@@ -204,3 +204,6 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 .fb-actions .link { font-size: 12px; }
 .alert a { color: var(--accent); }
 @media (max-width: 700px) { .feedback-btn span { display: none; } }
+
+.lbl-hit { fill: transparent; stroke: none; cursor: move; }
+.lbl-hit:hover { fill: rgba(0,102,204,.12); stroke: #06c; stroke-width: .6; stroke-dasharray: 2 2; }

@@ -83,6 +83,7 @@ type Interaction =
   | { kind: 'none' }
   | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number; btn: number; target: string | null }
   | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
+  | { kind: 'label'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'band'; x0: number; y0: number; add: boolean }
   | { kind: 'handle'; wireId: string; idx: number; moved: boolean; mid: boolean }
 
@@ -231,6 +232,16 @@ export default function Canvas(p: Props) {
       p.onPlaced(def.id)
       return
     }
+    const lblEl = (e.target as Element).closest('[data-lbl]')
+    if (lblEl) {
+      const id = lblEl.getAttribute('data-lbl')!
+      const sy = doc.symbols.find((x) => x.id === id)
+      if (sy) {
+        p.setSel([id])
+        inter.current = { kind: 'label', id, sx: pt.x, sy: pt.y, ox: sy.labelOff?.x ?? 0, oy: sy.labelOff?.y ?? 0, moved: false }
+        return
+      }
+    }
     const handleEl = (e.target as Element).closest('[data-handle]')
     if (handleEl) {
       const [wireId, idx, kind] = handleEl.getAttribute('data-handle')!.split('|')
@@ -290,6 +301,13 @@ export default function Canvas(p: Props) {
           wires: d.wires.map((w) => (it.vias[w.id] ? { ...w, via: it.vias[w.id].map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w)),
         }))
       }
+    } else if (it.kind === 'label') {
+      const off = { x: it.ox + Math.round(pt.x - it.sx), y: it.oy + Math.round(pt.y - it.sy) }
+      if (!it.moved && (off.x !== it.ox || off.y !== it.oy)) {
+        it.moved = true
+        p.checkpoint()
+      }
+      if (it.moved) p.update((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === it.id ? { ...s, labelOff: off.x || off.y ? off : undefined } : s)) }))
     } else if (it.kind === 'handle') {
       const wr = doc.wires.find((w) => w.id === it.wireId)
       const a = wr && symById(wr.from.symId)
@@ -472,8 +490,12 @@ export default function Canvas(p: Props) {
                   const off = { up: [4, -3], down: [4, 9], left: [-4, -3], right: [4, -3] }[pos.dir]
                   return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{text}</text>
                 })}
-                {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
-                {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{s.desc}</text>}
+                {(s.label || s.desc) && (
+                  <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>
+                    {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
+                    {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{s.desc}</text>}
+                  </g>
+                )}
               </g>
             )
           })}
@@ -526,6 +548,11 @@ export default function Canvas(p: Props) {
                       onMouseEnter={() => setHoverPort(key)} onMouseLeave={() => setHoverPort(null)} />
                   )
                 })}
+                {!p.sim && (s.label || s.desc) && (() => {
+                  const w = Math.max((s.label?.length ?? 0) * 6.5, (s.desc?.length ?? 0) * 4) + 6
+                  const h = (s.label ? 12 : 0) + (s.desc ? 9 : 0) + 2
+                  return <rect data-lbl={s.id} className="lbl-hit" x={b.x2 + 3 + (s.labelOff?.x ?? 0)} y={(b.y1 + b.y2) / 2 - 10 + (s.labelOff?.y ?? 0)} width={w} height={h} />
+                })()}
               </g>
             )
           })}

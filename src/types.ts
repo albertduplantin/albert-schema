@@ -74,6 +74,8 @@ export interface PlacedSymbol {
   volts?: number
   /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
   terms?: Record<string, string>
+  /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */
+  labelOff?: { x: number; y: number }
 }
 
 export interface PortRef {
