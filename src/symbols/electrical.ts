@@ -23,16 +23,23 @@ const noPole = (x: number, cross = false) =>
   `<path d="M${x} 0V10M${x} 30V40M${x} 30L${x + 8} 12"/>` +
   (cross ? `<path d="M${x + 5} 9L${x + 11} 15M${x + 11} 9L${x + 5} 15"/>` : '')
 
-const threePorts = (): PortDef[] => [
+const threePorts = (h = 40): PortDef[] => [
   { id: 'a1', x: 10, y: 0, dir: 'up', label: '1' },
   { id: 'a2', x: 30, y: 0, dir: 'up', label: '3' },
   { id: 'a3', x: 50, y: 0, dir: 'up', label: '5' },
-  { id: 'b1', x: 10, y: 40, dir: 'down', label: '2' },
-  { id: 'b2', x: 30, y: 40, dir: 'down', label: '4' },
-  { id: 'b3', x: 50, y: 40, dir: 'down', label: '6' },
+  { id: 'b1', x: 10, y: h, dir: 'down', label: '2' },
+  { id: 'b2', x: 30, y: h, dir: 'down', label: '4' },
+  { id: 'b3', x: 50, y: h, dir: 'down', label: '6' },
 ]
 
 const link = '<path d="M14 21H54" stroke-dasharray="3 2"/>'
+
+/** Pôle de disjoncteur magnétothermique (h = 70) : déclencheur thermique (bilame),
+ *  déclencheur magnétique (demi-disque) puis contact avec croix de sectionnement. */
+const mtPole = (x: number) =>
+  `<path d="M${x} 0V8M${x} 22V28M${x} 35V44M${x} 60V70M${x} 60L${x + 8} 46M${x + 5} 43L${x + 11} 49M${x + 11} 43L${x + 5} 49"/>` +
+  `<rect x="${x - 6}" y="8" width="12" height="14"/><path d="M${x - 4} 19L${x - 2} 11L${x + 2} 19L${x + 4} 11"/>` +
+  `<path d="M${x - 7} 35A7 7 0 0 1 ${x + 7} 35Z" fill="currentColor"/>`
 
 export const electrical: SymbolDef[] = [
   E('el-no', 'K', 'Contact à fermeture (NO)', 'Make contact (NO)', 20, 40, noPole(10)),
@@ -51,6 +58,9 @@ export const electrical: SymbolDef[] = [
   E('el-cb1', 'Q', 'Disjoncteur 1P', 'Circuit breaker 1P', 20, 40, noPole(10, true)),
   E('el-cb3', 'Q', 'Disjoncteur 3P', 'Circuit breaker 3P', 60, 40,
     `${noPole(10, true)}${noPole(30, true)}${noPole(50, true)}${link}`, threePorts()),
+  E('el-mt1', 'Q', 'Disjoncteur magnétothermique monophasé (1P)', 'Thermal-magnetic circuit breaker, single-pole (1P)', 20, 70, mtPole(10)),
+  E('el-mt3', 'Q', 'Disjoncteur magnétothermique triphasé (3P)', 'Thermal-magnetic circuit breaker, three-pole (3P)', 60, 70,
+    `${mtPole(10)}${mtPole(30)}${mtPole(50)}<path d="M14 53H54" stroke-dasharray="3 2"/>`, threePorts(70)),
   E('el-ct3', 'K', 'Contacteur 3P (puissance)', 'Contactor 3P (power)', 60, 40,
     `${noPole(10)}${noPole(30)}${noPole(50)}${link}`, threePorts()),
   E('el-th', 'F', 'Relais thermique', 'Thermal overload relay', 20, 40,
