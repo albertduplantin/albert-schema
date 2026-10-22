@@ -106,7 +106,8 @@ export function classify({ id, nameFr, nameEn, ports }) {
   const delayed = has(/11_delayed_contacts/) ? timerKind(name + ' ' + file) : null
   const contact = (ctl) => {
     if (/position/.test(name)) return null // sélecteurs rotatifs : non modélisés
-    if (changeover) {
+    // contacteurs de puissance « inverseur » à 6 ou 8 bornes : simples contacts à plusieurs pôles (le nom désigne la forme du dessin)
+    if (changeover && !(has(/02_power_contacts/) && ports.length !== 3)) {
       const co = ports.length === 3 ? changeoverPorts(ports) : null
       if (!co) return null
       return delayed ? { k: 'switch', poles: [], changeover: [co], ctl, nc: false, delay: delayed } : { k: 'switch', poles: [], changeover: [co], ctl, nc: false }

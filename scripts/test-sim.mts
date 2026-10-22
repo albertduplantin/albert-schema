@@ -139,6 +139,11 @@ function rig(doc: any) {
   const r2 = g2.run()
   check('bobine 230 V sous 24 V : alerte de tension', Object.keys(r2.badVoltage).length, 1)
 }
+// ── contacteur de puissance « inverseur » 3 pôles (6 bornes) : se ferme quand sa bobine est alimentée
+{
+  const inv = lib.symbols.find((s: any) => s.id.endsWith('com_puiss_3P_inv'))
+  check('contacteur 3P « inv » : modélisé comme 3 pôles pilotés par bobine', [inv.sim?.k, inv.sim?.ctl, inv.sim?.poles?.length], ['switch', 'coil', 3])
+}
 // ── repères d'appareil : casse et espaces sans importance (« km1 » = « KM1 »)
 {
   const d = T.reversingStarter(base)
