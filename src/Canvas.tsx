@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { effectiveTerms } from './terminals'
+import { routeAll } from './routing'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
@@ -139,6 +140,8 @@ export default function Canvas(p: Props) {
   const symById = (id: string) => doc.symbols.find((s) => s.id === id)
   // repères de bornes affichés d'office : numérotation automatique, unique au sein d'un même appareil
   const terms = useMemo(() => effectiveTerms(doc.symbols, SYMBOL_MAP), [doc.symbols])
+  // tracé de tous les conducteurs, séparés en couloirs quand ils se superposeraient
+  const routes = useMemo(() => routeAll(doc.wires, doc.symbols), [doc.wires, doc.symbols])
 
   const toSheet = (e: { clientX: number; clientY: number }) => {
     const r = svgRef.current!.getBoundingClientRect()
@@ -418,7 +421,7 @@ export default function Canvas(p: Props) {
             if (!a || !b) return null
             const pa = portPos(a, wr.from.portId), pb = portPos(b, wr.to.portId)
             if (!pa || !pb) return null
-            const pts = routeVia(pa, pb, wr.via ?? [])
+            const pts = routes[wr.id] ?? routeVia(pa, pb, wr.via ?? [])
             const m = pts[Math.floor(pts.length / 2)]
             const n = pts[Math.floor(pts.length / 2) - 1] ?? m
             const mx = (m.x + n.x) / 2, my = (m.y + n.y) / 2
@@ -483,7 +486,7 @@ export default function Canvas(p: Props) {
             if (!a || !b) return null
             const pa = portPos(a, wr.from.portId), pb = portPos(b, wr.to.portId)
             if (!pa || !pb) return null
-            const routed = routeVia(pa, pb, wr.via ?? [])
+            const routed = routes[wr.id] ?? routeVia(pa, pb, wr.via ?? [])
             const pts = pointsAttr(routed)
             const handles = !p.sim && sel.length === 1 && sel[0] === wr.id
             return (
