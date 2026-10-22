@@ -603,6 +603,9 @@ function Editor() {
             <p>{t('creditsText')}</p>
             <h3>{t('privacyTitle')}</h3>
             <p>{t('privacyText')}</p>
+            <h3>{t('legalTitle')}</h3>
+            <p>{t('legalText')}</p>
+            <p><a href="https://github.com/albertduplantin/albert-schema" target="_blank" rel="noreferrer">{t('sourceCode')}</a> · <a href="https://github.com/albertduplantin/albert-schema/issues" target="_blank" rel="noreferrer">{t('contact')}</a></p>
             <p><a href="https://qelectrotech.org" target="_blank" rel="noreferrer">qelectrotech.org</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a> · <a href="https://github.com/qelectrotech/qelectrotech-elements" target="_blank" rel="noreferrer">qelectrotech-elements</a></p>
             <div className="actions"><button onClick={() => setShowCredits(false)}>{t('close')}</button></div>
           </div>

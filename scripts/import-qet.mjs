@@ -104,6 +104,7 @@ const escapeText = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace
 function convert(xml) {
   const shapes = []
   const terminals = []
+  const texts = [] // textes statiques conservés dans le dessin
   const box = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity }
   const grow = (x, y) => {
     box.x1 = Math.min(box.x1, x); box.y1 = Math.min(box.y1, y)
@@ -160,10 +161,11 @@ function convert(xml) {
       grow(tx, ty - size); grow(tx + Math.max(...lines.map((l) => l.length)) * size * 0.6, ty + (lines.length - 1) * size * 1.2)
       const body = lines.map((l, i) => `<tspan x="${n1(tx)}" dy="${i ? n1(size * 1.2) : 0}">${escapeText(l)}</tspan>`).join('')
       const tr = rot ? ` transform="rotate(${rot} ${n1(tx)} ${n1(ty)})"` : ''
+      for (const l of lines) texts.push(l.trim())
       shapes.push(`<text x="${n1(tx)}" y="${n1(ty)}" font-size="${n1(size * 1.15)}" fill="currentColor" stroke="none"${tr}>${body}</text>`)
     }
   }
-  return { shapes, terminals, box }
+  return { shapes, terminals, box, texts }
 }
 
 const roots = [
@@ -186,7 +188,7 @@ for (const r of roots) {
     const head = /<definition\b([^>]*)>/.exec(xml)
     const def = head ? attrsOf(head[1]) : {}
     if (/report/.test(def.link_type || '')) { skipped++; continue }
-    const { shapes, terminals, box } = convert(xml)
+    const { shapes, terminals, box, texts } = convert(xml)
     if (!terminals.length || !shapes.length) { skipped++; continue }
     const ox = Math.floor(box.x1 / 10) * 10
     const oy = Math.floor(box.y1 / 10) * 10
@@ -195,7 +197,8 @@ for (const r of roots) {
     const svg = shapes.join('')
     const ports = terminals.map((t, i) => {
       const p = { id: 't' + i, x: n1(t.x - ox), y: n1(t.y - oy), dir: t.dir }
-      if (t.name && t.name.length <= 4 && t.name.toLowerCase() !== 'terminal') p.label = t.name
+      // pas d'étiquette si le dessin l'affiche déjà (évite les numéros de bornes en double)
+      if (t.name && t.name.length <= 4 && t.name.toLowerCase() !== 'terminal' && !texts.includes(t.name)) p.label = t.name
       return p
     })
     const el = names(xml.slice(0, xml.indexOf('</names>') + 8))

@@ -22,3 +22,15 @@ Mise en place du classement commun : dans Vercel, *Storage → Upstash Redis* (M
 Les variables `KV_REST_API_URL` et `KV_REST_API_TOKEN` (ou `UPSTASH_REDIS_REST_URL/TOKEN`) sont alors injectées ; redéployer.
 
 Après toute régénération de la bibliothèque : `node scripts/import-qet.mjs <qelectrotech-elements> public/qet-library.json api/_ids.json`.
+
+## Simulation
+
+Le bouton **Simuler** passe en mode simulation (logique de relais) : les sources (`L1`, `L2`, `L3`, `N`, `L`, `+24 V`, `0 V`)
+imposent un potentiel, un récepteur s'allume quand ses bornes sont à des potentiels différents, un contact prend l'état de la
+bobine de même repère. Boutons-poussoirs, interrupteurs, arrêts d'urgence et disjoncteurs se manœuvrent à la souris ; les
+courts-circuits sont signalés. Le modèle de chaque symbole est déterminé par `scripts/sim-classify.mjs` (229 symboles).
+Limites : pas de régime transitoire, de courants ni de temporisations ; contacts inverseurs, automates et variateurs non simulés.
+
+## Déploiement
+
+Application statique (Vite) + une fonction serverless (`api/usage.js`). En-têtes de sécurité (CSP…) dans `vercel.json`.

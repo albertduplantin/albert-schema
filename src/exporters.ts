@@ -62,6 +62,7 @@ const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`
 
 export function bomRows(doc: Doc, lang: Lang) {
   return doc.symbols
+    .filter((s) => SYMBOL_MAP[s.defId].prefix !== '') // repères de simulation exclus
     .map((s) => ({ label: s.label, name: SYMBOL_MAP[s.defId].name[lang], desc: s.desc, std: SYMBOL_MAP[s.defId].std }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
 }
