@@ -204,5 +204,31 @@ function rig(doc: any) {
     check(`exercice « ${ex.id} » : un schéma vide échoue`, runExercise(ex, base, SYMBOL_MAP, 'fr').ok, false)
   }
 }
+// ── relais thermique : surcharge moteur injectée → déclenchement après 5 s, réarmement quand la surcharge cesse
+{
+  const d = T.motorStarter(base)
+  const mot = d.symbols.find((s: any) => s.label === 'M1').id
+  const coil = d.symbols.find((s: any) => s.label === 'KM1' && s.defId.includes('bobine'))
+  const n = d.symbols.find((s: any) => s.defId === 'sim-n')
+  const th = { id: 'th1', defId: lib.symbols.find((s: any) => s.id.endsWith('15_protection_contacts/contact_relais_nf_esclave')).id, x: 600, y: 360, rot: 0, label: 'F1', desc: '' }
+  d.symbols.push(th)
+  const w = d.wires.find((x: any) => x.from.symId === coil.id && x.from.portId === 't1' && x.to.symId === n.id)
+  w.to = { symId: 'th1', portId: 't0' }
+  d.wires.push({ id: 'wth', from: { symId: 'th1', portId: 't1' }, to: { symId: n.id, portId: 'a' }, label: '', color: '#000', section: '' })
+  const S2 = d.symbols.find((s: any) => s.label === 'S2').id
+  let mem: any = {}, now = 1_000_000
+  const run = (pressed: string[], cut: string[], dt: number) => { now += dt; const r = simulate(d, SYMBOL_MAP, mem, { pressed: new Set(pressed), toggled: new Set(), cut: new Set(cut) }, now); mem = r.state; return r }
+  let r = run([S2], [], 100); r = run([], [], 100)
+  check('thermique : démarrage normal', [r.energized.has(coil.id), r.thermalTrip], [true, false])
+  r = run([], ['ovl:' + mot], 100)
+  r = run([], ['ovl:' + mot], 2000)
+  check('thermique : surcharge depuis 2 s, pas encore déclenché', [r.energized.has(coil.id), r.thermalTrip], [true, false])
+  r = run([], ['ovl:' + mot], 4000)
+  check('thermique : surcharge depuis 6 s, KM1 coupé', [r.energized.has(coil.id), r.thermalTrip], [false, true])
+  r = run([S2], ['ovl:' + mot], 100)
+  check('thermique : redémarrage impossible tant que la surcharge dure', r.energized.has(coil.id), false)
+  r = run([], [], 100); r = run([S2], [], 100); r = run([], [], 100)
+  check('thermique : surcharge supprimée → réarmé, KM1 redémarre', [r.energized.has(coil.id), r.thermalTrip], [true, false])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

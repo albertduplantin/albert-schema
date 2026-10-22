@@ -263,6 +263,7 @@ export default function Canvas(p: Props) {
       if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
       else if (s && (() => { const m = SYMBOL_MAP[s.defId].sim; return m?.k === 'switch' && m.ctl === 'fixed' })()) p.onSimFault?.(s.id)
+      else if (s && (() => { const m = SYMBOL_MAP[s.defId].sim; return m?.k === 'load' && m.role === 'motor' })()) p.onSimFault?.('ovl:' + s.id)
       else if (!s) {
         const we = (e.target as Element).closest('[data-wire]')
         if (we) p.onSimFault?.(we.getAttribute('data-wire')!)
@@ -550,6 +551,7 @@ export default function Canvas(p: Props) {
                     <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6} fill={col} fillOpacity={bad ? 0.3 : 0.4} stroke={col} strokeWidth={bad ? 2 : 1.2} strokeDasharray={bad ? '4 2' : undefined} />
                   )
                 })()}
+                {p.faults?.has('ovl:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚠ {p.lang === 'fr' ? 'SURCHARGE' : 'OVERLOAD'}</text>}
                 {p.faults?.has(s.id) && <text x={b.x2 + 2} y={b.y1 + 10} fontSize={14} fill="#e53935" stroke="none" fontWeight={700}>✕</text>}
                 {closedState !== undefined && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />

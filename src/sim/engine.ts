@@ -52,6 +52,8 @@ export interface SimResult {
   volts: Record<string, number>
   /** récepteurs dont la tension appliquée s'écarte de plus de 15 % de leur tension nominale */
   badVoltage: Record<string, { applied: number; rated: number }>
+  /** un relais thermique a déclenché (surcharge moteur injectée) */
+  thermalTrip: boolean
 }
 
 export const DEFAULT_DELAY_S = 3
@@ -101,6 +103,11 @@ function applyDelay(m: { on: boolean; since: number } | undefined, kind: TimerKi
   }
 }
 
+/** Délai (s) avant déclenchement d'un relais thermique sous surcharge. */
+export const THERMAL_S = 5
+const THERMAL = '§TH'
+const isThermalSlave = (s: PlacedSymbol) => /15_protection_contacts/.test(s.defId)
+
 /** Repère d'appareil normalisé : « km1 », « KM1 » ou « KM1 » avec espaces désignent le même relais. */
 export const devKey = (l: string) => l.replace(/\s+/g, '').toUpperCase()
 
@@ -132,6 +139,7 @@ function actuated(s: PlacedSymbol, m: Extract<SimModel, { k: 'switch' }>, x: Ctx
     case 'momentary':
       return x.inp.pressed.has(s.id)
     default:
+      if (isThermalSlave(s) && applyDelay(x.memory[THERMAL], 'on', THERMAL_S, x.now, x.pending)) return true // relais thermique déclenché
       return x.inp.toggled.has(s.id)
   }
 }
@@ -206,6 +214,8 @@ function solve(x: Ctx) {
     const on = seen.size >= 2
     if (on) energized.add(s.id)
     if (m.k === 'coil' && s.label) coilOn[devKey(s.label)] = coilOn[devKey(s.label)] || on
+    // surcharge injectée sur un moteur : le relais thermique déclenche après un délai et reste déclenché tant que la surcharge dure
+    if (m.k === 'load' && m.role === 'motor' && x.inp.cut?.has('ovl:' + s.id) && (on || x.memory[THERMAL]?.on)) coilOn[THERMAL] = true
   }
   // transformateurs : alimentés quand deux bornes du primaire sont à des potentiels différents
   const trafoOn = new Set<string>()
@@ -412,5 +422,6 @@ export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: 
     current: currentFlow(doc, defs, out),
     volts,
     badVoltage,
+    thermalTrip: applyDelay(memory[THERMAL], 'on', THERMAL_S, now, []),
   }
 }

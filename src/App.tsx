@@ -829,6 +829,7 @@ function Editor() {
               const s = all.symbols.find((x) => x.id === id)
               return <div key={id} className="alert" role="alert">⚠ {s?.label || SYMBOL_MAP[s?.defId ?? '']?.name[lang]} : {v.applied} V {t('simApplied')}, {v.rated} V {t('simRated')}</div>
             })}
+            {sim.thermalTrip && <div className="alert" role="alert">🔥 {t('simThermal')}</div>}
             {sim.unstable && <div className="alert warn">{t('simUnstable')}</div>}
             {sim.pendingMs !== null && <div className="alert info">⏱ {t('simTiming')}</div>}
             <div className="simlist">
