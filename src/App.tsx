@@ -6,6 +6,7 @@ import { uid } from './geometry'
 import Canvas from './Canvas'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
 import { motorStarter, pneumaticCylinder } from './templates'
+import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 
 const STORE = 'albertschema.doc'
 const emptyDoc = (): Doc => ({
@@ -102,6 +103,7 @@ function Editor() {
   const [query, setQuery] = useState('')
   const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
   const [showCredits, setShowCredits] = useState(false)
+  const [usageTick, setUsageTick] = useState(0) // relance le classement après chaque pose
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
@@ -139,6 +141,8 @@ function Editor() {
   }, [lang])
 
   const onPlaced = useCallback((defId: string) => {
+    recordUse(defId)
+    setUsageTick((n) => n + 1)
     setRecent((r) => {
       const next = [defId, ...r.filter((x) => x !== defId)].slice(0, 6)
       try { localStorage.setItem('albertschema.recent', JSON.stringify(next)) } catch { /* ignoré */ }
@@ -269,15 +273,31 @@ function Editor() {
   const cat = catByDomain[domain] || TOP
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const now = Date.now()
+    const sc = new Map<string, number>() // score adaptatif calculé une seule fois par symbole
+    const score = (s: (typeof SYMBOLS)[number]) => {
+      let v = sc.get(s.id)
+      if (v === undefined) sc.set(s.id, (v = adaptiveScore(s, now)))
+      return v
+    }
     const found = SYMBOLS.filter(
       (s) =>
         !s.legacy && s.domain === domain &&
-        (q ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q : cat === TOP ? s.top : s.cat === cat),
+        (q
+          ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q
+          : cat === TOP ? s.top || usageCount(s.id, now) >= 1 : s.cat === cat),
     )
-    // recherche et « les plus utilisés » : tri par fréquence d'usage ; sinon ordre de la catégorie (groupes puis score)
-    if (q || cat === TOP) found.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-    return q ? found.slice(0, 80) : found
-  }, [domain, query, lang, cat])
+    if (q || cat === TOP) {
+      // recherche et « les plus utilisés » : par score adaptatif (a priori + usage de l'utilisateur)
+      found.sort((a, b) => score(b) - score(a))
+      return found.slice(0, q ? 80 : 36)
+    }
+    // catégorie : groupes du plus au moins utilisé, puis symboles par score
+    const gk = (s: (typeof SYMBOLS)[number]) => s.group?.fr ?? ''
+    const gmax = new Map<string, number>()
+    for (const s of found) gmax.set(gk(s), Math.max(gmax.get(gk(s)) ?? 0, score(s)))
+    return found.sort((a, b) => gmax.get(gk(b))! - gmax.get(gk(a))! || gk(a).localeCompare(gk(b)) || score(b) - score(a))
+  }, [domain, query, lang, cat, usageTick])
   const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s && !s.legacy && s.domain === domain), [recent, domain])
 
   const selSym = sel.length === 1 ? doc.symbols.find((s) => s.id === sel[0]) : undefined
@@ -296,7 +316,7 @@ function Editor() {
   const hint = placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
   const symButton = (s: (typeof SYMBOLS)[number]) => (
-    <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '')} title={`${s.name[lang]} — ${s.std}`}
+    <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '')} title={`${s.name[lang]} — ${s.std}`}
       draggable
       onDragStart={(e) => { e.dataTransfer.setData('text/x-albert-symbol', s.id); e.dataTransfer.effectAllowed = 'copy'; setPlacing(null) }}
       onClick={() => { setPlacing(placing === s.id ? null : s.id); setSel([]) }}>
@@ -380,6 +400,7 @@ function Editor() {
             )
           })}
         </div>
+        <p className="note">{t('adaptive')} {hasUsage() && <button className="link" onClick={() => { if (confirm(t('resetConfirm'))) { resetUsage(); setUsageTick((n) => n + 1) } }}>{t('resetUsage')}</button>}</p>
         <p className="note">{t('warn')} <button className="link" onClick={() => setShowCredits(true)}>{t('credits')}</button></p>
       </aside>
 
