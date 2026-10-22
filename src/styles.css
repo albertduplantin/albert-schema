@@ -1,0 +1,78 @@
+:root {
+  --bg: #fff;
+  --ui-bg: #f4f5f7;
+  --ui-line: #d5d8de;
+  --accent: #0b6bcb;
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: #e3e6eb; color: #1b1f24; }
+
+.app {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 240px 1fr 260px;
+  grid-template-rows: auto 1fr;
+  grid-template-areas: 'bar bar bar' 'pal stage props';
+}
+.toolbar { grid-area: bar; display: flex; flex-wrap: wrap; gap: 3px; align-items: center; padding: 5px 8px; background: var(--ui-bg); border-bottom: 1px solid var(--ui-line); }
+.brand { margin-right: 8px; color: var(--accent); }
+.sep { width: 1px; height: 20px; background: var(--ui-line); margin: 0 2px; }
+.grow { flex: 1; }
+button { font: inherit; font-size: 12px; padding: 4px 7px; border: 1px solid var(--ui-line); background: #fff; border-radius: 5px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.palette { grid-area: pal; background: var(--ui-bg); border-right: 1px solid var(--ui-line); display: flex; flex-direction: column; min-height: 0; padding: 8px; gap: 6px; }
+.tabs { display: flex; gap: 3px; }
+.tabs button { flex: 1; padding: 4px 2px; font-size: 12px; }
+input, select { font: inherit; padding: 4px 6px; border: 1px solid var(--ui-line); border-radius: 5px; background: #fff; width: 100%; }
+.symlist { overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: start; flex: 1; }
+.symbtn { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; text-align: center; font-size: 11px; line-height: 1.2; }
+.symbtn svg { width: 64px; height: 48px; color: #111; }
+.symbtn.on { border-color: var(--accent); box-shadow: 0 0 0 2px #0b6bcb44; }
+.note { font-size: 11px; color: #667; margin: 0; }
+
+.stage { grid-area: stage; position: relative; min-width: 0; min-height: 0; }
+.canvas { width: 100%; height: 100%; display: block; background: #c9ced6; user-select: none; }
+.canvas.placing { cursor: crosshair; }
+.status { position: absolute; left: 8px; right: 8px; bottom: 6px; padding: 4px 8px; background: #ffffffd9; border-radius: 5px; font-size: 11px; color: #445; pointer-events: none; }
+
+.hit-box { fill: transparent; stroke: none; cursor: move; }
+.sel-box { fill: #0b6bcb18; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 3; cursor: move; }
+.port { fill: #fff; stroke: #0b6bcb; stroke-width: 1.5; opacity: 0; cursor: crosshair; }
+.sym-hit:hover .port, .port.hot { opacity: 1; }
+.port.used { fill: #0b6bcb; }
+.port.hot { fill: #ffb400; stroke: #c07000; }
+.canvas.placing .port { pointer-events: none; }
+.hit { stroke: transparent; stroke-width: 10; fill: none; cursor: pointer; }
+.sel-wire { stroke: var(--accent); stroke-width: 5; opacity: 0.45; fill: none; }
+.preview { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 3; fill: none; pointer-events: none; }
+.band { fill: #0b6bcb18; stroke: var(--accent); stroke-dasharray: 4 3; }
+
+.props { grid-area: props; background: var(--ui-bg); border-left: 1px solid var(--ui-line); padding: 8px 10px; overflow: auto; }
+.props h3 { margin: 10px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #556; }
+.form { display: flex; flex-direction: column; gap: 6px; }
+.form label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #556; }
+.kind { font-weight: 600; }
+.kind small { font-weight: 400; color: #667; }
+.muted { color: #778; }
+.colors { display: flex; gap: 4px; flex-wrap: wrap; }
+.swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; }
+.swatch.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.modal { position: fixed; inset: 0; background: #0006; display: grid; place-items: center; z-index: 10; }
+.dialog { background: #fff; border-radius: 8px; padding: 16px 20px; width: min(760px, 94vw); max-height: 86vh; overflow: auto; }
+.dialog h3 { margin: 8px 0; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
+th, td { text-align: left; border-bottom: 1px solid var(--ui-line); padding: 4px 8px; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 180px 1fr; grid-template-areas: 'bar bar' 'pal stage'; }
+  .props { display: none; }
+}
