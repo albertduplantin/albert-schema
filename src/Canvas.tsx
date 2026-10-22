@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { effectiveTerms } from './terminals'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
@@ -136,6 +137,8 @@ export default function Canvas(p: Props) {
   fitRef.current = () => fit()
   useEffect(() => { fit() }, [doc.paper])
   const symById = (id: string) => doc.symbols.find((s) => s.id === id)
+  // repères de bornes affichés d'office : numérotation automatique, unique au sein d'un même appareil
+  const terms = useMemo(() => effectiveTerms(doc.symbols, SYMBOL_MAP), [doc.symbols])
 
   const toSheet = (e: { clientX: number; clientY: number }) => {
     const r = svgRef.current!.getBoundingClientRect()
@@ -460,7 +463,7 @@ export default function Canvas(p: Props) {
                   {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} />}
                 </g>
                 {def.ports.map((pt) => {
-                  const text = s.terms?.[pt.id] ?? pt.label
+                  const text = terms[s.id]?.[pt.id] ?? pt.label
                   if (!text) return null
                   const pos = portPos(s, pt.id)!
                   const off = { up: [4, -3], down: [4, 9], left: [-4, -3], right: [4, -3] }[pos.dir]

@@ -49,5 +49,7 @@ coude. Le bouton « Tracé automatique » revient au routage par défaut. Les co
   le secondaire devient une source pour le circuit aval (fils colorés à part). Sa tension se règle dans « Tension du secondaire (V) ».
 - **Tension nominale** d'une bobine, d'un voyant ou d'un moteur : si la tension appliquée s'écarte de plus de 15 %, le récepteur
   est entouré en rouge et une alerte s'affiche. Le panneau de simulation indique la tension aux bornes de chaque récepteur.
-- **Numérotation des bornes** : section « Bornes » des propriétés. Modifier la première borne fait suivre les autres
-  (13 → 53 donne 54 ; un contacteur 1-2/3-4/5-6 devient 7-8/9-10/11-12). « Numérotation normalisée » applique 13-14, 21-22, 1-2…, A1-A2.
+- **Numérotation des bornes** : affichée d'office, selon EN 50005, et **unique au sein d'un appareil** (les symboles de même repère,
+  ex. KM1) : contacts de puissance 1-2, 3-4, 5-6 puis 7-8… ; auxiliaires 13-14, 21-22, 33-34… (un rang par contact) ; bobine A1-A2.
+  Section « Bornes » des propriétés : modifier la première borne fait suivre les autres (13 → 53 donne 54) ; un numéro déjà pris est
+  incrémenté automatiquement, et ce que vous saisissez est prioritaire sur la numérotation automatique.

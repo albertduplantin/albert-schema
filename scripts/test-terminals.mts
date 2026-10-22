@@ -1,71 +1,114 @@
 // Tests de la numérotation des bornes : npm test
 import { readFileSync } from 'node:fs'
-import { defaultTerm, editTerm, suggestTerms, termGroups } from '../src/terminals.ts'
+import { defaultTerm, duplicateTerms, editTermUnique, effectiveTerms, othersTerms, termGroups } from '../src/terminals.ts'
 
 const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
-const def = (end: string) => lib.symbols.find((s: any) => s.id.endsWith(end))
+const defs: Record<string, any> = Object.fromEntries(lib.symbols.map((s: any) => [s.id, s]))
+const id = (end: string) => lib.symbols.find((s: any) => s.id.endsWith(end)).id
+
 let fails = 0
 const check = (name: string, got: unknown, want: unknown) => {
   const ok = JSON.stringify(got) === JSON.stringify(want)
   if (!ok) fails++
   console.log((ok ? 'ok   ' : 'ÉCHEC') + ' ' + name + (ok ? '' : ` (obtenu ${JSON.stringify(got)}, attendu ${JSON.stringify(want)})`))
 }
-const labels = (d: any, terms?: Record<string, string>) => Object.fromEntries(d.ports.map((p: any) => [p.id, terms?.[p.id] ?? defaultTerm(d, p.id)]))
 
-// contact auxiliaire NO (con_simple) : 13 / 14 → 53 / 54
+const AUX_NO = id('01_auxiliary_contacts/con_simple')
+const AUX_NC = id('01_auxiliary_contacts/con_simple_nf')
+const CHG = id('01_auxiliary_contacts/contnonc')
+const POWER3 = id('02_power_contacts/com_puiss4')
+const COIL = id('01_coils/bobine3')
+let n = 0
+const sym = (defId: string, label: string, terms?: Record<string, string>): any => ({ id: 's' + ++n, defId, x: 0, y: 0, rot: 0, label, desc: '', ...(terms ? { terms } : {}) })
+/** repères d'un symbole dans l'ordre d'affichage des groupes de bornes (haut/bas, pôle par pôle) */
+const shown = (s: any, eff: Record<string, Record<string, string>>) => termGroups(defs[s.defId]).map((g) => g.ports.map((p) => eff[s.id]?.[p] ?? '-').join('/'))
+
+// ── numéros affichés d'office, sans aucune saisie
 {
-  const d = def('01_auxiliary_contacts/con_simple')
-  check('contact NO : numérotation normalisée 13/14', Object.values(labels(d)), ['13', '14'])
-  const first = termGroups(d)[0].ports[0]
-  const t = editTerm(d, undefined, first, '53')
-  check('contact NO : 13 → 53 entraîne 14 → 54', Object.values(labels(d, t)), ['53', '54'])
+  const c = sym(AUX_NO, 'S2')
+  const eff = effectiveTerms([c], defs)
+  check('contact NO seul : 13/14 affichés d\'office', shown(c, eff), ['13/14'])
+  const nc = sym(AUX_NC, 'S1')
+  check('contact NF seul : 11/12 affichés d\'office', shown(nc, effectiveTerms([nc], defs)), ['11/12'])
+  const k = sym(COIL, 'KM1')
+  check('bobine : A1/A2 affichés d\'office', shown(k, effectiveTerms([k], defs)), ['A1/A2'])
 }
-// contact NF : 21 / 22 → 61 / 62
+
+// ── un même appareil : jamais deux contacts avec les mêmes numéros
 {
-  const d = def('01_auxiliary_contacts/con_simple_nf')
-  check('contact NF : 21/22 par défaut', Object.values(labels(d)), ['21', '22'])
-  const t = editTerm(d, undefined, termGroups(d)[0].ports[0], '61')
-  check('contact NF : 21 → 61 entraîne 22 → 62', Object.values(labels(d, t)), ['61', '62'])
+  const kc = sym(COIL, 'KM1')
+  const p1 = sym(POWER3, 'KM1')
+  const p2 = sym(POWER3, 'KM1')
+  const a1 = sym(AUX_NO, 'KM1')
+  const a2 = sym(AUX_NC, 'KM1')
+  const a3 = sym(AUX_NO, 'KM1')
+  const a4 = sym(CHG, 'KM1')
+  const all = [kc, p1, p2, a1, a2, a3, a4]
+  const eff = effectiveTerms(all, defs)
+  check('contacteur KM1 : 1er contact de puissance 1-2 / 3-4 / 5-6', shown(p1, eff), ['1/2', '3/4', '5/6'])
+  check('contacteur KM1 : 2e contact de puissance 7-8 / 9-10 / 11-12', shown(p2, eff), ['7/8', '9/10', '11/12'])
+  check('contacteur KM1 : 1er auxiliaire NO 13/14', shown(a1, eff), ['13/14'])
+  check('contacteur KM1 : auxiliaire suivant NF 21/22 (rang suivant)', shown(a2, eff), ['21/22'])
+  check('contacteur KM1 : auxiliaire suivant NO 33/34', shown(a3, eff), ['33/34'])
+  check('contacteur KM1 : inverseur 41/42/44', shown(a4, eff), ['41/42/44'])
+  check('contacteur KM1 : aucun numéro en double', duplicateTerms(all, eff).size, 0)
+  // un autre appareil repart de zéro
+  const other = sym(AUX_NO, 'KM2')
+  check('autre appareil KM2 : repart à 13/14', shown(other, effectiveTerms([...all, other], defs)), ['13/14'])
 }
-// contacteur 3 pôles de puissance : 1-2 / 3-4 / 5-6 → décalage de tous les pôles
+
+// ── numéros saisis : réservés, les autres s'adaptent
 {
-  const d = def('02_power_contacts/com_puiss4')
-  const sug = suggestTerms(d)
-  const groups = termGroups(d)
-  check('contacteur 3 pôles : 3 pôles de 2 bornes', groups.map((g) => g.ports.length), [2, 2, 2])
-  check('contacteur 3 pôles : 1/2, 3/4, 5/6', groups.map((g) => g.ports.map((p) => sug[p]).join('/')), ['1/2', '3/4', '5/6'])
-  const t = editTerm(d, undefined, groups[0].ports[0], '7')
-  check('contacteur 3 pôles : 1 → 7 décale tous les pôles (7/8, 9/10, 11/12)', groups.map((g) => g.ports.map((p) => t[p]).join('/')), ['7/8', '9/10', '11/12'])
+  const a1 = sym(AUX_NO, 'KM1', { t0: '13', t1: '14' })
+  const a2 = sym(AUX_NO, 'KM1')
+  const eff = effectiveTerms([a1, a2], defs)
+  check('13/14 saisis sur le 1er : le 2e prend 23/24', shown(a2, eff), ['23/24'])
+  const b1 = sym(AUX_NO, 'KM1')
+  const b2 = sym(AUX_NO, 'KM1', { t0: '13', t1: '14' }) // posé après : sa saisie reste prioritaire
+  const eff2 = effectiveTerms([b1, b2], defs)
+  check('saisie sur le 2e : il garde 13/14 et le 1er s\'écarte (23/24)', [shown(b1, eff2)[0], shown(b2, eff2)[0]], ['23/24', '13/14'])
 }
-// édition d'un pôle seul : le premier pôle n'est pas touché
+
+// ── édition : un numéro déjà pris est incrémenté automatiquement
 {
-  const d = def('02_power_contacts/com_puiss4')
-  const groups = termGroups(d)
-  const t = editTerm(d, undefined, groups[1].ports[0], '13')
-  check('pôle 2 modifié : seul ce pôle suit (13/14), les autres gardent leur défaut', groups.map((g) => g.ports.map((p) => t[p] ?? '-').join('/')), ['-/-', '13/14', '-/-'])
+  const a1 = sym(AUX_NO, 'KM1')
+  const a2 = sym(AUX_NO, 'KM1')
+  const all = [a1, a2]
+  const eff = effectiveTerms(all, defs)
+  const first = termGroups(defs[a2.defId])[0].ports[0]
+  const defaults = Object.fromEntries(defs[a2.defId].ports.map((p: any) => [p.id, defaultTerm(all, defs, a2.id, p.id)]))
+  const others = othersTerms(all, eff, a2.id)
+  check('numéros du 1er contact connus (13/14)', [...others].sort(), ['13', '14'])
+  // le 2e contact (23/24) passe en 13 : déjà pris → décalé en 23/24
+  const t = editTermUnique(defs[a2.defId], undefined, first, '13', defaults, others)
+  check('13 déjà pris par le 1er contact : décalé automatiquement en 23/24', defs[a2.defId].ports.map((p: any) => t[p.id]).sort(), ['23', '24'])
+  // un numéro libre est accepté tel quel
+  const t2 = editTermUnique(defs[a2.defId], undefined, first, '53', defaults, others)
+  check('53 libre : accepté, 54 suit', defs[a2.defId].ports.map((p: any) => t2[p.id]).sort(), ['53', '54'])
 }
-// inverseur : 11 (commun) / 12 (NF) / 14 (NO)
+
+// ── contacteur de puissance : modification d'un pôle, décalage des suivants
 {
-  const d = def('01_auxiliary_contacts/contnonc')
-  const g = termGroups(d)[0]
-  check('inverseur : commun/NF/NO = 11/12/14', g.ports.map((p) => suggestTerms(d)[p]), ['11', '12', '14'])
-  const t = editTerm(d, undefined, g.ports[0], '51')
-  check('inverseur : 11 → 51 entraîne 52 et 54', g.ports.map((p) => t[p]), ['51', '52', '54'])
+  const p1 = sym(POWER3, 'KM1')
+  const p2 = sym(POWER3, 'KM1')
+  const all = [p1, p2]
+  const eff = effectiveTerms(all, defs)
+  const groups = termGroups(defs[p2.defId])
+  const defaults = Object.fromEntries(defs[p2.defId].ports.map((p: any) => [p.id, defaultTerm(all, defs, p2.id, p.id)]))
+  const others = othersTerms(all, eff, p2.id)
+  // 7 → 1 (déjà pris par le premier contacteur) : décalage des 6 bornes jusqu'à une plage libre
+  const t = editTermUnique(defs[p2.defId], undefined, groups[0].ports[0], '1', defaults, others)
+  const vals = groups.map((g) => g.ports.map((p) => t[p]).join('/'))
+  check('contact de puissance : 1 déjà pris → trois pôles renumérotés', vals.length, 3)
+  check('contact de puissance : plus aucun numéro en commun avec KM1', groups.flatMap((g) => g.ports).every((p) => !others.has(t[p])), true)
 }
-// bobine A1/A2
+
+// ── anomalie signalée si un fichier contient déjà des doublons
 {
-  const d = def('01_coils/bobine3')
-  check('bobine : A1 en haut, A2 en bas', Object.values(labels(d)), ['A1', 'A2'])
-}
-// saisie vide : retour au défaut ; saisie non numérique : isolée
-{
-  const d = def('01_auxiliary_contacts/con_simple')
-  const first = termGroups(d)[0].ports[0]
-  let t = editTerm(d, undefined, first, '53')
-  t = editTerm(d, t, first, '')
-  check('saisie vide : repère par défaut rétabli', t[first], undefined)
-  const t2 = editTerm(d, undefined, first, 'X1')
-  check('saisie non numérique : la borne voisine ne bouge pas', Object.keys(t2), [first])
+  const a1 = sym(AUX_NO, 'KM1', { t0: '13', t1: '14' })
+  const a2 = sym(AUX_NO, 'KM1', { t0: '13', t1: '14' })
+  const eff = effectiveTerms([a1, a2], defs)
+  check('doublons saisis à la main : détectés', duplicateTerms([a1, a2], eff).size, 4)
 }
 
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests de numérotation passent')

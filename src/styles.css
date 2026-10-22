@@ -184,3 +184,6 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 .term-in { width: 100%; min-width: 0; padding: 3px 5px; text-align: center; font-variant-numeric: tabular-nums; }
 .muted.small { font-size: 10.5px; margin: 0; }
 .port-ring { fill: none; stroke: #ff9800; stroke-width: 2; pointer-events: none; animation: pulse 0.7s ease-in-out infinite alternate; }
+
+.term-in.auto { color: var(--ui-muted); font-style: italic; }
+.term-in.dup { border-color: #e53935; background: #e5393514; color: #e53935; }

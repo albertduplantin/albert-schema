@@ -6,7 +6,7 @@ import { uid } from './geometry'
 import Canvas from './Canvas'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
 import { motorStarter, motorStarterTransformer, pneumaticCylinder, reversingStarter, timerOnDelay } from './templates'
-import { defaultTerm, editTerm, suggestTerms, termGroups } from './terminals'
+import { duplicateTerms, editTerm, effectiveTerms, ensureUnique, othersTerms, termGroups } from './terminals'
 import { DEFAULT_DELAY_S, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
@@ -247,14 +247,15 @@ function Editor() {
   const paste = useCallback(() => {
     const c = clip.current
     if (!c || !c.symbols.length) return
-    const map = new Map<string, string>()
+    // identifiants créés avant la mise à jour : la sélection du collage en dépend
+    const map = new Map<string, string>(c.symbols.map((s) => [s.id, uid()]))
     commit((d) => {
       const added: PlacedSymbol[] = []
       for (const s of c.symbols) {
-        const id = uid()
-        map.set(s.id, id)
-        const ns = { ...s, id, x: s.x + 20, y: s.y + 20, label: '' }
-        ns.label = nextLabel({ ...d, symbols: [...d.symbols, ...added] }, s.defId)
+        const m = SYMBOL_MAP[s.defId]?.sim
+        const sameDevice = m?.k === 'switch' && m.ctl === 'coil' // un contact dupliqué reste sur le même appareil (même repère)
+        const ns: PlacedSymbol = { ...s, id: map.get(s.id)!, x: s.x + 20, y: s.y + 20, label: sameDevice ? s.label : '', terms: undefined }
+        if (!sameDevice) ns.label = nextLabel({ ...d, symbols: [...d.symbols, ...added] }, s.defId)
         added.push(ns)
       }
       const wires = c.wires.map((w) => ({
@@ -575,37 +576,45 @@ function Editor() {
               const def = SYMBOL_MAP[selSym.defId]
               const groups = termGroups(def)
               if (!groups.length || def.ports.length > 16) return null
-              const sug = suggestTerms(def)
+              // repères affichés : saisie, sinon numérotation automatique (unique au sein de l'appareil)
+              const eff = effectiveTerms(doc.symbols, SYMBOL_MAP)
+              const defaults = effectiveTerms(doc.symbols, SYMBOL_MAP, selSym.id)[selSym.id] ?? {}
+              const dups = duplicateTerms(doc.symbols, eff)
+              const others = othersTerms(doc.symbols, eff, selSym.id)
               const title = (g: (typeof groups)[number], n: number) =>
                 g.kind === 'pole' ? `${t('termPole')} ${g.index + 1}` : g.kind === 'changeover' ? `${t('termChangeover')} ${g.index + 1}` : g.kind === 'winding' ? `${t('termWinding')} ${n + 1}` : `${t('termPort')} ${n + 1}`
               const sideHint = (id: string) => {
                 const p = def.ports.find((x) => x.id === id)
                 return p ? ({ up: '↑', down: '↓', left: '←', right: '→' } as const)[p.dir] : ''
               }
+              const store = (next: Record<string, string> | undefined) => patchSym({ terms: next && Object.keys(next).length ? next : undefined })
+              const device = selSym.label || ''
               return (
                 <div className="terms">
                   <div className="terms-head">
                     <span>{t('terminals')}</span>
-                    <span>
-                      {Object.keys(sug).length > 0 && <button className="mini" title={t('termStdHelp')} onClick={() => patchSym({ terms: { ...sug } })}>{t('termStd')}</button>}
-                      {selSym.terms && Object.keys(selSym.terms).length > 0 && <button className="mini" onClick={() => patchSym({ terms: undefined })}>{t('termReset')}</button>}
-                    </span>
+                    {selSym.terms && Object.keys(selSym.terms).length > 0 && <button className="mini" title={t('termResetHelp')} onClick={() => store(undefined)}>{t('termReset')}</button>}
                   </div>
                   {groups.map((g, gi) => (
                     <div key={gi} className="term-row">
                       <span className="term-title">{title(g, gi)}</span>
                       <span className="term-inputs">
-                        {g.ports.map((pid) => (
-                          <input key={pid} className="term-in" maxLength={6} aria-label={`${title(g, gi)} ${sideHint(pid)}`}
-                            value={selSym.terms?.[pid] ?? ''} placeholder={defaultTerm(def, pid) || sideHint(pid)}
-                            title={t('termHelp')}
-                            onFocus={() => setHiPort({ symId: selSym.id, portId: pid })} onBlur={() => setHiPort(null)}
-                            onChange={(e) => patchSym({ terms: Object.keys(editTerm(def, selSym.terms, pid, e.target.value)).length ? editTerm(def, selSym.terms, pid, e.target.value) : undefined })} />
-                        ))}
+                        {g.ports.map((pid) => {
+                          const explicit = selSym.terms?.[pid]
+                          const dup = dups.has(`${selSym.id}:${pid}`)
+                          return (
+                            <input key={pid} className={'term-in' + (explicit === undefined ? ' auto' : '') + (dup ? ' dup' : '')} maxLength={6}
+                              aria-label={`${title(g, gi)} ${sideHint(pid)}`} value={explicit ?? eff[selSym.id]?.[pid] ?? ''} placeholder={sideHint(pid)}
+                              title={dup ? t('termDup') : t('termHelp')}
+                              onFocus={() => setHiPort({ symId: selSym.id, portId: pid })}
+                              onBlur={() => { setHiPort(null); store(ensureUnique(def, selSym.terms, others)) }}
+                              onChange={(e) => store(editTerm(def, selSym.terms, pid, e.target.value, defaults))} />
+                          )
+                        })}
                       </span>
                     </div>
                   ))}
-                  <p className="muted small">{t('termHelp')}</p>
+                  <p className="muted small">{device ? `${t('termDevice')} ${device} · ` : ''}{t('termHelp')}</p>
                 </div>
               )
             })()}
