@@ -54,6 +54,28 @@ export function printSheet(doc: Doc, content: SVGGElement) {
   setTimeout(() => win.print(), 300)
 }
 
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+
+/** Impression de tout le projet : une page par feuille, puis la nomenclature (l'utilisateur choisit « Enregistrer au format PDF »). */
+export function printProject(doc: Doc, svgs: string[], rows: { label: string; name: string; desc: string; std: string }[], lang: Lang) {
+  const { w, h } = PAPER_SIZE[doc.paper]
+  const win = window.open('', '_blank')
+  if (!win) return
+  const head = lang === 'fr' ? ['Repère', 'Composant', 'Description', 'Norme'] : ['Tag', 'Component', 'Description', 'Standard']
+  const table =
+    `<section class="bom"><h2>${esc(doc.title.title || (lang === 'fr' ? 'Nomenclature' : 'Bill of materials'))} — ${lang === 'fr' ? 'Nomenclature' : 'Bill of materials'}</h2><table><thead><tr>${head.map((x) => `<th>${x}</th>`).join('')}</tr></thead><tbody>` +
+    rows.map((r) => `<tr><td>${esc(r.label)}</td><td>${esc(r.name)}</td><td>${esc(r.desc)}</td><td>${esc(r.std)}</td></tr>`).join('') +
+    `</tbody></table></section>`
+  win.document.write(
+    `<!doctype html><meta charset="utf-8"><title>${esc(doc.title.title)}</title><style>@page{size:${w * UNIT_MM}mm ${h * UNIT_MM}mm;margin:0}html,body{margin:0;font-family:Arial,sans-serif}svg{display:block}.pg{page-break-after:always}.bom{padding:15mm}table{border-collapse:collapse;width:100%;font-size:11px}td,th{border:1px solid #999;padding:3px 6px;text-align:left}</style>` +
+      svgs.map((x) => `<div class="pg">${x}</div>`).join('') +
+      table,
+  )
+  win.document.close()
+  win.focus()
+  setTimeout(() => win.print(), 400)
+}
+
 export function saveJson(doc: Doc) {
   download(fileBase(doc) + '.albert.json', new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }))
 }

@@ -5,13 +5,17 @@ import { tr, type Key } from './i18n'
 import { symBBox, uid } from './geometry'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
-import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
+import { bomRows, exportCsv, exportPng, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
 import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticCylinder, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, effectiveTerms, ensureUnique, othersTerms, termGroups } from './terminals'
 import { DEFAULT_DELAY_S, isOperable, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
 import { netLabels } from './nets'
+import { pagesOf as pagesOfDoc } from './pages'
+import { addPage, deletePage, mergedDoc, pageCount, pageOfSymbols, renamePage, switchPage } from './pages'
+import { EXERCISES, runExercise, type StepResult } from './exercises'
+import { decodeDoc, encodeDoc, fragmentFromHash, shareUrl } from './share'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
 
@@ -26,9 +30,13 @@ const emptyDoc = (): Doc => ({
 
 /** Retire les symboles dont la définition n'existe plus et les conducteurs orphelins. */
 function sanitize(d: Doc): Doc {
-  const symbols = d.symbols.filter((s) => SYMBOL_MAP[s.defId])
-  const ok = new Set(symbols.map((s) => s.id))
-  return { ...d, symbols, wires: d.wires.filter((w) => ok.has(w.from.symId) && ok.has(w.to.symId)) }
+  const clean = <T extends { symbols: PlacedSymbol[]; wires: Wire[] }>(x: T): T => {
+    const symbols = x.symbols.filter((s) => SYMBOL_MAP[s.defId])
+    const ok = new Set(symbols.map((s) => s.id))
+    return { ...x, symbols, wires: x.wires.filter((w) => ok.has(w.from.symId) && ok.has(w.to.symId)) }
+  }
+  const cur = clean(d)
+  return d.pages ? { ...cur, pages: d.pages.map(clean) } : cur
 }
 
 function loadDoc(): Doc {
@@ -66,6 +74,17 @@ const nextLabel = (doc: Doc, defId: string) => {
   }
   return prefix + (max + 1)
 }
+
+type Tpl = { key: Key; fn: (b: Doc) => Doc; level: 1 | 2 | 3; about: { fr: string; en: string } }
+const GALLERY: Tpl[] = [
+  { key: 'tplMotor', fn: motorStarter, level: 1, about: { fr: 'Disjoncteur-moteur, contacteur, moteur, marche/arrêt à auto-maintien et voyant.', en: 'Motor breaker, contactor, motor, latched start/stop and lamp.' } },
+  { key: 'tplLamps', fn: startLamps, level: 1, about: { fr: 'Voyants de marche (contact NO) et d’arrêt (contact NF) d’un même contacteur.', en: 'Run lamp (NO contact) and stop lamp (NC contact) from the same contactor.' } },
+  { key: 'tplTimer', fn: timerOnDelay, level: 1, about: { fr: 'Une lampe s’allume 5 s après la mise sous tension de la bobine temporisée.', en: 'A lamp comes on 5 s after the timed coil is energised.' } },
+  { key: 'tplTrafo', fn: motorStarterTransformer, level: 2, about: { fr: 'Commande en 24 V alternatif par un transformateur monophasé.', en: 'Control circuit at 24 V AC through a single-phase transformer.' } },
+  { key: 'tplCascade', fn: delayedCascade, level: 2, about: { fr: 'KM2 démarre 5 s après KM1 grâce à une temporisation à la montée.', en: 'KM2 starts 5 s after KM1 thanks to an on-delay timer.' } },
+  { key: 'tplReversing', fn: reversingStarter, level: 3, about: { fr: 'Deux sens de marche, deux phases permutées, verrouillage électrique KM1/KM2.', en: 'Two directions, two swapped phases, KM1/KM2 electrical interlock.' } },
+  { key: 'tplPneu', fn: pneumaticCylinder, level: 2, about: { fr: 'Vérin double effet commandé par un distributeur 4/2.', en: 'Double-acting cylinder driven by a 4/2 valve.' } },
+]
 
 const TOP = '__top'
 const DOMAINS: Domain[] = ['electrical', 'pneumatic', 'hydraulic']
@@ -142,6 +161,8 @@ function Editor() {
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
+  const [showGallery, setShowGallery] = useState(false)
+  const [exResult, setExResult] = useState<Record<string, { ok: boolean; steps: StepResult[]; missing: string[] }>>({})
   const [toast, setToast] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; target: string | null } | null>(null)
   const contentRef = useRef<SVGGElement>(null)
@@ -177,7 +198,9 @@ function Editor() {
     setClockUi({ speed: clock.current.speed, paused: clock.current.paused })
     setSimTick((n) => n + 1)
   }
-  const sim = useMemo(() => (simMode ? simulate(doc, SYMBOL_MAP, coilMemory.current, simIn, vnow()) : null), [simMode, doc, simIn, simTick]) // eslint-disable-line react-hooks/exhaustive-deps
+  // le projet entier (toutes les feuilles) : la simulation, le contrôle et la nomenclature le traitent d'un bloc
+  const all = useMemo(() => mergedDoc(doc), [doc])
+  const sim = useMemo(() => (simMode ? simulate(all, SYMBOL_MAP, coilMemory.current, simIn, vnow()) : null), [simMode, all, simIn, simTick]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sim) return
     coilMemory.current = sim.state
@@ -190,16 +213,16 @@ function Editor() {
   const [chronoNow, setChronoNow] = useState(0)
   const signalNames = useMemo(() => {
     const names: string[] = []
-    for (const s of doc.symbols) {
+    for (const s of all.symbols) {
       const m = SYMBOL_MAP[s.defId]?.sim
       if (s.label && (m?.k === 'coil' || m?.k === 'load' || isOperable(m)) && !names.includes(s.label)) names.push(s.label)
     }
     return names
-  }, [doc.symbols])
+  }, [all.symbols])
   useEffect(() => {
     if (!sim) return
     const v: Record<string, boolean> = {}
-    for (const s of doc.symbols) {
+    for (const s of all.symbols) {
       const m = SYMBOL_MAP[s.defId]?.sim
       if (!s.label) continue
       if (m?.k === 'coil' || m?.k === 'load') v[s.label] = v[s.label] || sim.energized.has(s.id)
@@ -215,7 +238,7 @@ function Editor() {
     return () => window.clearInterval(id)
   }, [simMode, clockUi.paused, clockUi.speed]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showCheck, setShowCheck] = useState(false)
-  const issues = useMemo(() => (showCheck ? checkDoc(doc, SYMBOL_MAP, lang) : []), [showCheck, doc, lang])
+  const issues = useMemo(() => (showCheck ? checkDoc(all, SYMBOL_MAP, lang) : []), [showCheck, all, lang])
   const startSim = () => {
     coilMemory.current = {}
     clock.current = { v: Date.now(), r: Date.now(), speed: clock.current.speed, paused: false }
@@ -251,8 +274,8 @@ function Editor() {
     })
   }, [])
   const coilLabels = useMemo(
-    () => [...new Set(doc.symbols.filter((s) => SYMBOL_MAP[s.defId]?.sim?.k === 'coil' && s.label).map((s) => s.label))],
-    [doc.symbols],
+    () => [...new Set(all.symbols.filter((s) => SYMBOL_MAP[s.defId]?.sim?.k === 'coil' && s.label).map((s) => s.label))],
+    [all.symbols],
   )
 
   const say = useCallback((msg: string) => {
@@ -270,9 +293,37 @@ function Editor() {
   const undo = useCallback(() => setH((s) => (s.past.length ? { doc: s.past[s.past.length - 1], past: s.past.slice(0, -1), future: [s.doc, ...s.future] } : s)), [])
   const redo = useCallback(() => setH((s) => (s.future.length ? { doc: s.future[0], past: [...s.past, s.doc], future: s.future.slice(1) } : s)), [])
 
+  // schéma reçu par lien : lecture et simulation, rien n'est enregistré tant qu'on n'en garde pas une copie
+  const [viewOnly, setViewOnly] = useState(() => !!fragmentFromHash(location.hash))
   useEffect(() => {
+    const frag = fragmentFromHash(location.hash)
+    if (!frag) return
+    decodeDoc(frag)
+      .then((d) => {
+        setH({ doc: sanitize(d), past: [], future: [] })
+        coilMemory.current = {}
+        setSimMode(true)
+      })
+      .catch(() => { setViewOnly(false); say(tr(lang, 'toastInvalid')) })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (viewOnly) return
     try { localStorage.setItem(STORE, JSON.stringify(doc)) } catch { /* quota ou mode privé */ }
-  }, [doc])
+  }, [doc, viewOnly])
+  const keepCopy = () => {
+    if (!window.confirm(tr(lang, 'shareKeepConfirm'))) return
+    history.replaceState(null, '', location.pathname + location.search)
+    setViewOnly(false)
+    setSimMode(false)
+  }
+  const copyShareLink = async () => {
+    try {
+      const url = shareUrl(await encodeDoc(doc))
+      await navigator.clipboard.writeText(url)
+      say(tr(lang, 'shareCopied'))
+    } catch { say(tr(lang, 'shareFailed')) }
+    if (exportRef.current) exportRef.current.open = false
+  }
   useEffect(() => {
     try { localStorage.setItem('albertschema.lang', lang) } catch { /* ignoré */ }
     document.documentElement.lang = lang
@@ -478,7 +529,7 @@ function Editor() {
   }
 
   const autoWire = () => {
-    const labels = netLabels(doc, SYMBOL_MAP)
+    const labels = netLabels(all, SYMBOL_MAP)
     commit((d) => ({ ...d, wires: d.wires.map((w) => ({ ...w, label: labels[w.id] ?? w.label })) }))
     say(t('toastWires'))
   }
@@ -546,6 +597,23 @@ function Editor() {
     update((d) => ({ ...d, wires: d.wires.map((w) => (w.id === sel[0] ? { ...w, ...patch } : w)) }))
   const patchTitle = (k: keyof Doc['title'], v: string) => update((d) => ({ ...d, title: { ...d.title, [k]: v } }))
 
+  /** impression de toutes les feuilles : on affiche chaque page à son tour pour en capturer le dessin, puis on revient à la page d'origine */
+  const printAllPages = async () => {
+    if (exportRef.current) exportRef.current.open = false
+    const start = doc.page ?? 0
+    const svgs: string[] = []
+    for (let i = 0; i < pageCount(doc); i++) {
+      setH((s) => ({ ...s, doc: switchPage(s.doc, i) }))
+      await new Promise((r) => setTimeout(r, 250))
+      if (contentRef.current) svgs.push(sheetSvg(doc, contentRef.current))
+    }
+    setH((s) => ({ ...s, doc: switchPage(s.doc, start) }))
+    printProject(doc, svgs, bomRows(all, lang), lang)
+  }
+  const pageTabs = pagesOfDoc(doc)
+  const extraSyms = useMemo(() => pagesOfDoc(doc).filter((_, i) => i !== (doc.page ?? 0)).flatMap((pg) => pg.symbols), [doc])
+  const pageOf = useMemo(() => pageOfSymbols(doc), [doc])
+  const goPage = (i: number) => { if (i !== (doc.page ?? 0)) { commit((d) => switchPage(d, i)); setSel([]) } }
   const withContent = (fn: (c: SVGGElement) => void) => () => {
     if (exportRef.current) exportRef.current.open = false
     if (contentRef.current) fn(contentRef.current)
@@ -603,6 +671,7 @@ function Editor() {
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
           <button onClick={() => setShowCheck(true)}>{t('check')}</button>
+          <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
           <button onClick={addNote} title={t('note')}>T {t('note')}</button>
           <details className="menu">
             <summary>▦ {t('blocks')} ▾</summary>
@@ -638,7 +707,9 @@ function Editor() {
             <button onClick={withContent((c) => exportSvg(doc, c))}>{t('exportSvg')}</button>
             <button onClick={withContent((c) => exportPng(doc, c))}>{t('exportPng')}</button>
             <button onClick={withContent((c) => printSheet(doc, c))}>{t('print')}</button>
-            <button onClick={() => { if (exportRef.current) exportRef.current.open = false; exportCsv(doc, lang) }}>{t('exportCsv')}</button>
+            {pageCount(doc) > 1 && <button onClick={printAllPages}>{t('printAll')}</button>}
+            <button onClick={() => { if (exportRef.current) exportRef.current.open = false; exportCsv(all, lang) }}>{t('exportCsv')}</button>
+            <button onClick={copyShareLink}>{t('shareLink')}</button>
           </div>
         </details>
         <span className="grow" />
@@ -695,7 +766,25 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+        <div className="pagebar" role="tablist" aria-label={t('pages')}>
+          {pageTabs.map((pg, i) => (
+            <button key={i} role="tab" aria-selected={i === (doc.page ?? 0)} className={i === (doc.page ?? 0) ? 'on' : ''}
+              onClick={() => goPage(i)}
+              onDoubleClick={() => { const n = window.prompt(tr(lang, 'pageRename'), pg.name)?.trim(); if (n) update((d) => renamePage(d, i, n)) }}
+              title={t('pageRenameHint')}>{pg.name || i + 1}</button>
+          ))}
+          <button className="add" onClick={() => { commit((d) => addPage(d)); setSel([]) }} title={t('pageAdd')} aria-label={t('pageAdd')}>＋</button>
+          {pageTabs.length > 1 && (
+            <button className="add" onClick={() => { if (window.confirm(tr(lang, 'pageDeleteConfirm'))) { commit((d) => deletePage(d, d.page ?? 0)); setSel([]) } }} title={t('pageDelete')} aria-label={t('pageDelete')}>🗑</button>
+          )}
+        </div>
+        {viewOnly && (
+          <div className="viewbanner" role="status">
+            <span>👁 {t('shareView')}</span>
+            <button onClick={keepCopy}>{t('shareKeep')}</button>
+          </div>
+        )}
         {sim && signalNames.length > 0 && (
           <Chrono rows={trace.current.rows} names={signalNames} now={chronoNow} lang={lang}
             onClear={() => { trace.current = { t0: vnow(), rows: [] }; setChronoNow(0) }} />
@@ -737,14 +826,14 @@ function Editor() {
               <div className="alert" role="alert">⚠ {t('simShort')} {[...new Set(sim.shorts.flatMap((s) => s.potentials))].join(' / ')}</div>
             )}
             {Object.entries(sim.badVoltage).map(([id, v]) => {
-              const s = doc.symbols.find((x) => x.id === id)
+              const s = all.symbols.find((x) => x.id === id)
               return <div key={id} className="alert" role="alert">⚠ {s?.label || SYMBOL_MAP[s?.defId ?? '']?.name[lang]} : {v.applied} V {t('simApplied')}, {v.rated} V {t('simRated')}</div>
             })}
             {sim.unstable && <div className="alert warn">{t('simUnstable')}</div>}
             {sim.pendingMs !== null && <div className="alert info">⏱ {t('simTiming')}</div>}
             <div className="simlist">
               <div className="section">{t('simEnergized')}</div>
-              {doc.symbols.filter((s) => sim.energized.has(s.id)).map((s) => (
+              {all.symbols.filter((s) => sim.energized.has(s.id)).map((s) => (
                 <div key={s.id} className="simrowitem">● <strong>{s.label || '·'}</strong> {SYMBOL_MAP[s.defId].name[lang]}{sim.volts[s.id] ? ` · ${sim.volts[s.id]} V` : ''}</div>
               ))}
               {!sim.energized.size && <p className="muted">{t('simNone')}</p>}
@@ -752,7 +841,7 @@ function Editor() {
                 <>
                   <div className="section">{t('simUnsupported')} ({sim.unsupported.length})</div>
                   <p className="muted">{t('simUnsupportedHelp')}</p>
-                  {doc.symbols.filter((s) => sim.unsupported.includes(s.id)).slice(0, 8).map((s) => (
+                  {all.symbols.filter((s) => sim.unsupported.includes(s.id)).slice(0, 8).map((s) => (
                     <div key={s.id} className="simrowitem dim">○ <strong>{s.label || '·'}</strong> {SYMBOL_MAP[s.defId].name[lang]}</div>
                   ))}
                 </>
@@ -786,10 +875,10 @@ function Editor() {
               const groups = termGroups(def)
               if (!groups.length || def.ports.length > 16) return null
               // repères affichés : saisie, sinon numérotation automatique (unique au sein de l'appareil)
-              const eff = effectiveTerms(doc.symbols, SYMBOL_MAP)
-              const defaults = effectiveTerms(doc.symbols, SYMBOL_MAP, selSym.id)[selSym.id] ?? {}
-              const dups = duplicateTerms(doc.symbols, eff)
-              const others = othersTerms(doc.symbols, eff, selSym.id)
+              const eff = effectiveTerms(all.symbols, SYMBOL_MAP)
+              const defaults = effectiveTerms(all.symbols, SYMBOL_MAP, selSym.id)[selSym.id] ?? {}
+              const dups = duplicateTerms(all.symbols, eff)
+              const others = othersTerms(all.symbols, eff, selSym.id)
               const title = (g: (typeof groups)[number], n: number) =>
                 g.kind === 'pole' ? `${t('termPole')} ${g.index + 1}` : g.kind === 'changeover' ? `${t('termChangeover')} ${g.index + 1}` : g.kind === 'winding' ? `${t('termWinding')} ${n + 1}` : `${t('termPort')} ${n + 1}`
               const sideHint = (id: string) => {
@@ -925,6 +1014,48 @@ function Editor() {
         </div>
       )}
 
+      {showGallery && (
+        <div className="modal" onClick={() => setShowGallery(false)}>
+          <div className="dialog gallery" role="dialog" aria-label={t('gallery')} onClick={(e) => e.stopPropagation()}>
+            <h3>{t('galleryExamples')}</h3>
+            <div className="cards">
+              {GALLERY.map((g) => (
+                <div key={g.key} className="card">
+                  <strong>{t(g.key)}</strong>
+                  <span className="lvl">{'★'.repeat(g.level)}{'☆'.repeat(3 - g.level)} {t(('level' + g.level) as Key)}</span>
+                  <p className="muted">{g.about[lang]}</p>
+                  <button onClick={() => { if (!doc.symbols.length || window.confirm(tr(lang, 'galleryReplace'))) { startTemplate(g.fn); setShowGallery(false) } }}>{t('galleryLoad')}</button>
+                </div>
+              ))}
+            </div>
+            <h3>{t('galleryExercises')}</h3>
+            <p className="muted">{t('exerciseHelp')}</p>
+            <div className="cards">
+              {EXERCISES.map((ex) => {
+                const r = exResult[ex.id]
+                return (
+                  <div key={ex.id} className="card wide">
+                    <strong>{ex.title[lang]}</strong>
+                    <span className="lvl">{'★'.repeat(ex.level)}{'☆'.repeat(3 - ex.level)} {t(('level' + ex.level) as Key)}</span>
+                    <p>{ex.statement[lang]}</p>
+                    <p className="muted">{t('exerciseLabels')} : {ex.labels.join(', ')}</p>
+                    <button onClick={() => setExResult((m) => ({ ...m, [ex.id]: runExercise(ex, doc, SYMBOL_MAP, lang) }))}>{t('exerciseCheck')}</button>
+                    {r && (
+                      <div className={'exres ' + (r.ok ? 'ok' : 'ko')}>
+                        <strong>{r.ok ? '✓ ' + t('exerciseOk') : '✗ ' + t('exerciseKo')}</strong>
+                        {r.missing.length > 0 && <div>{t('exerciseMissing')} : {r.missing.join(', ')}</div>}
+                        <ul>{r.steps.map((st, i) => <li key={i}>{st.ok ? '✓' : '✗'} {st.text}{st.detail ? ` — ${st.detail}` : ''}</li>)}</ul>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="actions"><button onClick={() => setShowGallery(false)}>{t('close')}</button></div>
+          </div>
+        </div>
+      )}
+
       {showKeys && (
         <div className="modal" onClick={() => setShowKeys(false)}>
           <div className="dialog" role="dialog" aria-label={t('shortcutsTitle')} onClick={(e) => e.stopPropagation()}>
@@ -964,15 +1095,15 @@ function Editor() {
             <h3>{t('bom')}</h3>
             <table>
               <thead><tr><th>{t('label')}</th><th>{t('component')}</th><th>{t('description')}</th><th>{t('standard')}</th></tr></thead>
-              <tbody>{bomRows(doc, lang).map((r, i) => <tr key={i}><td>{r.label}</td><td>{r.name}</td><td>{r.desc}</td><td>{r.std}</td></tr>)}</tbody>
+              <tbody>{bomRows(all, lang).map((r, i) => <tr key={i}><td>{r.label}</td><td>{r.name}</td><td>{r.desc}</td><td>{r.std}</td></tr>)}</tbody>
             </table>
             <h3>{t('wires')}</h3>
             <table>
               <thead><tr><th>{t('label')}</th><th>{t('from')}</th><th>{t('to')}</th><th>{t('section')}</th></tr></thead>
-              <tbody>{wireRows(doc).map((r, i) => <tr key={i}><td>{r.label}</td><td>{r.from}</td><td>{r.to}</td><td>{r.section}</td></tr>)}</tbody>
+              <tbody>{wireRows(all).map((r, i) => <tr key={i}><td>{r.label}</td><td>{r.from}</td><td>{r.to}</td><td>{r.section}</td></tr>)}</tbody>
             </table>
             <div className="actions">
-              <button onClick={() => exportCsv(doc, lang)}>{t('csv')}</button>
+              <button onClick={() => exportCsv(all, lang)}>{t('csv')}</button>
               <button onClick={() => setShowBom(false)}>{t('close')}</button>
             </div>
           </div>

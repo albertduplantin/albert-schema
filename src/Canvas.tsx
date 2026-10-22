@@ -75,6 +75,10 @@ interface Props {
   onSimToggle: (id: string) => void
   /** défauts injectés (fils coupés, appareils ouverts) et bascule d'un défaut */
   faults?: ReadonlySet<string>
+  /** projet à plusieurs feuilles : symboles des autres feuilles, feuille de chaque symbole, et repère « n/N » de la feuille affichée */
+  extra?: PlacedSymbol[]
+  pageOf?: Record<string, number>
+  sheetLabel?: string
   onSimFault?: (id: string) => void
   labels: { zoomIn: string; zoomOut: string; fit: string; grid: string }
 }
@@ -145,22 +149,24 @@ export default function Canvas(p: Props) {
   useEffect(() => { fit() }, [doc.paper])
   const symById = (id: string) => doc.symbols.find((s) => s.id === id)
   // repères de bornes affichés d'office : numérotation automatique, unique au sein d'un même appareil
-  const terms = useMemo(() => effectiveTerms(doc.symbols, SYMBOL_MAP), [doc.symbols])
+  const terms = useMemo(() => effectiveTerms([...doc.symbols, ...(p.extra ?? [])], SYMBOL_MAP), [doc.symbols, p.extra])
   // renvois : sous chaque bobine, la liste de ses contacts (nature, bornes, zone de la feuille), comme dans CADe SIMU
   const crossRefs = useMemo(() => {
     const out: Record<string, string[]> = {}
+    const everyone = [...doc.symbols, ...(p.extra ?? [])]
+    const multi = (p.extra?.length ?? 0) > 0
     const { w, h } = PAPER_SIZE[doc.paper]
     const cols = Math.floor((w - 2 * MARGIN) / 80), rows = Math.floor((h - 2 * MARGIN) / 80)
     const zone = (s: PlacedSymbol) => {
       const b = symBBox(s)
       const c = Math.min(cols, Math.max(1, Math.floor(((b.x1 + b.x2) / 2 - MARGIN) / ((w - 2 * MARGIN) / cols)) + 1))
       const r = Math.min(rows, Math.max(1, Math.floor(((b.y1 + b.y2) / 2 - MARGIN) / ((h - 2 * MARGIN) / rows)) + 1))
-      return c + String.fromCharCode(64 + r)
+      return (multi ? (p.pageOf?.[s.id] ?? 0) + 1 + ':' : '') + c + String.fromCharCode(64 + r)
     }
-    for (const c of doc.symbols) {
+    for (const c of everyone) {
       if (SYMBOL_MAP[c.defId]?.sim?.k !== 'coil' || !c.label) continue
       const rows2: string[] = []
-      for (const k of doc.symbols) {
+      for (const k of everyone) {
         const m = SYMBOL_MAP[k.defId]?.sim
         if (m?.k !== 'switch' || m.ctl !== 'coil' || !k.label || devKey(k.label) !== devKey(c.label)) continue
         const t = (id: string) => terms[k.id]?.[id] ?? ''
@@ -171,14 +177,14 @@ export default function Canvas(p: Props) {
       out[c.id] = rows2.sort()
     }
     // renvoi inverse : près de chaque contact, la bobine qui le commande
-    for (const k of doc.symbols) {
+    for (const k of everyone) {
       const m = SYMBOL_MAP[k.defId]?.sim
       if (m?.k !== 'switch' || m.ctl !== 'coil' || !k.label) continue
-      const c = doc.symbols.find((x) => SYMBOL_MAP[x.defId]?.sim?.k === 'coil' && x.label && devKey(x.label) === devKey(k.label))
+      const c = everyone.find((x) => SYMBOL_MAP[x.defId]?.sim?.k === 'coil' && x.label && devKey(x.label) === devKey(k.label))
       if (c) out[k.id] = [`⇐ ${c.label} · ${zone(c)}`]
     }
     return out
-  }, [doc.symbols, doc.paper, terms])
+  }, [doc.symbols, doc.paper, terms, p.extra, p.pageOf])
   // tracé de tous les conducteurs, séparés en couloirs quand ils se superposeraient
   const routes = useMemo(() => routeAll(doc.wires, doc.symbols), [doc.wires, doc.symbols])
 
@@ -493,7 +499,7 @@ export default function Canvas(p: Props) {
       <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
         <rect x={-4} y={-4} width={w + 8} height={h + 8} fill="#000" opacity={0.12} />
         <g ref={p.contentRef} color="#000" stroke="currentColor" fill="none" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" fontFamily="Arial, sans-serif">
-          <Sheet paper={doc.paper} title={doc.title} lang={p.lang} />
+          <Sheet paper={doc.paper} title={p.sheetLabel ? { ...doc.title, sheet: p.sheetLabel } : doc.title} lang={p.lang} />
           {doc.wires.map((wr) => {
             const a = symById(wr.from.symId), b = symById(wr.to.symId)
             if (!a || !b) return null

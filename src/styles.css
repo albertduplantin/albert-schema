@@ -226,3 +226,20 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 .issues li button.link { text-align: left; }
 .issues li.error button { color: #c62828; }
 .menu summary.dis { opacity: .5; }
+.viewbanner { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; gap: 10px; align-items: center; padding: 6px 12px; background: var(--ui-panel); border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 2px 10px #0003; font-size: 12px; max-width: 90%; }
+
+.dialog.gallery { width: min(900px, 94vw); max-height: 88vh; overflow-y: auto; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 8px 0 14px; }
+.card { border: 1px solid var(--ui-line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; background: var(--ui-bg); }
+.card.wide { grid-column: 1 / -1; }
+.card p { margin: 0; }
+.lvl { font-size: 11px; color: var(--accent); }
+.exres { border-radius: 6px; padding: 8px; font-size: 12px; }
+.exres.ok { background: #2f9e4422; border: 1px solid #2f9e44; }
+.exres.ko { background: #e5393522; border: 1px solid #e53935; }
+.exres ul { margin: 4px 0 0; padding-left: 18px; }
+
+.pagebar { position: absolute; left: 10px; top: 10px; z-index: 5; display: flex; gap: 2px; align-items: center; padding: 3px; background: var(--ui-panel); border: 1px solid var(--ui-line); border-radius: 8px; max-width: 60%; overflow-x: auto; }
+.pagebar button { border: 0; padding: 3px 9px; font-size: 12px; }
+.pagebar button.on { background: var(--accent); color: #fff; }
+.pagebar .add { padding: 3px 7px; }

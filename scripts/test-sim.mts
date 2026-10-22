@@ -194,5 +194,15 @@ function rig(doc: any) {
   const lbl = (def: string, ap: string) => nl[d.wires.find((w: any) => w.from.symId === d.symbols.find((s: any) => s.defId === def).id && w.from.portId === ap).id]
   check('repères de fils : le fil de L1 porte « L1 »', lbl('sim-l1', 'a'), 'L1')
 }
+// ── exercices : chaque exemple de référence réussit son exercice, et un schéma vide échoue
+{
+  const { EXERCISES, runExercise } = await import(ROOT + '/src/exercises.ts')
+  const ref: Record<string, any> = { 'start-stop': T.motorStarter, lamp: T.startLamps, delay: T.delayedCascade, interlock: T.reversingStarter }
+  for (const ex of EXERCISES) {
+    const r = runExercise(ex, ref[ex.id](base), SYMBOL_MAP, 'fr')
+    check(`exercice « ${ex.id} » : le schéma de référence réussit`, [r.ok, r.missing.length], [true, 0])
+    check(`exercice « ${ex.id} » : un schéma vide échoue`, runExercise(ex, base, SYMBOL_MAP, 'fr').ok, false)
+  }
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

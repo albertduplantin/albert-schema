@@ -114,6 +114,14 @@ export interface Note {
   size: number
 }
 
+/** Une feuille d'un projet à plusieurs pages. */
+export interface Page {
+  name: string
+  symbols: PlacedSymbol[]
+  wires: Wire[]
+  notes?: Note[]
+}
+
 export interface Doc {
   version: 1
   paper: Paper
@@ -121,4 +129,7 @@ export interface Doc {
   symbols: PlacedSymbol[]
   wires: Wire[]
   notes?: Note[]
+  /** projet à plusieurs feuilles : le contenu de la feuille active est dans symbols/wires/notes */
+  pages?: Page[]
+  page?: number
 }
