@@ -61,5 +61,8 @@ schéma joint **seulement si la case est cochée** (conservé 90 jours), informa
 Un lien propose aussi d'ouvrir un ticket GitHub pré-rempli. Fonction serveur : `api/feedback.js` (champs validés, champ piège anti-robots,
 5 envois par heure et par adresse, 300 par jour au total).
 
-**Lire les retours** : console Upstash (base reliée au projet Vercel) → *Data Browser* → clé `albertschema:feedback` (liste, plus récent en
-premier, 1 000 entrées au plus) ; un schéma joint est dans `albertschema:feedback:doc:<id>`.
+**Lire les retours** : page `/admin` (mot de passe = variable d'environnement `ADMIN_TOKEN` du projet Vercel, 16 caractères minimum ;
+sans elle, la page et l'API répondent 404). Filtres par nature, statut et texte, statuts Nouveau / Lu / Traité / Indésirable, notes internes,
+téléchargement du schéma joint, suppression, export CSV (formules neutralisées). Les essais de connexion sont limités (10 échecs par quart
+d'heure et par adresse). Pour changer le mot de passe : modifier `ADMIN_TOKEN` dans Vercel (Settings → Environment Variables) puis redéployer.
+Les données brutes restent consultables dans la console Upstash (*Data Browser*, clé `albertschema:feedback`).

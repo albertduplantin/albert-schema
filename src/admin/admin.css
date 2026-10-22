@@ -1,0 +1,63 @@
+:root {
+  --bg: #f4f5f7; --panel: #fff; --line: #d5d8de; --text: #1b1f24; --muted: #667085; --accent: #0b6bcb;
+  --bug: #d33; --idea: #1f8f3a; --question: #7e57c2;
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1d2026; --panel: #262a32; --line: #3a404b; --text: #e6e8ec; --muted: #98a2b3; --accent: #4d9cf0; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { padding: 6px 12px; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bug); }
+input, select, textarea { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.muted { color: var(--muted); }
+.err { color: var(--bug); font-weight: 600; }
+.grow { flex: 1; }
+
+.login { max-width: 360px; margin: 14vh auto; padding: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.login h1 { margin: 0 0 4px; font-size: 20px; }
+.login form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.login label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+
+.admin { max-width: 980px; margin: 0 auto; padding: 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.bar h1 { margin: 0; font-size: 20px; }
+.bar h1 small { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+.stats { display: flex; gap: 6px; }
+.chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 12px; }
+.alert-chip { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.filters input { flex: 1; min-width: 220px; }
+.empty { text-align: center; padding: 32px 0; }
+
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.item { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.item.new { border-left: 4px solid var(--accent); }
+.item.done, .item.spam { opacity: 0.7; }
+.row { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-radius: 0; background: none; text-align: left; padding: 10px 12px; }
+.row .title { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.badge { padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; color: #fff; }
+.badge.bug { background: var(--bug); } .badge.idea { background: var(--idea); } .badge.question { background: var(--question); }
+.state { font-size: 11px; padding: 1px 8px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.state.new { color: var(--accent); border-color: var(--accent); }
+.detail { padding: 0 14px 14px; border-top: 1px solid var(--line); }
+.message { white-space: pre-wrap; margin: 12px 0; line-height: 1.5; }
+dl { display: grid; grid-template-columns: 100px 1fr; gap: 4px 12px; margin: 0 0 12px; font-size: 12px; }
+dt { color: var(--muted); }
+dd { margin: 0; word-break: break-word; }
+.ua { font-size: 11px; color: var(--muted); }
+.note { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.note textarea { color: var(--text); resize: vertical; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.actions label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+a { color: var(--accent); }
+@media (max-width: 640px) { .row { flex-wrap: wrap; } .row time { width: 100%; } dl { grid-template-columns: 1fr; } }
