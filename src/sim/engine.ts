@@ -44,6 +44,8 @@ export interface SimResult {
   unsupported: string[]
   /** délai (ms) avant le prochain changement dû à une temporisation, ou null */
   pendingMs: number | null
+  /** conducteurs parcourus par un courant : +1 si le courant va de la borne `from` vers la borne `to`, -1 sinon */
+  current: Record<string, 1 | -1>
 }
 
 export const DEFAULT_DELAY_S = 3
@@ -129,19 +131,24 @@ function solve(x: Ctx) {
   for (const w of doc.wires) uf.union(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
 
   const closed: Record<string, boolean> = {}
+  const swEdges: [string, string][] = [] // liaisons établies par les contacts fermés
+  const link = (a: string, b: string) => {
+    uf.union(a, b)
+    swEdges.push([a, b])
+  }
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
     if (m?.k !== 'switch') continue
     const act = actuated(s, m, x)
     closed[s.id] = act
     if (m.ctl === 'fixed') {
-      for (const [a, b] of m.poles) uf.union(key(s.id, a), key(s.id, b))
+      for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
       continue
     }
     const isClosed = m.nc ? !act : act
-    if (isClosed) for (const [a, b] of m.poles) uf.union(key(s.id, a), key(s.id, b))
+    if (isClosed) for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
     // inverseurs : commun relié au contact travail (actionné) ou repos (au repos)
-    for (const [com, nc, no] of m.changeover ?? []) uf.union(key(s.id, com), key(s.id, act ? no : nc))
+    for (const [com, nc, no] of m.changeover ?? []) link(key(s.id, com), key(s.id, act ? no : nc))
   }
 
   const pots = new Map<string, Set<string>>()
@@ -175,7 +182,89 @@ function solve(x: Ctx) {
     if (on) energized.add(s.id)
     if (m.k === 'coil' && s.label) coilOn[s.label] = coilOn[s.label] || on
   }
-  return { closed, energized, coilOn, potOf, shorts }
+  return { closed, energized, coilOn, potOf, shorts, swEdges }
+}
+
+const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
+
+/**
+ * Conducteurs réellement parcourus par un courant et sens de circulation.
+ * On garde le graphe (fils + contacts fermés), on retire de proche en proche les branches mortes (impasses
+ * qui ne mènent ni à une source ni à un récepteur alimenté), puis on oriente chaque fil : depuis la source
+ * vers le récepteur sur les potentiels « chauds » (L, +), du récepteur vers la source sur les retours (N, 0 V).
+ */
+function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<typeof solve>): Record<string, 1 | -1> {
+  const adj = new Map<string, Set<string>>()
+  const addEdge = (a: string, b: string) => {
+    if (a === b) return
+    if (!adj.has(a)) adj.set(a, new Set())
+    if (!adj.has(b)) adj.set(b, new Set())
+    adj.get(a)!.add(b)
+    adj.get(b)!.add(a)
+  }
+  for (const w of doc.wires) addEdge(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
+  for (const [a, b] of out.swEdges) addEdge(a, b)
+
+  const pinned = new Set<string>()
+  const sources: string[] = []
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k === 'source') {
+      for (const p of Object.keys(m.pot)) {
+        pinned.add(key(s.id, p))
+        sources.push(key(s.id, p))
+      }
+    } else if ((m?.k === 'coil' || m?.k === 'load') && out.energized.has(s.id)) {
+      for (const p of m.ports) pinned.add(key(s.id, p))
+    }
+  }
+
+  // élagage des impasses
+  const queue = [...adj.keys()].filter((n) => !pinned.has(n) && adj.get(n)!.size <= 1)
+  while (queue.length) {
+    const n = queue.pop()!
+    const nb = adj.get(n)
+    if (!nb) continue
+    adj.delete(n)
+    for (const o of nb) {
+      const set = adj.get(o)
+      if (!set) continue
+      set.delete(n)
+      if (!pinned.has(o) && set.size <= 1) queue.push(o)
+    }
+  }
+
+  // distance depuis les sources
+  const dist = new Map<string, number>()
+  const bfs: string[] = []
+  for (const s of sources) {
+    if (adj.has(s)) {
+      dist.set(s, 0)
+      bfs.push(s)
+    }
+  }
+  for (let i = 0; i < bfs.length; i++) {
+    for (const o of adj.get(bfs[i]) ?? []) {
+      if (!dist.has(o)) {
+        dist.set(o, dist.get(bfs[i])! + 1)
+        bfs.push(o)
+      }
+    }
+  }
+
+  const res: Record<string, 1 | -1> = {}
+  for (const w of doc.wires) {
+    const u = key(w.from.symId, w.from.portId)
+    const v = key(w.to.symId, w.to.portId)
+    if (!adj.get(u)?.has(v)) continue
+    const pot = out.potOf(w.from.symId, w.from.portId)
+    if (!pot || !dist.has(u) || !dist.has(v)) continue
+    const du = dist.get(u)!
+    const dv = dist.get(v)!
+    const awayFromSource = HOT.has(pot)
+    res[w.id] = du === dv ? 1 : (awayFromSource ? du < dv : du > dv) ? 1 : -1
+  }
+  return res
 }
 
 export function simulate(doc: Doc, defs: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now = Date.now()): SimResult {
@@ -218,5 +307,6 @@ export function simulate(doc: Doc, defs: Record<string, SymbolDef>, previous: Si
   return {
     state: memory, energized: out.energized, closed: out.closed, potentialOf, shorts: out.shorts, unstable, unsupported,
     pendingMs: ctx.pending.length ? Math.min(...ctx.pending) : null,
+    current: currentFlow(doc, defs, out),
   }
 }

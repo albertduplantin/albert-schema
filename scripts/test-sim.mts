@@ -68,5 +68,26 @@ function rig(doc: any) {
   d.wires.push({ id: 'x', from: { symId: l1.id, portId: 'a' }, to: { symId: l2.id, portId: 'a' }, label: '', color: '', section: '' })
   const r = g.run(); check('court-circuit L1-L2 détecté', r.shorts.map((s: any) => s.potentials.sort()), [['L1', 'L2']])
 }
+// ── 5. circulation du courant : seuls les fils parcourus sont animés, dans le bon sens
+{
+  const d = T.motorStarter(base), g = rig(d)
+  const wireBetween = (aLabel: string, aDef: string, bLabel: string, bDef: string) =>
+    d.wires.find((w: any) => {
+      const a = d.symbols.find((s: any) => s.id === w.from.symId), b = d.symbols.find((s: any) => s.id === w.to.symId)
+      return a.label === aLabel && a.defId.includes(aDef) && b.label === bLabel && b.defId.includes(bDef)
+    })
+  const S2 = g.idOf('S2')
+  let r = g.run()
+  check('courant : au repos, aucun fil parcouru', Object.keys(r.current).length, 0)
+  r = g.run([S2])
+  const feed = wireBetween('', 'sim-l', 'S1', 'poussoir_nf'), back = wireBetween('KM1', 'bobine', '', 'sim-n'), toStop = wireBetween('S1', 'poussoir_nf', 'S2', 'poussoir')
+  check('courant : fil source L → S1 parcouru de la source vers la charge', r.current[feed.id], 1)
+  check('courant : fil bobine → N parcouru de la charge vers le retour', r.current[back.id], 1)
+  check('courant : S2 appuyé, fil S1 → S2 parcouru', r.current[toStop.id], 1)
+  r = g.run()
+  check('courant : S2 relâché, branche S2 sans courant (auto-maintien par KM1)', [r.current[toStop.id], r.current[feed.id]], [undefined, 1])
+  const l1 = wireBetween('', 'sim-l1', 'Q1', 'disjonct')
+  check('courant : phase L1 vers le disjoncteur parcourue (moteur en marche)', r.current[l1.id], 1)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

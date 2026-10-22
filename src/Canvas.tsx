@@ -6,6 +6,36 @@ import {
 } from './geometry'
 import Sheet from './Sheet'
 import { isOperable, type SimResult } from './sim/engine'
+import type { SimModel } from './types'
+
+/** Variables CSS --b{n} : rotation de chaque lame de contact selon l'état simulé (la transition CSS anime le mouvement). */
+function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | null): React.CSSProperties | undefined {
+  if (!sim || model?.k !== 'switch' || !model.blades) return undefined
+  const actuated = sim.closed[id]
+  // état conducteur : un inverseur est « fermé » côté travail quand il est actionné ; un contact simple selon sa nature (NO/NF)
+  const conducting = model.changeover?.length ? actuated : model.nc ? !actuated : actuated
+  const vars: Record<string, string> = {}
+  model.blades.forEach((b, n) => {
+    vars['--b' + n] = (conducting === b.closed ? 0 : b.rot) + 'deg'
+  })
+  return vars as React.CSSProperties
+}
+
+/** Rotor : trois pales qui tournent dans le cercle du moteur. */
+function Rotor({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+  const R = r * 0.78
+  return (
+    <g transform={`translate(${cx} ${cy})`} pointerEvents="none">
+      <circle r={R + 1} fill="#fff" fillOpacity={0.82} stroke="none" />
+      <g stroke="#1f8f3a" strokeWidth={1.8} strokeLinecap="round" fill="none">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.8s" repeatCount="indefinite" />
+        <path d={`M0 0L${R} 0M0 0L${-R / 2} ${R * 0.866}M0 0L${-R / 2} ${-R * 0.866}`} />
+        <circle r={R} strokeOpacity={0.35} strokeWidth={1} />
+      </g>
+      <circle r={1.8} fill="#1f8f3a" stroke="none" />
+    </g>
+  )
+}
 
 const POT_COLOR: Record<string, string> = {
   L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
@@ -317,6 +347,11 @@ export default function Canvas(p: Props) {
             return (
               <g key={wr.id}>
                 <polyline points={pointsAttr(pts)} stroke={stroke} strokeWidth={p.sim && pot ? 2.2 : 1.6} />
+                {p.sim?.current[wr.id] && (
+                  <polyline points={pointsAttr(pts)} stroke="#fff" strokeOpacity={0.95} strokeWidth={1.3} strokeDasharray="2 6" strokeLinecap="butt">
+                    <animate attributeName="stroke-dashoffset" from="0" to={p.sim.current[wr.id] > 0 ? '-8' : '8'} dur="0.45s" repeatCount="indefinite" />
+                  </polyline>
+                )}
                 {txt && <text x={mx + 4} y={my - 4} fontSize={7} fill={wr.color} stroke="none">{txt}</text>}
               </g>
             )
@@ -327,7 +362,9 @@ export default function Canvas(p: Props) {
             const b = symBBox(s)
             const model = def.sim
             const lit = p.sim?.energized.has(s.id)
-            const closedState = p.sim && model?.k === 'switch' && model.ctl !== 'fixed' ? p.sim.closed[s.id] : undefined
+            const closedState = p.sim && model?.k === 'switch' && model.ctl !== 'fixed'
+              ? (model.changeover?.length ? p.sim.closed[s.id] : model.nc ? !p.sim.closed[s.id] : p.sim.closed[s.id]) // contact conducteur
+              : undefined
             return (
               <g key={s.id}>
                 {lit && model && (model.k === 'coil' || model.k === 'load') && (
@@ -337,7 +374,10 @@ export default function Canvas(p: Props) {
                 {closedState !== undefined && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
-                <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />
+                <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={bladeVars(s.id, model, p.sim)}>
+                  <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />
+                  {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} />}
+                </g>
                 {def.ports.map((pt) => {
                   if (!pt.label) return null
                   const pos = portPos(s, pt.id)!

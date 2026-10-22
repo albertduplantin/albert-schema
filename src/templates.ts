@@ -35,7 +35,7 @@ export const motorStarter = (base: Doc): Doc =>
   build(base,
     [
       ['l1', 'sim-l1', 120, 30], ['l2', 'sim-l2', 140, 30], ['l3', 'sim-l3', 160, 30],
-      ['q', Q('200_fuses_protective_gears/12_magneto_thermal_circuit_breakers/fa4202_disjoncteur_moteur_3p'), 100, 100, 'Q1'],
+      ['q', Q('200_fuses_protective_gears/11_circuit_breakers/disjonct-m_3f'), 120, 100, 'Q1'],
       ['k', Q('310_relays_contactors_contacts/02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 120, 200, 'KM1'],
       ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 120, 320, 'M1'],
       ['lc', 'sim-l', 400, 30],
@@ -47,8 +47,8 @@ export const motorStarter = (base: Doc): Doc =>
       ['n', 'sim-n', 400, 420],
     ],
     [
-      ['l1', 'a', 'q', 't0'], ['l2', 'a', 'q', 't1'], ['l3', 'a', 'q', 't2'],
-      ['q', 't5', 'k', 't0'], ['q', 't4', 'k', 't2'], ['q', 't3', 'k', 't4'],
+      ['l1', 'a', 'q', 't5'], ['l2', 'a', 'q', 't4'], ['l3', 'a', 'q', 't3'],
+      ['q', 't1', 'k', 't0'], ['q', 't0', 'k', 't2'], ['q', 't2', 'k', 't4'],
       ['k', 't1', 'm', 't0'], ['k', 't3', 'm', 't2'], ['k', 't5', 'm', 't1'],
       ['lc', 'a', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'ka', 't0'],
       ['s2', 't1', 'c', 't0'], ['ka', 't1', 'c', 't0'], ['c', 't1', 'n', 'a'],
@@ -97,7 +97,7 @@ export const reversingStarter = (base: Doc): Doc =>
   build(base,
     [
       ['l1', 'sim-l1', 120, 30], ['l2', 'sim-l2', 140, 30], ['l3', 'sim-l3', 160, 30],
-      ['q', Q('200_fuses_protective_gears/12_magneto_thermal_circuit_breakers/fa4202_disjoncteur_moteur_3p'), 100, 100, 'Q1'],
+      ['q', Q('200_fuses_protective_gears/11_circuit_breakers/disjonct-m_3f'), 120, 100, 'Q1'],
       ['k1', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 120, 220, 'KM1'],
       ['k2', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 240, 220, 'KM2'],
       ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 120, 330, 'M1'],
@@ -115,9 +115,9 @@ export const reversingStarter = (base: Doc): Doc =>
       ['n2', 'sim-n', 560, 440],
     ],
     [
-      ['l1', 'a', 'q', 't0'], ['l2', 'a', 'q', 't1'], ['l3', 'a', 'q', 't2'],
-      ['q', 't5', 'k1', 't0'], ['q', 't4', 'k1', 't2'], ['q', 't3', 'k1', 't4'],
-      ['q', 't5', 'k2', 't0'], ['q', 't4', 'k2', 't2'], ['q', 't3', 'k2', 't4'],
+      ['l1', 'a', 'q', 't5'], ['l2', 'a', 'q', 't4'], ['l3', 'a', 'q', 't3'],
+      ['q', 't1', 'k1', 't0'], ['q', 't0', 'k1', 't2'], ['q', 't2', 'k1', 't4'],
+      ['q', 't1', 'k2', 't0'], ['q', 't0', 'k2', 't2'], ['q', 't2', 'k2', 't4'],
       ['k1', 't1', 'm', 't0'], ['k1', 't3', 'm', 't2'], ['k1', 't5', 'm', 't1'],
       ['k2', 't1', 'm', 't0'], ['k2', 't3', 'm', 't1'], ['k2', 't5', 'm', 't2'],
       ['lc', 'a', 's1', 't0'],

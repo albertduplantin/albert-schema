@@ -166,3 +166,6 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 .simrowitem.dim { color: var(--ui-muted); }
 
 .alert.info { background: #0b6bcb18; border-color: #0b6bcb; font-weight: 400; }
+
+.blade { will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .blade { transition: none !important; } }
