@@ -3,10 +3,13 @@
 //   GET  /api/admin?action=list            -> { total, items: [{ …retour, status, note }] }   (300 plus récents)
 //   GET  /api/admin?action=doc&id=<id>     -> schéma joint (JSON brut)
 //   POST /api/admin { action: 'status' | 'note' | 'delete', id, status?, note? }
+//   GET  /api/admin?action=examples        -> { items: [exemples enregistrés, sans le schéma], hidden: [clés d'exemples intégrés masqués] }
+//   POST /api/admin { action: 'ex-save', id?, title:{fr,en}, about:{fr,en}, level, order, doc }   -> { ok, id }
+//   POST /api/admin { action: 'ex-delete', id }   |   { action: 'ex-hide', key, hidden }
 //
 // Accès : en-tête `Authorization: Bearer <ADMIN_TOKEN>`. Sans variable d'environnement ADMIN_TOKEN (10 caractères minimum), l'API
 // répond 404 comme si elle n'existait pas. Les mauvais essais sont comptés par adresse (10 par quart d'heure, puis 429).
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto'
 
 const LIST = 'albertschema:feedback'
 const STATUS = 'albertschema:feedback:status'
@@ -14,6 +17,11 @@ const STATUSES = new Set(['new', 'read', 'done', 'spam'])
 const MAX_FAILS = 10
 const MAX_NOTE = 1000
 const LIMIT = 300
+const EXAMPLES = 'albertschema:examples'
+const HIDDEN = 'albertschema:examples:hidden'
+const MAX_EXAMPLES = 100
+const MAX_EXAMPLE_DOC = 400_000
+const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 
 const config = () => ({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
@@ -61,6 +69,19 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const action = String(req.query?.action || new URL(req.url, 'http://x').searchParams.get('action') || 'list')
+      if (action === 'examples') {
+        const [{ result: rows }, { result: hidden }] = await redis([['HGETALL', EXAMPLES], ['SMEMBERS', HIDDEN]])
+        const items = []
+        for (let i = 1; i < (rows?.length ?? 0); i += 2) {
+          try {
+            const { doc, ...meta } = JSON.parse(rows[i])
+            items.push(meta)
+          } catch { /* entrée illisible ignorée */ }
+        }
+        items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.ts).localeCompare(String(b.ts)))
+        res.status(200).json({ items, hidden: hidden ?? [] })
+        return
+      }
       if (action === 'doc') {
         const id = String(req.query?.id || new URL(req.url, 'http://x').searchParams.get('id') || '')
         if (!validId(id)) {
@@ -98,6 +119,57 @@ export default async function handler(req, res) {
       let body = req.body
       if (typeof body === 'string') {
         try { body = JSON.parse(body) } catch { body = null }
+      }
+      if (body && body.action === 'ex-save') {
+        const title = { fr: text(body.title?.fr, 120), en: text(body.title?.en, 120) }
+        const about = { fr: text(body.about?.fr, 400), en: text(body.about?.en, 400) }
+        const level = [1, 2, 3].includes(Number(body.level)) ? Number(body.level) : 1
+        const order = Number.isFinite(Number(body.order)) ? Math.max(-999, Math.min(999, Math.round(Number(body.order)))) : 0
+        const id = body.id ? String(body.id) : randomUUID().slice(0, 8)
+        if (!validId(id) || !title.fr || !title.en) {
+          res.status(400).json({ error: 'invalid example' })
+          return
+        }
+        let doc = body.doc
+        if (doc !== undefined) {
+          const raw = typeof doc === 'string' ? doc : JSON.stringify(doc)
+          let parsed
+          try { parsed = JSON.parse(raw) } catch { parsed = null }
+          if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.symbols) || !Array.isArray(parsed.wires) || parsed.symbols.length > 2000 || raw.length > MAX_EXAMPLE_DOC) {
+            res.status(400).json({ error: 'invalid document' })
+            return
+          }
+          doc = parsed
+        }
+        const [{ result: existing }, { result: count }] = await redis([['HGET', EXAMPLES, id], ['HLEN', EXAMPLES]])
+        if (!existing && Number(count ?? 0) >= MAX_EXAMPLES) {
+          res.status(400).json({ error: 'too many examples' })
+          return
+        }
+        let prev = {}
+        try { prev = existing ? JSON.parse(existing) : {} } catch { prev = {} }
+        if (!doc && !prev.doc) {
+          res.status(400).json({ error: 'document required' })
+          return
+        }
+        const entry = { id, title, about, level, order, ts: prev.ts ?? new Date().toISOString(), n: (doc ?? prev.doc).symbols.length, doc: doc ?? prev.doc }
+        await redis([['HSET', EXAMPLES, id, JSON.stringify(entry)]])
+        res.status(200).json({ ok: true, id })
+        return
+      }
+      if (body && body.action === 'ex-delete' && validId(body.id)) {
+        await redis([['HDEL', EXAMPLES, body.id]])
+        res.status(200).json({ ok: true })
+        return
+      }
+      if (body && body.action === 'ex-hide' && typeof body.key === 'string' && /^[A-Za-z0-9]{2,40}$/.test(body.key)) {
+        await redis([[body.hidden ? 'SADD' : 'SREM', HIDDEN, body.key]])
+        res.status(200).json({ ok: true })
+        return
+      }
+      if (body && String(body.action).startsWith('ex-')) {
+        res.status(400).json({ error: 'invalid request' })
+        return
       }
       if (!body || !validId(body.id)) {
         res.status(400).json({ error: 'invalid request' })

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "tsx scripts/test-sim.mts && tsx scripts/test-routing.mts && tsx scripts/test-terminals.mts && tsx scripts/test-share.mts && node scripts/test-feedback-api.mjs && node scripts/test-admin-api.mjs"
+    "test": "tsx scripts/test-sim.mts && tsx scripts/test-routing.mts && tsx scripts/test-terminals.mts && tsx scripts/test-share.mts && node scripts/test-feedback-api.mjs && node scripts/test-admin-api.mjs && node scripts/test-examples-api.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

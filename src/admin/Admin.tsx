@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Examples from './Examples'
 
 type Kind = 'bug' | 'idea' | 'question'
 type Status = 'new' | 'read' | 'done' | 'spam'
@@ -81,6 +82,8 @@ export default function Admin() {
   const [kind, setKind] = useState<Kind | ''>('')
   const [status, setStatus] = useState<Status | 'todo' | ''>('todo')
   const [q, setQ] = useState('')
+  const [view, setView] = useState<'feedback' | 'examples'>('feedback')
+  const callApi = useCallback((query: string, body?: unknown) => api(token, query, body), [token])
 
   const logout = useCallback(() => {
     try { sessionStorage.removeItem(KEY) } catch { /* ignoré */ }
@@ -167,6 +170,14 @@ export default function Admin() {
 
   return (
     <main className="admin">
+      <nav className="tabs" role="tablist">
+        <button role="tab" aria-selected={view === 'feedback'} className={view === 'feedback' ? 'on' : ''} onClick={() => setView('feedback')}>Retours{counts.new ? ` (${counts.new})` : ''}</button>
+        <button role="tab" aria-selected={view === 'examples'} className={view === 'examples' ? 'on' : ''} onClick={() => setView('examples')}>Exemples</button>
+        <span className="grow" />
+        <button onClick={logout}>Se déconnecter</button>
+      </nav>
+      {error && <p className="err" role="alert">{error}</p>}
+      {view === 'examples' ? <Examples call={callApi} onError={setError} /> : (<>
       <header className="bar">
         <h1>Retours <small>{total} au total</small></h1>
         <div className="stats">
@@ -176,7 +187,6 @@ export default function Admin() {
         <span className="grow" />
         <button onClick={() => void load(token)} disabled={loading}>{loading ? 'Actualisation…' : 'Actualiser'}</button>
         <button onClick={exportCsv} disabled={!shown.length}>Exporter CSV</button>
-        <button onClick={logout}>Se déconnecter</button>
       </header>
 
       <div className="filters">
@@ -192,7 +202,6 @@ export default function Admin() {
         </select>
       </div>
 
-      {error && <p className="err" role="alert">{error}</p>}
       {!loading && !shown.length && <p className="muted empty">{items.length ? 'Aucun retour ne correspond aux filtres.' : 'Aucun retour pour le moment.'}</p>}
 
       <ul className="list">
@@ -234,6 +243,7 @@ export default function Admin() {
         ))}
       </ul>
       {total > items.length && <p className="muted">Seuls les {items.length} retours les plus récents sont affichés.</p>}
+      </>)}
     </main>
   )
 }

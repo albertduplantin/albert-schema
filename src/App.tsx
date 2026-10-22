@@ -14,6 +14,7 @@ import { checkDoc } from './check'
 import { netLabels } from './nets'
 import { pagesOf as pagesOfDoc } from './pages'
 import { addPage, deletePage, mergedDoc, pageCount, pageOfSymbols, renamePage, switchPage } from './pages'
+import { BUILTIN_META } from './galleryMeta'
 import { EXERCISES, runExercise, type StepResult } from './exercises'
 import { decodeDoc, encodeDoc, fragmentFromHash, shareUrl } from './share'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
@@ -75,18 +76,13 @@ const nextLabel = (doc: Doc, defId: string) => {
   return prefix + (max + 1)
 }
 
-type Tpl = { key: Key; fn: (b: Doc) => Doc; level: 1 | 2 | 3; about: { fr: string; en: string } }
-const GALLERY: Tpl[] = [
-  { key: 'tplMotor', fn: motorStarter, level: 1, about: { fr: 'Disjoncteur-moteur, contacteur, moteur, marche/arrêt à auto-maintien et voyant.', en: 'Motor breaker, contactor, motor, latched start/stop and lamp.' } },
-  { key: 'tplLamps', fn: startLamps, level: 1, about: { fr: 'Voyants de marche (contact NO) et d’arrêt (contact NF) d’un même contacteur.', en: 'Run lamp (NO contact) and stop lamp (NC contact) from the same contactor.' } },
-  { key: 'tplTimer', fn: timerOnDelay, level: 1, about: { fr: 'Une lampe s’allume 5 s après la mise sous tension de la bobine temporisée.', en: 'A lamp comes on 5 s after the timed coil is energised.' } },
-  { key: 'tplTrafo', fn: motorStarterTransformer, level: 2, about: { fr: 'Commande en 24 V alternatif par un transformateur monophasé.', en: 'Control circuit at 24 V AC through a single-phase transformer.' } },
-  { key: 'tplCascade', fn: delayedCascade, level: 2, about: { fr: 'KM2 démarre 5 s après KM1 grâce à une temporisation à la montée.', en: 'KM2 starts 5 s after KM1 thanks to an on-delay timer.' } },
-  { key: 'tplReversing', fn: reversingStarter, level: 3, about: { fr: 'Deux sens de marche, deux phases permutées, verrouillage électrique KM1/KM2.', en: 'Two directions, two swapped phases, KM1/KM2 electrical interlock.' } },
-  { key: 'tplPneu', fn: pneumaticCylinder, level: 1, about: { fr: 'Vérin double effet et distributeur 5/2 manuel : maintenez le distributeur appuyé en simulation.', en: 'Double-acting cylinder and manual 5/2 valve: hold the valve pressed in simulation.' } },
-  { key: 'tplPneuElec', fn: pneumaticElectric, level: 2, about: { fr: 'Électrodistributeur 5/2 commandé par un bouton ; le fin de course A1+ allume un voyant.', en: 'Solenoid 5/2 valve driven by a switch; the A1+ limit switch lights a lamp.' } },
-  { key: 'tplPneuAuto', fn: pneumaticAuto, level: 3, about: { fr: 'Va-et-vient automatique A+ A- : distributeur bistable et deux fins de course.', en: 'Automatic A+ A- cycle: bistable valve and two limit switches.' } },
-]
+const TEMPLATE_FN: Record<string, (b: Doc) => Doc> = {
+  tplMotor: motorStarter, tplLamps: startLamps, tplTimer: timerOnDelay, tplTrafo: motorStarterTransformer, tplCascade: delayedCascade,
+  tplReversing: reversingStarter, tplPneu: pneumaticCylinder, tplPneuElec: pneumaticElectric, tplPneuAuto: pneumaticAuto,
+}
+const GALLERY = BUILTIN_META.map((m) => ({ ...m, fn: TEMPLATE_FN[m.key] }))
+/** Exemple publié par l'administrateur (le schéma est téléchargé à l'ouverture). */
+interface RemoteExample { id: string; title: { fr: string; en: string }; about: { fr: string; en: string }; level: 1 | 2 | 3; order: number; n?: number }
 
 const TOP = '__top'
 const DOMAINS: Domain[] = ['electrical', 'pneumatic', 'hydraulic']
@@ -164,6 +160,27 @@ function Editor() {
   const [showBom, setShowBom] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
   const [showGallery, setShowGallery] = useState(false)
+  const [remoteEx, setRemoteEx] = useState<{ items: RemoteExample[]; hidden: string[] }>({ items: [], hidden: [] })
+  useEffect(() => {
+    // exemples publiés par l'administrateur : chargés à l'ouverture de la galerie ; sans réseau, seuls les exemples intégrés restent
+    if (!showGallery) return
+    fetch(import.meta.env.BASE_URL + 'api/examples')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && Array.isArray(d.items)) setRemoteEx({ items: d.items, hidden: Array.isArray(d.hidden) ? d.hidden : [] }) })
+      .catch(() => undefined)
+  }, [showGallery])
+  const openRemote = (ex: RemoteExample) => {
+    if (doc.symbols.length && !window.confirm(tr(lang, 'galleryReplace'))) return
+    fetch(import.meta.env.BASE_URL + 'api/examples?id=' + encodeURIComponent(ex.id))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http'))))
+      .then((d: Doc) => {
+        if (d.version !== 1 || !Array.isArray(d.symbols)) throw new Error('format')
+        commit(() => sanitize(d))
+        setSel([])
+        setShowGallery(false)
+      })
+      .catch(() => say(tr(lang, 'toastInvalid')))
+  }
   const [exResult, setExResult] = useState<Record<string, { ok: boolean; steps: StepResult[]; missing: string[] }>>({})
   const [toast, setToast] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; target: string | null } | null>(null)
@@ -1026,12 +1043,20 @@ function Editor() {
           <div className="dialog gallery" role="dialog" aria-label={t('gallery')} onClick={(e) => e.stopPropagation()}>
             <h3>{t('galleryExamples')}</h3>
             <div className="cards">
-              {GALLERY.map((g) => (
+              {GALLERY.filter((g) => !remoteEx.hidden.includes(g.key)).map((g) => (
                 <div key={g.key} className="card">
                   <strong>{t(g.key)}</strong>
                   <span className="lvl">{'★'.repeat(g.level)}{'☆'.repeat(3 - g.level)} {t(('level' + g.level) as Key)}</span>
                   <p className="muted">{g.about[lang]}</p>
                   <button onClick={() => { if (!doc.symbols.length || window.confirm(tr(lang, 'galleryReplace'))) { startTemplate(g.fn); setShowGallery(false) } }}>{t('galleryLoad')}</button>
+                </div>
+              ))}
+              {remoteEx.items.map((ex) => (
+                <div key={ex.id} className="card">
+                  <strong>{ex.title[lang] || ex.title.fr}</strong>
+                  <span className="lvl">{'★'.repeat(ex.level)}{'☆'.repeat(3 - ex.level)} {t(('level' + ex.level) as Key)}</span>
+                  <p className="muted">{ex.about[lang] || ex.about.fr}</p>
+                  <button onClick={() => openRemote(ex)}>{t('galleryLoad')}</button>
                 </div>
               ))}
             </div>
