@@ -169,3 +169,8 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 
 .blade { will-change: transform; }
 @media (prefers-reduced-motion: reduce) { .blade { transition: none !important; } }
+
+.via-handle { fill: #fff; stroke: #0b6bcb; stroke-width: 1.5; cursor: move; }
+.mid-handle { fill: #0b6bcb66; stroke: #0b6bcb; stroke-width: 1; cursor: crosshair; }
+.mid-handle:hover { fill: #0b6bcb; }
+.via-dot { fill: #0b6bcb; stroke: #fff; stroke-width: 1; pointer-events: none; }

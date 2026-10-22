@@ -82,6 +82,8 @@ export interface Wire {
   label: string
   color: string
   section: string
+  /** points de passage imposés par l'utilisateur (tracé manuel) ; absent = tracé automatique */
+  via?: { x: number; y: number }[]
 }
 
 export interface TitleBlock {

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "tsx scripts/test-sim.mts"
+    "test": "tsx scripts/test-sim.mts && tsx scripts/test-routing.mts"
   },
   "dependencies": {
     "react": "^18.3.1",

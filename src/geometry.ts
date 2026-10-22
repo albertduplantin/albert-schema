@@ -102,4 +102,92 @@ export function route(a: P & { dir: Dir }, b: P & { dir: Dir }): P[] {
   return out
 }
 
+const STUB_LEN = 20
+const sameP = (p: P, q: P) => p.x === q.x && p.y === q.y
+
+/** Supprime les points en double et les points alignés. */
+function clean(pts: P[]): P[] {
+  const out: P[] = []
+  for (const p of pts) {
+    const last = out[out.length - 1]
+    if (last && sameP(last, p)) continue
+    out.push(p)
+    while (out.length >= 3) {
+      const [p0, p1, p2] = out.slice(-3)
+      if ((p0.x === p1.x && p1.x === p2.x) || (p0.y === p1.y && p1.y === p2.y)) out.splice(out.length - 2, 1)
+      else break
+    }
+  }
+  return out
+}
+
+/**
+ * Relie des points successifs par des segments horizontaux/verticaux. Entre deux points non alignés, on ajoute un coin :
+ * on poursuit d'abord dans la direction courante, sauf si cela imposerait un demi-tour.
+ */
+function orthogonalize(pts: P[], dir0: [number, number], arrive?: { index: number; dir: [number, number] }): P[] {
+  const out: P[] = [pts[0]]
+  let d = dir0
+  const unit = (p: P, q: P): [number, number] => [Math.sign(q.x - p.x), Math.sign(q.y - p.y)]
+  for (let i = 1; i < pts.length; i++) {
+    const p = out[out.length - 1]
+    const q = pts[i]
+    if (sameP(p, q)) continue
+    if (p.x === q.x || p.y === q.y) {
+      out.push(q)
+      d = unit(p, q)
+      continue
+    }
+    const horizontal = d[0] !== 0
+    const c1 = horizontal ? { x: q.x, y: p.y } : { x: p.x, y: q.y }
+    const c2 = horizontal ? { x: p.x, y: q.y } : { x: q.x, y: p.y }
+    const dot = (c: P) => (c.x - p.x) * d[0] + (c.y - p.y) * d[1]
+    // arrivée sur la borne : on ne doit pas arriver à contre-sens de l'entrée dans la borne (traversée + demi-tour)
+    const okArrive = (c: P) => !arrive || i !== arrive.index || (q.x - c.x) * arrive.dir[0] + (q.y - c.y) * arrive.dir[1] >= 0
+    const candidates = [c1, c2]
+    const c = candidates.find((k) => dot(k) >= 0 && okArrive(k)) ?? candidates.find(okArrive) ?? c1
+    out.push(c, q)
+    d = unit(c, q)
+  }
+  return clean(out)
+}
+
+/** Tracé d'un conducteur entre deux bornes en passant par des points imposés (coudes choisis par l'utilisateur). */
+export function routeVia(a: P & { dir: Dir }, b: P & { dir: Dir }, via: P[]): P[] {
+  if (!via.length) return route(a, b)
+  const [ax, ay] = VEC[a.dir]
+  const [bx, by] = VEC[b.dir]
+  const A = { x: a.x + ax * STUB_LEN, y: a.y + ay * STUB_LEN }
+  const B = { x: b.x + bx * STUB_LEN, y: b.y + by * STUB_LEN }
+  const pts = [{ x: a.x, y: a.y }, A, ...via, B, { x: b.x, y: b.y }]
+  return orthogonalize(pts, [ax, ay], { index: pts.length - 2, dir: [-bx, -by] })
+}
+
+/** Tracé en cours de pose : de la borne de départ, par les coudes déjà posés, jusqu'au curseur. */
+export function routeOpen(a: P & { dir: Dir }, via: P[], end: P): P[] {
+  const [ax, ay] = VEC[a.dir]
+  const A = { x: a.x + ax * STUB_LEN, y: a.y + ay * STUB_LEN }
+  return orthogonalize([{ x: a.x, y: a.y }, A, ...via, end], [ax, ay])
+}
+
+export const pathLength = (pts: P[]) => pts.reduce((s, p, i) => (i ? s + Math.abs(p.x - pts[i - 1].x) + Math.abs(p.y - pts[i - 1].y) : 0), 0)
+
+/** Position d'insertion d'un nouveau coude q dans la liste des coudes : celle qui donne le tracé le plus court. */
+export function bestInsertIndex(a: P & { dir: Dir }, b: P & { dir: Dir }, via: P[], q: P): number {
+  let best = 0
+  let bestLen = Infinity
+  for (let j = 0; j <= via.length; j++) {
+    const trial = [...via.slice(0, j), q, ...via.slice(j)]
+    // longueur de la suite ordonnée des points (insensible au choix des coins : un coude hors de l'ordre allonge le trajet)
+    const [ax, ay] = VEC[a.dir]
+    const [bx, by] = VEC[b.dir]
+    const len = pathLength([{ x: a.x, y: a.y }, { x: a.x + ax * STUB_LEN, y: a.y + ay * STUB_LEN }, ...trial, { x: b.x + bx * STUB_LEN, y: b.y + by * STUB_LEN }, { x: b.x, y: b.y }])
+    if (len < bestLen) {
+      bestLen = len
+      best = j
+    }
+  }
+  return best
+}
+
 export const pointsAttr = (pts: P[]) => pts.map((p) => `${p.x},${p.y}`).join(' ')

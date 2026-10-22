@@ -35,3 +35,10 @@ Limites : pas de régime transitoire électrique ni de courants ; automates et v
 ## Déploiement
 
 Application statique (Vite) + une fonction serverless (`api/usage.js`). En-têtes de sécurité (CSP…) dans `vercel.json`.
+
+## Tracé des conducteurs
+
+Tirez un fil depuis une borne, ou cliquez la borne puis cliquez dans le vide pour poser des **coudes** (le tracé reste orthogonal et
+passe par chaque point), et terminez sur la borne d'arrivée. Retour arrière retire le dernier coude, Échap annule. Sur un fil
+sélectionné, les poignées ■ (coudes) se déplacent, un double-clic en retire une, et la poignée ● au milieu d'un segment crée un
+coude. Le bouton « Tracé automatique » revient au routage par défaut. Les coudes suivent les symboles qu'on déplace.

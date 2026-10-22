@@ -70,7 +70,9 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
   fr: [
     ['Clic sur un symbole, puis clic', 'Poser un symbole (répétable)'],
     ['Glisser depuis la bibliothèque', 'Poser un symbole à l’endroit voulu'],
-    ['Glisser depuis une borne', 'Tracer un conducteur'],
+    ['Glisser ou cliquer depuis une borne', 'Tracer un conducteur (les clics sur le vide posent des coudes)'],
+    ['Retour arrière (pendant un tracé)', 'Retirer le dernier coude'],
+    ['Poignées d’un conducteur sélectionné', 'Créer, déplacer ou retirer (double-clic) un coude'],
     ['R', 'Pivoter (symbole sélectionné ou en cours de pose)'],
     ['Flèches (+ Maj)', 'Déplacer la sélection (pas de grille ×5)'],
     ['Ctrl + A / Ctrl + D', 'Tout sélectionner / dupliquer'],
@@ -88,7 +90,9 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
   en: [
     ['Click a symbol, then click', 'Place a symbol (repeatable)'],
     ['Drag from the library', 'Drop a symbol where you want it'],
-    ['Drag from a terminal', 'Draw a conductor'],
+    ['Drag or click from a terminal', 'Draw a conductor (clicks on empty space add bends)'],
+    ['Backspace (while drawing)', 'Remove the last bend'],
+    ['Handles of a selected conductor', 'Create, move or remove (double-click) a bend'],
     ['R', 'Rotate (selected symbol or while placing)'],
     ['Arrows (+ Shift)', 'Move the selection (grid step ×5)'],
     ['Ctrl + A / Ctrl + D', 'Select all / duplicate'],
@@ -137,6 +141,7 @@ function Editor() {
   const t = (k: Key) => tr(lang, k)
 
   // ── simulation
+  const [wiringOn, setWiringOn] = useState(false)
   const [simMode, setSimMode] = useState(false)
   const [simIn, setSimIn] = useState<SimInputs>({ pressed: new Set(), toggled: new Set() })
   const coilMemory = useRef<SimMemory>({})
@@ -254,6 +259,7 @@ function Editor() {
         ...w, id: uid(),
         from: { ...w.from, symId: map.get(w.from.symId)! },
         to: { ...w.to, symId: map.get(w.to.symId)! },
+        ...(w.via?.length ? { via: w.via.map((v) => ({ x: v.x + 20, y: v.y + 20 })) } : {}),
       }))
       return { ...d, symbols: [...d.symbols, ...added], wires: [...d.wires, ...wires] }
     })
@@ -264,7 +270,11 @@ function Editor() {
 
   const nudge = useCallback((dx: number, dy: number) => {
     if (!sel.length) return
-    commit((d) => ({ ...d, symbols: d.symbols.map((s) => (sel.includes(s.id) ? { ...s, x: s.x + dx, y: s.y + dy } : s)) }))
+    commit((d) => ({
+      ...d,
+      symbols: d.symbols.map((s) => (sel.includes(s.id) ? { ...s, x: s.x + dx, y: s.y + dy } : s)),
+      wires: d.wires.map((w) => (w.via?.length && sel.includes(w.from.symId) && sel.includes(w.to.symId) ? { ...w, via: w.via.map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w)),
+    }))
   }, [sel, commit])
 
   useEffect(() => {
@@ -272,6 +282,7 @@ function Editor() {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (simMode) { if (e.key === 'Escape') setSimMode(false); return }
+      if (wiringOn && (e.key === 'Backspace' || e.key === 'Delete')) return // pendant un tracé, Retour arrière retire seulement le dernier coude
       const ctrl = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       const step = e.shiftKey ? 50 : 10
@@ -293,7 +304,7 @@ function Editor() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deleteSel, rotateSel, undo, redo, copySel, paste, duplicate, nudge, doc, placing, say, lang, simMode])
+  }, [deleteSel, rotateSel, undo, redo, copySel, paste, duplicate, nudge, doc, placing, say, lang, simMode, wiringOn])
 
   const autoLabel = () => {
     commit((d) => {
@@ -376,7 +387,7 @@ function Editor() {
     if (contentRef.current) fn(contentRef.current)
   }
 
-  const hint = simMode ? t('simHint') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
+  const hint = simMode ? t('simHint') : wiringOn ? t('hintWiring') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
   const symButton = (s: (typeof SYMBOLS)[number]) => (
     <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '')} title={`${s.name[lang]} — ${s.std}`}
@@ -479,7 +490,7 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
         {!doc.symbols.length && !placing && (
           <div className="empty">
             <h2>{t('emptyTitle')}</h2>
@@ -560,6 +571,11 @@ function Editor() {
             <div className="kind">{t('wire')}</div>
             <label>{t('label')}<input value={selWire.label} onChange={(e) => patchWire({ label: e.target.value })} /></label>
             <label>{t('section')}<input value={selWire.section} onChange={(e) => patchWire({ section: e.target.value })} /></label>
+            {selWire.via?.length ? (
+              <button onClick={() => commit((d) => ({ ...d, wires: d.wires.map((w) => (w.id === selWire.id ? { ...w, via: undefined } : w)) }))}>{t('autoRoute')}</button>
+            ) : (
+              <p className="muted">{t('routeHelp')}</p>
+            )}
             <div className="colors">
               {WIRE_COLORS.map((c) => (
                 <button key={c} className={'swatch' + (selWire.color === c ? ' on' : '')} style={{ background: c }} title={t('color')} aria-label={c}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
-  GRID, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, rotCenter, snap, symBBox, uid,
+  GRID, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
 } from './geometry'
 import Sheet from './Sheet'
 import { isOperable, type SimResult } from './sim/engine'
@@ -55,6 +55,8 @@ interface Props {
   contentRef: RefObject<SVGGElement>
   nextLabel: (doc: Doc, defId: string) => string
   onPlaced: (defId: string) => void
+  /** tracé d'un conducteur en cours (pour l'aide affichée) */
+  onWiring?: (on: boolean) => void
   onContext: (x: number, y: number, target: string | null) => void
   /** simulation en cours (null : mode édition) */
   sim: SimResult | null
@@ -63,12 +65,15 @@ interface Props {
   labels: { zoomIn: string; zoomOut: string; fit: string }
 }
 
+type Pt = { x: number; y: number }
+type Wiring = { from: PortRef; via: Pt[] }
+
 type Interaction =
   | { kind: 'none' }
   | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number; btn: number; target: string | null }
-  | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; moved: boolean }
+  | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
   | { kind: 'band'; x0: number; y0: number; add: boolean }
-  | { kind: 'wire'; from: PortRef }
+  | { kind: 'handle'; wireId: string; idx: number; moved: boolean; mid: boolean }
 
 const portKey = (r: PortRef) => `${r.symId}:${r.portId}`
 
@@ -104,7 +109,13 @@ export default function Canvas(p: Props) {
   const [hoverPort, setHoverPort] = useState<string | null>(null)
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] })
   const inter = useRef<Interaction>({ kind: 'none' })
-  const [wiring, setWiring] = useState<PortRef | null>(null)
+  const [wiring, setWiringState] = useState<Wiring | null>(null)
+  const wiringRef = useRef<Wiring | null>(null)
+  const setWiring = (w: Wiring | null) => {
+    wiringRef.current = w
+    setWiringState(w)
+    p.onWiring?.(!!w)
+  }
   const space = useRef(false)
   const held = useRef<string | null>(null) // bouton-poussoir maintenu appuyé en simulation
   const [rot, setRot] = useState<0 | 90 | 180 | 270>(0)
@@ -138,6 +149,10 @@ export default function Canvas(p: Props) {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'f' && !e.ctrlKey && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLSelectElement)) fitRef.current()
       if (e.key === 'Escape') { inter.current = { kind: 'none' }; setWiring(null); setBand(null); setRot(0) }
+      if (e.key === 'Backspace' && wiringRef.current && wiringRef.current.via.length && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        setWiring({ ...wiringRef.current, via: wiringRef.current.via.slice(0, -1) })
+      }
       if (e.key.toLowerCase() === 'r' && !e.ctrlKey && placingRef.current && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) setRot((r) => (((r + 90) % 360) as 0 | 90 | 180 | 270))
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         space.current = true
@@ -167,6 +182,11 @@ export default function Canvas(p: Props) {
 
   const onMouseDown = (e: React.MouseEvent) => {
     const pt = toSheet(e)
+    if (e.button === 2 && wiringRef.current) {
+      setWiring(null)
+      e.preventDefault()
+      return
+    }
     if (e.button === 1 || e.button === 2 || space.current) {
       const hit = (e.target as Element).closest('[data-sym],[data-wire]')
       const target = hit ? (hit.getAttribute('data-sym') ?? hit.getAttribute('data-wire')) : null
@@ -184,6 +204,7 @@ export default function Canvas(p: Props) {
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
       return
     }
+    if (wiringRef.current) return // tracé en cours : le coude ou la borne d'arrivée est pris au relâchement
     if (p.placing) {
       const def = SYMBOL_MAP[p.placing]
       const sym: PlacedSymbol = {
@@ -195,10 +216,16 @@ export default function Canvas(p: Props) {
       p.onPlaced(def.id)
       return
     }
+    const handleEl = (e.target as Element).closest('[data-handle]')
+    if (handleEl) {
+      const [wireId, idx, kind] = handleEl.getAttribute('data-handle')!.split('|')
+      inter.current = { kind: 'handle', wireId, idx: Number(idx), moved: false, mid: kind === 'mid' }
+      return
+    }
     const port = portUnder(e.target)
     if (port) {
-      inter.current = { kind: 'wire', from: port }
-      setWiring(port)
+      p.setSel([]) // la sélection ne doit pas être touchée par Retour arrière/Suppr pendant le tracé
+      setWiring({ from: port, via: [] })
       return
     }
     const symEl = (e.target as Element).closest('[data-sym]')
@@ -210,7 +237,9 @@ export default function Canvas(p: Props) {
       p.setSel(ids)
       const orig: Record<string, { x: number; y: number }> = {}
       for (const s of doc.symbols) if (ids.includes(s.id)) orig[s.id] = { x: s.x, y: s.y }
-      inter.current = { kind: 'drag', sx: pt.x, sy: pt.y, orig, moved: false }
+      const vias: Record<string, Pt[]> = {}
+      for (const w of doc.wires) if (w.via?.length && orig[w.from.symId] && orig[w.to.symId]) vias[w.id] = w.via
+      inter.current = { kind: 'drag', sx: pt.x, sy: pt.y, orig, vias, moved: false }
       return
     }
     const wireEl = (e.target as Element).closest('[data-wire]')
@@ -243,7 +272,31 @@ export default function Canvas(p: Props) {
         p.update((d) => ({
           ...d,
           symbols: d.symbols.map((s) => (it.orig[s.id] ? { ...s, x: it.orig[s.id].x + dx, y: it.orig[s.id].y + dy } : s)),
+          wires: d.wires.map((w) => (it.vias[w.id] ? { ...w, via: it.vias[w.id].map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w)),
         }))
+      }
+    } else if (it.kind === 'handle') {
+      const wr = doc.wires.find((w) => w.id === it.wireId)
+      const a = wr && symById(wr.from.symId)
+      const b = wr && symById(wr.to.symId)
+      const pa = a && wr && portPos(a, wr.from.portId)
+      const pb = b && wr && portPos(b, wr.to.portId)
+      if (!wr || !pa || !pb) return
+      const q = { x: snap(pt.x), y: snap(pt.y) }
+      const via = wr.via ?? []
+      const setVia = (next: Pt[]) => p.update((d) => ({ ...d, wires: d.wires.map((w) => (w.id === it.wireId ? { ...w, via: next } : w)) }))
+      if (it.mid) {
+        // poignée du milieu d'un segment : on crée un nouveau coude, puis on le fait glisser
+        const j = bestInsertIndex(pa, pb, via, q)
+        p.checkpoint()
+        it.moved = true
+        it.mid = false
+        it.idx = j
+        setVia([...via.slice(0, j), q, ...via.slice(j)])
+      } else if (via[it.idx] && (via[it.idx].x !== q.x || via[it.idx].y !== q.y)) {
+        if (!it.moved) p.checkpoint()
+        it.moved = true
+        setVia(via.map((v, i) => (i === it.idx ? q : v)))
       }
     } else if (it.kind === 'band') {
       setBand({ x0: it.x0, y0: it.y0, x1: pt.x, y1: pt.y })
@@ -259,22 +312,31 @@ export default function Canvas(p: Props) {
       else if (!it.target) p.setSel([])
       p.onContext(e.clientX, e.clientY, it.target)
     }
-    if (it.kind === 'wire') {
+    const w = wiringRef.current
+    if (w && e.button === 0 && !p.sim) {
       const target = portUnder(e.target)
-      if (target && portKey(target) !== portKey(it.from)) {
+      if (target && portKey(target) === portKey(w.from)) {
+        // clic sur la borne de départ : le tracé reste en cours, on clique ensuite les coudes puis la borne d'arrivée
+      } else if (target) {
         const exists = doc.wires.some(
           (wr) =>
-            (portKey(wr.from) === portKey(it.from) && portKey(wr.to) === portKey(target)) ||
-            (portKey(wr.to) === portKey(it.from) && portKey(wr.from) === portKey(target)),
+            (portKey(wr.from) === portKey(w.from) && portKey(wr.to) === portKey(target)) ||
+            (portKey(wr.to) === portKey(w.from) && portKey(wr.from) === portKey(target)),
         )
         if (!exists) {
           p.commit((d) => ({
             ...d,
-            wires: [...d.wires, { id: uid(), from: it.from, to: target, label: '', color: '#000000', section: '' }],
+            wires: [...d.wires, { id: uid(), from: w.from, to: target, label: '', color: '#000000', section: '', ...(w.via.length ? { via: w.via } : {}) }],
           }))
         }
+        setWiring(null)
+      } else {
+        // relâché sur le vide : coude imposé à cet endroit, le tracé continue
+        const pt = toSheet(e)
+        const q = { x: snap(pt.x), y: snap(pt.y) }
+        const last = w.via[w.via.length - 1]
+        if (!last || last.x !== q.x || last.y !== q.y) setWiring({ ...w, via: [...w.via, q] })
       }
-      setWiring(null)
     } else if (it.kind === 'band' && band) {
       const x1 = Math.min(band.x0, band.x1), x2 = Math.max(band.x0, band.x1)
       const y1 = Math.min(band.y0, band.y1), y2 = Math.max(band.y0, band.y1)
@@ -325,8 +387,15 @@ export default function Canvas(p: Props) {
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
-      onMouseLeave={() => { inter.current = { kind: 'none' }; setWiring(null); setBand(null); if (held.current) { p.onSimPress(held.current, false); held.current = null } }}
+      onMouseLeave={() => { inter.current = { kind: 'none' }; setBand(null); if (held.current) { p.onSimPress(held.current, false); held.current = null } }}
       onContextMenu={(e) => e.preventDefault()}
+      onDoubleClick={(e) => {
+        const el = (e.target as Element).closest('[data-handle]')
+        if (!el || p.sim) return
+        const [wireId, idx, kind] = el.getAttribute('data-handle')!.split('|')
+        if (kind !== 'via') return
+        p.commit((d) => ({ ...d, wires: d.wires.map((w) => (w.id === wireId ? { ...w, via: (w.via ?? []).filter((_, i) => i !== Number(idx)) } : w)) }))
+      }}
     >
       <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
         <rect x={-4} y={-4} width={w + 8} height={h + 8} fill="#000" opacity={0.12} />
@@ -337,7 +406,7 @@ export default function Canvas(p: Props) {
             if (!a || !b) return null
             const pa = portPos(a, wr.from.portId), pb = portPos(b, wr.to.portId)
             if (!pa || !pb) return null
-            const pts = route(pa, pb)
+            const pts = routeVia(pa, pb, wr.via ?? [])
             const m = pts[Math.floor(pts.length / 2)]
             const n = pts[Math.floor(pts.length / 2) - 1] ?? m
             const mx = (m.x + n.x) / 2, my = (m.y + n.y) / 2
@@ -398,11 +467,26 @@ export default function Canvas(p: Props) {
             if (!a || !b) return null
             const pa = portPos(a, wr.from.portId), pb = portPos(b, wr.to.portId)
             if (!pa || !pb) return null
-            const pts = pointsAttr(route(pa, pb))
+            const routed = routeVia(pa, pb, wr.via ?? [])
+            const pts = pointsAttr(routed)
+            const handles = !p.sim && sel.length === 1 && sel[0] === wr.id
             return (
               <g key={wr.id} data-wire={wr.id} className="wire-hit">
                 {sel.includes(wr.id) && <polyline points={pts} className="sel-wire" />}
                 <polyline points={pts} className="hit" />
+                {handles && (
+                  <>
+                    {routed.slice(0, -1).map((q, i) => {
+                      const r = routed[i + 1]
+                      const len = Math.abs(r.x - q.x) + Math.abs(r.y - q.y)
+                      if (len < 30) return null // amorces près des bornes : pas de poignée
+                      return <circle key={'m' + i} data-handle={`${wr.id}|${i}|mid`} cx={(q.x + r.x) / 2} cy={(q.y + r.y) / 2} r={3.5} className="mid-handle" />
+                    })}
+                    {(wr.via ?? []).map((v, i) => (
+                      <rect key={'v' + i} data-handle={`${wr.id}|${i}|via`} x={v.x - 4} y={v.y - 4} width={8} height={8} className="via-handle" />
+                    ))}
+                  </>
+                )}
               </g>
             )
           })}
@@ -433,10 +517,16 @@ export default function Canvas(p: Props) {
             return pos ? <circle key={'short' + k} cx={pos.x} cy={pos.y} r={7} className="short" /> : null
           })}
           {wiring && (() => {
-            const a = symById(wiring.symId)
-            const pa = a && portPos(a, wiring.portId)
+            const a = symById(wiring.from.symId)
+            const pa = a && portPos(a, wiring.from.portId)
             if (!pa) return null
-            return <path d={`M${pa.x} ${pa.y}L${snap(mouse.x)} ${snap(mouse.y)}`} className="preview" />
+            const pts = routeOpen(pa, wiring.via, { x: snap(mouse.x), y: snap(mouse.y) })
+            return (
+              <>
+                <polyline points={pointsAttr(pts)} className="preview" />
+                {wiring.via.map((v, i) => <rect key={i} x={v.x - 3} y={v.y - 3} width={6} height={6} className="via-dot" />)}
+              </>
+            )
           })()}
           {ghost && (
             <g opacity={0.5} pointerEvents="none" color="#06c" stroke="currentColor" fill="none" strokeWidth={2}
