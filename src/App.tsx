@@ -50,6 +50,7 @@ const nextLabel = (doc: Doc, defId: string) => {
   return prefix + (max + 1)
 }
 
+const TOP = '__top'
 const DOMAINS: Domain[] = ['electrical', 'pneumatic', 'hydraulic']
 const WIRE_COLORS = ['#000000', '#0050c8', '#c80000', '#008000', '#8a5a00', '#7a7a7a', '#e08000', '#6a00a0']
 
@@ -265,14 +266,16 @@ function Editor() {
     setSel([])
   }
 
-  const cat = catByDomain[domain] || CATEGORIES[domain][0]?.id || ''
+  const cat = catByDomain[domain] || TOP
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
     const found = SYMBOLS.filter(
       (s) =>
         !s.legacy && s.domain === domain &&
-        (q ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q : s.cat === cat),
+        (q ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q : cat === TOP ? s.top : s.cat === cat),
     )
+    // recherche et « les plus utilisés » : tri par fréquence d'usage ; sinon ordre de la catégorie (groupes puis score)
+    if (q || cat === TOP) found.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     return q ? found.slice(0, 80) : found
   }, [domain, query, lang, cat])
   const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s && !s.legacy && s.domain === domain), [recent, domain])
@@ -354,6 +357,7 @@ function Editor() {
         <input className="search" placeholder={t('search')} aria-label={t('search')} value={query} onChange={(e) => setQuery(e.target.value)} />
         {!query && (
           <select aria-label={t('category')} value={cat} onChange={(e) => setCatByDomain((c) => ({ ...c, [domain]: e.target.value }))}>
+            <option value={TOP}>★ {t('mostUsed')}</option>
             {CATEGORIES[domain].map((c) => <option key={c.id} value={c.id}>{c.name[lang]}</option>)}
           </select>
         )}
@@ -370,7 +374,7 @@ function Editor() {
             const prev = i > 0 ? (list[i - 1].group?.[lang] ?? '') : null
             return (
               <div key={s.id} className="symrow">
-                {g && g !== prev && <div className="section wide">{g}</div>}
+                {!query && cat !== TOP && g && g !== prev && <div className="section wide">{g}</div>}
                 {symButton(s)}
               </div>
             )

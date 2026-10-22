@@ -6,6 +6,7 @@
 // Les fichiers .elmt lus sont traités comme des DONNÉES (lecture + regex), jamais exécutés.
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
+import { popularity } from './popularity.mjs'
 
 const [, , root, out] = process.argv
 if (!root || !out) {
@@ -202,11 +203,15 @@ for (const r of roots) {
       const cn = dirName(join(base, rel[0]))
       categories[r.domain].push({ id: catId, name: { fr: (r.label?.fr ?? '') + (cn.fr || rel[0]), en: (r.label?.en ?? '') + (cn.en || rel[0]) } })
     }
-    const grp = rel.length > 2 ? dirName(join(base, rel[0], rel[1])) : null
+    // groupe : sous-dossier de 2e niveau (3e niveau pour pneumatique/hydraulique : types de distributeurs, de vérins…)
+    const gi = r.domain !== 'electrical' && rel.length > 3 ? 2 : 1
+    const grp = rel.length > gi + 1 ? dirName(join(base, ...rel.slice(0, gi + 1))) : null
+    const relFromRoot = relative(root, file).split(sep).join('/')
     symbols.push({
-      id: 'qet:' + relative(root, file).split(sep).join('/').replace(/\.elmt$/, ''),
+      id: 'qet:' + relFromRoot.replace(/\.elmt$/, ''),
       domain: r.domain, cat: catId,
       group: grp && (grp.fr || grp.en) ? grp : null,
+      score: popularity({ rel: relFromRoot, nameFr: el.fr, nameEn: el.en }),
       prefix: prefixFor(r.dir + '/' + rel.join('/')),
       name: el, w, h,
       svg: shapes.map((s) => s).join('').replace(/(-?\d+(?:\.\d+)?)/g, (m) => m), // inchangé, translation ci-dessous
@@ -219,14 +224,54 @@ for (const r of roots) {
   }
 }
 
-// Ordre d'affichage : les familles les plus courantes d'abord, unifilaire en dernier
-const ORDER = ['200_', '310_', '380_', '391_', '390_', '330_', '340_', '130_', '120_', '392_', '395_', '140_', '110_', '114_', '450_', '500_']
+// Ordre d'affichage : familles les plus utilisées d'abord, unifilaire en dernier
+const ORDER = ['310_', '200_', '380_', '330_', '391_', '340_', '390_', '395_', '130_', '110_', '120_', '140_', '114_', '392_', '450_', '500_']
 const rank = (id) => {
   const tail = id.split('/').pop()
   const i = ORDER.findIndex((p) => tail.startsWith(p))
   return (id.includes('11_singlepole') ? 100 : 0) + (i < 0 ? 50 : i)
 }
 for (const d of Object.keys(categories)) categories[d].sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id))
+
+// Tri des symboles : catégorie, puis groupes du plus au moins utilisé, puis symboles par score
+const catIndex = (s) => categories[s.domain].findIndex((c) => c.id === s.cat)
+const groupKey = (s) => s.cat + '|' + (s.group?.fr ?? '')
+const groupMax = new Map()
+for (const s of symbols) groupMax.set(groupKey(s), Math.max(groupMax.get(groupKey(s)) ?? 0, s.score))
+const original = new Map(symbols.map((s, i) => [s.id, i]))
+symbols.sort(
+  (a, b) =>
+    a.domain.localeCompare(b.domain) ||
+    catIndex(a) - catIndex(b) ||
+    groupMax.get(groupKey(b)) - groupMax.get(groupKey(a)) ||
+    groupKey(a).localeCompare(groupKey(b)) ||
+    b.score - a.score ||
+    original.get(a.id) - original.get(b.id),
+)
+
+// « Les plus utilisés » : meilleurs scores par domaine, 3 symboles au plus par groupe
+for (const d of Object.keys(categories)) {
+  // tourniquet entre familles (la plus utilisée d'abord) pour éviter qu'une seule famille monopolise la liste
+  const pool = symbols.filter((s) => s.domain === d && s.score >= 80 && !s.cat.includes('11_singlepole'))
+  const byGroup = new Map()
+  for (const s of pool.sort((a, b) => b.score - a.score)) {
+    const k = groupKey(s)
+    if (!byGroup.has(k)) byGroup.set(k, [])
+    byGroup.get(k).push(s)
+  }
+  const queues = [...byGroup.values()].sort((a, b) => b[0].score - a[0].score)
+  const seen = new Set()
+  let n = 0
+  for (let round = 0; round < 2 && n < 36; round++) {
+    for (const q of queues) {
+      const s = q.filter((x) => !seen.has(x.name.fr.toLowerCase()))[round === 0 ? 0 : 0]
+      if (!s || n >= 36) continue
+      seen.add(s.name.fr.toLowerCase())
+      s.top = true
+      n++
+    }
+  }
+}
 writeFileSync(out, JSON.stringify({ source: 'QElectroTech elements collection, CC-BY 3.0', categories, symbols }))
 console.log(`${symbols.length} symboles importés, ${skipped} ignorés`)
 for (const d of Object.keys(categories)) console.log(d, symbols.filter((s) => s.domain === d).length)

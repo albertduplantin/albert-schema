@@ -28,6 +28,9 @@ export interface SymbolDef {
   group?: { fr: string; en: string } | null
   /** Ancien symbole dessiné à la main, masqué de la palette */
   legacy?: boolean
+  /** Fréquence d'usage estimée (0-100) sur les machines actuelles ; `top` = affiché dans « Les plus utilisés » */
+  score?: number
+  top?: boolean
 }
 
 export interface PlacedSymbol {
