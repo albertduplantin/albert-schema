@@ -4,6 +4,7 @@ import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
 import { uid } from './geometry'
 import Canvas from './Canvas'
+import Feedback from './Feedback'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
 import { motorStarter, motorStarterTransformer, pneumaticCylinder, reversingStarter, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, effectiveTerms, ensureUnique, othersTerms, termGroups } from './terminals'
@@ -119,6 +120,7 @@ function Editor() {
   const [query, setQuery] = useState('')
   const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
   const [showCredits, setShowCredits] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
   const [usageTick, setUsageTick] = useState(0) // relance le classement après chaque pose
   const [share, setShareState] = useState<ShareChoice>(getShare)
   const [askShare, setAskShare] = useState(false)
@@ -289,7 +291,7 @@ function Editor() {
       const ctrl = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       const step = e.shiftKey ? 50 : 10
-      if (e.key === 'Escape') { setMenu(null); setPlacing(null); setSel([]); setShowKeys(false); setShowBom(false) }
+      if (e.key === 'Escape') { setMenu(null); setPlacing(null); setSel([]); setShowKeys(false); setShowBom(false); setShowFeedback(false); setShowCredits(false) }
       else if (e.key === 'Delete' || e.key === 'Backspace') deleteSel()
       else if (k === 'r' && !ctrl) { if (!placing) rotateSel() }
       else if (e.key === '?') setShowKeys((v) => !v)
@@ -443,6 +445,7 @@ function Editor() {
         </details>
         <span className="grow" />
         <span className="saved" aria-live="polite">✓ {t('saved')}</span>
+        <button className="feedback-btn" onClick={() => setShowFeedback(true)} title={t('feedbackHelp')}>💬 <span>{t('feedback')}</span></button>
         <button className="icon" onClick={() => setShowKeys(true)} title={`${t('shortcuts')} (?)`} aria-label={t('shortcuts')}>?</button>
         <div className="group">
           <button className={lang === 'fr' ? 'on' : ''} onClick={() => setLang('fr')}>FR</button>
@@ -688,6 +691,8 @@ function Editor() {
         </div>
       )}
 
+      {showFeedback && <Feedback doc={doc} lang={lang} onClose={() => setShowFeedback(false)} />}
+
       {showCredits && (
         <div className="modal" onClick={() => setShowCredits(false)}>
           <div className="dialog" role="dialog" aria-label={t('creditsTitle')} onClick={(e) => e.stopPropagation()}>
@@ -697,7 +702,7 @@ function Editor() {
             <p>{t('privacyText')}</p>
             <h3>{t('legalTitle')}</h3>
             <p>{t('legalText')}</p>
-            <p><a href="https://github.com/albertduplantin/albert-schema" target="_blank" rel="noreferrer">{t('sourceCode')}</a> · <a href="https://github.com/albertduplantin/albert-schema/issues" target="_blank" rel="noreferrer">{t('contact')}</a></p>
+            <p><a href="https://github.com/albertduplantin/albert-schema" target="_blank" rel="noreferrer">{t('sourceCode')}</a> · <button className="link" onClick={() => { setShowCredits(false); setShowFeedback(true) }}>{t('contact')}</button></p>
             <p><a href="https://qelectrotech.org" target="_blank" rel="noreferrer">qelectrotech.org</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a> · <a href="https://github.com/qelectrotech/qelectrotech-elements" target="_blank" rel="noreferrer">qelectrotech-elements</a></p>
             <div className="actions"><button onClick={() => setShowCredits(false)}>{t('close')}</button></div>
           </div>

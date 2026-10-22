@@ -53,3 +53,13 @@ coude. Le bouton « Tracé automatique » revient au routage par défaut. Les co
   ex. KM1) : contacts de puissance 1-2, 3-4, 5-6 puis 7-8… ; auxiliaires 13-14, 21-22, 33-34… (un rang par contact) ; bobine A1-A2.
   Section « Bornes » des propriétés : modifier la première borne fait suivre les autres (13 → 53 donne 54) ; un numéro déjà pris est
   incrémenté automatiquement, et ce que vous saisissez est prioritaire sur la numérotation automatique.
+
+## Retours des utilisateurs
+
+Le bouton **Retour** de la barre d'outils ouvre un formulaire (bug, amélioration, question) : résumé, description, e-mail facultatif,
+schéma joint **seulement si la case est cochée** (conservé 90 jours), informations techniques (version, navigateur, taille d'écran).
+Un lien propose aussi d'ouvrir un ticket GitHub pré-rempli. Fonction serveur : `api/feedback.js` (champs validés, champ piège anti-robots,
+5 envois par heure et par adresse, 300 par jour au total).
+
+**Lire les retours** : console Upstash (base reliée au projet Vercel) → *Data Browser* → clé `albertschema:feedback` (liste, plus récent en
+premier, 1 000 entrées au plus) ; un schéma joint est dans `albertschema:feedback:doc:<id>`.
