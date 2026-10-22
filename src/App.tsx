@@ -638,7 +638,7 @@ function Editor() {
   return (
     <div className={'app' + (simMode ? ' simmode' : '')}>
       <header className="toolbar" role="toolbar">
-        <strong className="brand">AlbertSchema</strong>
+        <span className="brand"><span className="vis" aria-hidden="true" />Albert<b>Schema</b></span>
         <div className="group">
           <button onClick={() => { if (!doc.symbols.length || confirm(t('newConfirm'))) { commit(() => emptyDoc()); setSel([]) } }}>{t('new')}</button>
           <button onClick={() => fileRef.current?.click()}>{t('open')}</button>
