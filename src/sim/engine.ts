@@ -1,4 +1,5 @@
 import type { Doc, PlacedSymbol, SimModel, SymbolDef, TimerKind } from '../types'
+import { cylPos, solveFluid, STROKE_S } from './fluid'
 
 /**
  * Simulation « logique de relais » d'un schéma électrique.
@@ -27,7 +28,7 @@ export interface SimInputs {
 }
 
 /** Mémoire de simulation : état de chaque relais (par repère) et instant du dernier changement. */
-export type SimMemory = Record<string, { on: boolean; since: number }>
+export type SimMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number }>
 
 export interface SimResult {
   /** mémoire à réinjecter au calcul suivant */
@@ -54,6 +55,10 @@ export interface SimResult {
   badVoltage: Record<string, { applied: number; rated: number }>
   /** un relais thermique a déclenché (surcharge moteur injectée) */
   thermalTrip: boolean
+  /** vérins : position de 0 (rentré) à 1 (sorti) */
+  cylPos: Record<string, number>
+  /** distributeurs : vrai = case actionnée */
+  valveA: Record<string, boolean>
 }
 
 export const DEFAULT_DELAY_S = 3
@@ -80,6 +85,12 @@ class UnionFind {
 }
 
 const key = (symId: string, portId: string) => `${symId}:${portId}`
+
+/** Organe manœuvrable à la souris : contact, bouton, ou distributeur à commande manuelle. */
+export function isOperableDef(def: SymbolDef | undefined): 'momentary' | 'toggle' | null {
+  if (def?.fluid?.k === 'valve') return def.fluid.manual ?? null
+  return isOperable(def?.sim)
+}
 
 export function isOperable(model: SimModel | undefined): 'momentary' | 'toggle' | null {
   if (model?.k === 'switch' && (model.ctl === 'momentary' || model.ctl === 'toggle')) return model.ctl
@@ -139,6 +150,16 @@ function actuated(s: PlacedSymbol, m: Extract<SimModel, { k: 'switch' }>, x: Ctx
     case 'momentary':
       return x.inp.pressed.has(s.id)
     default:
+      if (s.label) {
+        // fin de course lié à un vérin : « A1+ » se ferme vérin A1 sorti, « A1- » vérin rentré
+        const lm = /^(.+?)\s*([+-])$/.exec(s.label)
+        const cyl = lm && x.doc.symbols.find((c) => x.defs[c.defId]?.fluid?.k === 'cyl' && c.label && devKey(c.label) === devKey(lm[1]))
+        if (lm && cyl) {
+          const f = x.defs[cyl.defId].fluid
+          const p = cylPos(x.memory['§C:' + cyl.id], x.now, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0)
+          return lm[2] === '+' ? p >= 0.98 : p <= 0.02
+        }
+      }
       if (isThermalSlave(s) && applyDelay(x.memory[THERMAL], 'on', THERMAL_S, x.now, x.pending)) return true // relais thermique déclenché
       return x.inp.toggled.has(s.id)
   }
@@ -380,9 +401,26 @@ export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: 
     let changed = false
     const labels = new Set([...Object.keys(memory), ...Object.keys(out.coilOn)])
     for (const l of labels) {
+      if (l.startsWith('§C:') || l.startsWith('§V:')) continue // mémoire des circuits de fluide : gérée plus bas
       const on = !!out.coilOn[l]
       if (on !== (memory[l]?.on ?? false)) {
         memory[l] = { on, since: now }
+        changed = true
+      }
+    }
+    // circuits de fluide : positions des distributeurs (mémorisées si bistables) et sens de déplacement des vérins
+    const fl = solveFluid({ doc, defs, memory, coilOn: out.coilOn, pressed: inp.pressed, toggled: inp.toggled })
+    for (const [id, a] of Object.entries(fl.valveA)) {
+      if (a !== (memory['§V:' + id]?.on ?? false)) {
+        memory['§V:' + id] = { on: a, since: now }
+        changed = true
+      }
+    }
+    for (const [id, dir] of Object.entries(fl.cylDir)) {
+      const m = memory['§C:' + id]
+      if ((m?.dir ?? 0) !== dir) {
+        const f = defs[doc.symbols.find((c) => c.id === id)?.defId ?? '']?.fluid
+        memory['§C:' + id] = { on: dir > 0, since: now, p: cylPos(m, now, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0), dir }
         changed = true
       }
     }
@@ -415,13 +453,33 @@ export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: 
     volts[s.id] = v
     if (s.volts && (v < s.volts * 0.85 || v > s.volts * 1.15)) badVoltage[s.id] = { applied: v, rated: s.volts }
   }
-  const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.decor).map((s) => s.id)
+  // fluide : état final, positions des vérins et pression aux orifices
+  const fl = solveFluid({ doc, defs, memory, coilOn: out.coilOn, pressed: inp.pressed, toggled: inp.toggled })
+  const cyl: Record<string, number> = {}
+  const fluidPending: number[] = []
+  for (const s of doc.symbols) {
+    const f = defs[s.defId]?.fluid
+    for (const p of defs[s.defId]?.ports ?? []) if (f) {
+      const pr = fl.pot(s.id, p.id)
+      if (pr) potentialOf[key(s.id, p.id)] = pr
+    }
+    if (f?.k !== 'cyl') continue
+    const m = memory['§C:' + s.id]
+    const pos = cylPos(m, now, f.single === 'pull' ? 1 : 0)
+    cyl[s.id] = pos
+    const dir = m?.dir ?? 0
+    if (dir !== 0 && pos > 0 && pos < 1) fluidPending.push(Math.max(1, (dir > 0 ? 1 - pos : pos) * STROKE_S * 1000), 60)
+    else if (dir !== 0 && ((dir > 0 && pos <= 0) || (dir < 0 && pos >= 1))) fluidPending.push(60)
+  }
+  const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.fluid && !defs[s.defId]?.decor).map((s) => s.id)
   return {
     state: memory, energized, closed: out.closed, potentialOf, shorts: out.shorts, unstable, unsupported,
-    pendingMs: ctx.pending.length ? Math.min(...ctx.pending) : null,
+    pendingMs: ctx.pending.length || fluidPending.length ? Math.min(...ctx.pending, ...fluidPending) : null,
     current: currentFlow(doc, defs, out),
     volts,
     badVoltage,
     thermalTrip: applyDelay(memory[THERMAL], 'on', THERMAL_S, now, []),
+    cylPos: cyl,
+    valveA: fl.valveA,
   }
 }

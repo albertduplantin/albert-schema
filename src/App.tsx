@@ -6,9 +6,9 @@ import { symBBox, uid } from './geometry'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
 import { bomRows, exportCsv, exportPng, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
-import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticCylinder, reversingStarter, startLamps, timerOnDelay } from './templates'
+import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, effectiveTerms, ensureUnique, othersTerms, termGroups } from './terminals'
-import { DEFAULT_DELAY_S, isOperable, simulate, type SimInputs, type SimMemory } from './sim/engine'
+import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
 import { netLabels } from './nets'
@@ -83,7 +83,9 @@ const GALLERY: Tpl[] = [
   { key: 'tplTrafo', fn: motorStarterTransformer, level: 2, about: { fr: 'Commande en 24 V alternatif par un transformateur monophasé.', en: 'Control circuit at 24 V AC through a single-phase transformer.' } },
   { key: 'tplCascade', fn: delayedCascade, level: 2, about: { fr: 'KM2 démarre 5 s après KM1 grâce à une temporisation à la montée.', en: 'KM2 starts 5 s after KM1 thanks to an on-delay timer.' } },
   { key: 'tplReversing', fn: reversingStarter, level: 3, about: { fr: 'Deux sens de marche, deux phases permutées, verrouillage électrique KM1/KM2.', en: 'Two directions, two swapped phases, KM1/KM2 electrical interlock.' } },
-  { key: 'tplPneu', fn: pneumaticCylinder, level: 2, about: { fr: 'Vérin double effet commandé par un distributeur 4/2.', en: 'Double-acting cylinder driven by a 4/2 valve.' } },
+  { key: 'tplPneu', fn: pneumaticCylinder, level: 1, about: { fr: 'Vérin double effet et distributeur 5/2 manuel : maintenez le distributeur appuyé en simulation.', en: 'Double-acting cylinder and manual 5/2 valve: hold the valve pressed in simulation.' } },
+  { key: 'tplPneuElec', fn: pneumaticElectric, level: 2, about: { fr: 'Électrodistributeur 5/2 commandé par un bouton ; le fin de course A1+ allume un voyant.', en: 'Solenoid 5/2 valve driven by a switch; the A1+ limit switch lights a lamp.' } },
+  { key: 'tplPneuAuto', fn: pneumaticAuto, level: 3, about: { fr: 'Va-et-vient automatique A+ A- : distributeur bistable et deux fins de course.', en: 'Automatic A+ A- cycle: bistable valve and two limit switches.' } },
 ]
 
 const TOP = '__top'
@@ -215,7 +217,7 @@ function Editor() {
     const names: string[] = []
     for (const s of all.symbols) {
       const m = SYMBOL_MAP[s.defId]?.sim
-      if (s.label && (m?.k === 'coil' || m?.k === 'load' || isOperable(m)) && !names.includes(s.label)) names.push(s.label)
+      if (s.label && (m?.k === 'coil' || m?.k === 'load' || SYMBOL_MAP[s.defId]?.fluid?.k === 'cyl' || isOperableDef(SYMBOL_MAP[s.defId])) && !names.includes(s.label)) names.push(s.label)
     }
     return names
   }, [all.symbols])
@@ -226,7 +228,8 @@ function Editor() {
       const m = SYMBOL_MAP[s.defId]?.sim
       if (!s.label) continue
       if (m?.k === 'coil' || m?.k === 'load') v[s.label] = v[s.label] || sim.energized.has(s.id)
-      else if (isOperable(m)) v[s.label] = v[s.label] || simIn.pressed.has(s.id) || simIn.toggled.has(s.id)
+      else if (SYMBOL_MAP[s.defId]?.fluid?.k === 'cyl') v[s.label] = v[s.label] || (sim.cylPos[s.id] ?? 0) > 0.5
+      else if (isOperableDef(SYMBOL_MAP[s.defId])) v[s.label] = v[s.label] || simIn.pressed.has(s.id) || simIn.toggled.has(s.id)
     }
     const last = trace.current.rows[trace.current.rows.length - 1]
     if (!last || signalNames.some((n) => !!last.v[n] !== !!v[n])) trace.current.rows.push({ t: vnow() - trace.current.t0, v })
@@ -801,6 +804,8 @@ function Editor() {
               <button onClick={() => startTemplate(startLamps)}>{t('tplLamps')}</button>
               <button onClick={() => startTemplate(delayedCascade)}>{t('tplCascade')}</button>
               <button onClick={() => startTemplate(pneumaticCylinder)}>{t('tplPneu')}</button>
+              <button onClick={() => startTemplate(pneumaticElectric)}>{t('tplPneuElec')}</button>
+              <button onClick={() => startTemplate(pneumaticAuto)}>{t('tplPneuAuto')}</button>
             </div>
           </div>
         )}
@@ -850,6 +855,7 @@ function Editor() {
               <div className="section">{t('simLegendTitle')}</div>
               <p className="muted">{t('simLegend')}</p>
               <p className="muted">⚡ {t('simFaultHelp')}</p>
+              <p className="muted">💨 {t('simFluidHelp')}</p>
             </div>
           </>
         ) : (<>

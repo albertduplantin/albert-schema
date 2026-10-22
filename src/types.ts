@@ -33,6 +33,25 @@ export type SimModel =
   | { k: 'transformer'; primary: string[]; secondary: string[] }
   | { k: 'load'; ports: string[]; role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater'; spin?: { cx: number; cy: number; r: number } }
 
+/** Comportement fluidique (pneumatique) : voir scripts/fluid-classify.mjs */
+export type FluidModel =
+  | { k: 'fsource'; ports: string[] }
+  | { k: 'fsink'; ports: string[] }
+  | { k: 'flink'; ports: string[] }
+  | { k: 'cyl'; cap: string; rod?: string; single?: 'push' | 'pull' }
+  | {
+      k: 'valve'
+      /** liaisons entre orifices : case de repos / case actionnée (côté commande A) */
+      rest: [string, string][]
+      act: [string, string][]
+      /** commande A (gauche) et B (droite) : électrique, pneumatique, manuelle, ressort ou aucune */
+      a: 'elec' | 'pneu' | 'man'
+      b: 'elec' | 'pneu' | 'spring' | 'none'
+      pilotA?: string
+      pilotB?: string
+      manual?: 'momentary' | 'toggle'
+    }
+
 export interface SymbolDef {
   id: string
   domain: Domain
@@ -53,6 +72,8 @@ export interface SymbolDef {
   legacy?: boolean
   /** Modèle de simulation (absent : symbole non simulé) */
   sim?: SimModel
+  /** Modèle fluidique (distributeurs, vérins, sources d'air…) */
+  fluid?: FluidModel
   /** Symbole purement décoratif : ne compte pas parmi les « non simulés » */
   decor?: boolean
   /** Fréquence d'usage estimée (0-100) sur les machines actuelles ; `top` = affiché dans « Les plus utilisés » */

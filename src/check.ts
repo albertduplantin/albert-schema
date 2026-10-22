@@ -1,5 +1,6 @@
 import type { Doc, Lang, SymbolDef } from './types'
 import { devKey, simulate } from './sim/engine'
+import { valveCoils } from './sim/fluid'
 
 export interface Issue {
   level: 'error' | 'warn'
@@ -20,6 +21,8 @@ export function checkDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang):
   })
   const coilKeys = new Set(coils.filter((s) => s.label).map((s) => devKey(s.label)))
   const contactKeys = new Set(contacts.filter((s) => s.label).map((s) => devKey(s.label)))
+  // un électrodistributeur est « commandé » par les bobines dont il porte le repère (YV1 ou YV1/YV2)
+  for (const s of doc.symbols) if (defs[s.defId]?.fluid?.k === 'valve') for (const k of valveCoils(s.label)) if (k) contactKeys.add(k)
 
   for (const c of coils) {
     if (!c.label) out.push({ level: 'warn', symId: c.id, text: S(lang, 'Bobine sans repère : ses contacts ne peuvent pas lui être associés.', 'Coil without a reference: no contact can be linked to it.') })

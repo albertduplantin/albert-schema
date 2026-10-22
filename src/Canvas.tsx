@@ -7,7 +7,7 @@ import {
   GRID, MARGIN, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
 } from './geometry'
 import Sheet from './Sheet'
-import { devKey, isOperable, type SimResult } from './sim/engine'
+import { devKey, isOperableDef, type SimResult } from './sim/engine'
 import type { SimModel } from './types'
 
 /** Variables CSS --b{n} : rotation de chaque lame de contact selon l'état simulé (la transition CSS anime le mouvement). */
@@ -41,6 +41,8 @@ function Rotor({ cx, cy, r }: { cx: number; cy: number; r: number }) {
 
 const POT_COLOR: Record<string, string> = {
   L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
+  // fluide : pression (P), échappement (R), fuite (X)
+  P: '#1e88e5', R: '#90a4ae', X: '#e53935',
 }
 const SECONDARY_COLORS = ['#8e24aa', '#00897b', '#6d4c41', '#ef6c00', '#3949ab', '#7cb342']
 /** Couleur d'un fil selon son potentiel : réseau, source continue, ou n-ième borne du secondaire d'un transformateur. */
@@ -259,7 +261,7 @@ export default function Canvas(p: Props) {
       // simulation : on manœuvre les organes de commande, on ne modifie pas le schéma
       const el = (e.target as Element).closest('[data-sym]')
       const s = el ? doc.symbols.find((x) => x.id === el.getAttribute('data-sym')) : undefined
-      const kind = s ? isOperable(SYMBOL_MAP[s.defId].sim) : null
+      const kind = s ? isOperableDef(SYMBOL_MAP[s.defId]) : null
       if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
       else if (s && (() => { const m = SYMBOL_MAP[s.defId].sim; return m?.k === 'switch' && m.ctl === 'fixed' })()) p.onSimFault?.(s.id)
@@ -551,6 +553,29 @@ export default function Canvas(p: Props) {
                     <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6} fill={col} fillOpacity={bad ? 0.3 : 0.4} stroke={col} strokeWidth={bad ? 2 : 1.2} strokeDasharray={bad ? '4 2' : undefined} />
                   )
                 })()}
+                {p.sim && model === undefined && def.fluid?.k === 'valve' && (
+                  <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={p.sim.valveA[s.id] ? '#35c759' : '#fff'} stroke={p.sim.valveA[s.id] ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
+                )}
+                {p.sim && def.fluid?.k === 'cyl' && p.sim.cylPos[s.id] !== undefined && (() => {
+                  const f = def.fluid
+                  const c = portPos(s, f.cap)
+                  const r = f.rod ? portPos(s, f.rod) : null
+                  if (!c) return null
+                  const end = r ?? { x: c.x < (b.x1 + b.x2) / 2 ? b.x2 : b.x1, y: c.y }
+                  const pos = p.sim.cylPos[s.id]
+                  const horiz = Math.abs(end.x - c.x) >= Math.abs(end.y - c.y)
+                  const off = horiz ? { x: 0, y: 12 } : { x: 12, y: 0 }
+                  const a = { x: c.x + off.x, y: c.y + off.y }, z = { x: end.x + off.x, y: end.y + off.y }
+                  const m = { x: a.x + (z.x - a.x) * pos, y: a.y + (z.y - a.y) * pos }
+                  return (
+                    <g pointerEvents="none">
+                      <line x1={a.x} y1={a.y} x2={z.x} y2={z.y} stroke="#b0bec5" strokeWidth={3} strokeLinecap="round" />
+                      <line x1={a.x} y1={a.y} x2={m.x} y2={m.y} stroke="#1e88e5" strokeWidth={3} strokeLinecap="round" />
+                      <circle cx={m.x} cy={m.y} r={3.2} fill="#fff" stroke="#1e88e5" strokeWidth={1.4} />
+                      <text x={(a.x + z.x) / 2} y={a.y + (horiz ? 11 : 0)} fontSize={6.5} textAnchor="middle" fill="currentColor" stroke="none">{Math.round(pos * 100)} %</text>
+                    </g>
+                  )
+                })()}
                 {p.faults?.has('ovl:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚠ {p.lang === 'fr' ? 'SURCHARGE' : 'OVERLOAD'}</text>}
                 {p.faults?.has(s.id) && <text x={b.x2 + 2} y={b.y1 + 10} fontSize={14} fill="#e53935" stroke="none" fontWeight={700}>✕</text>}
                 {closedState !== undefined && (
@@ -621,7 +646,7 @@ export default function Canvas(p: Props) {
             const def = SYMBOL_MAP[s.defId]
             const b = symBBox(s)
             const on = !p.sim && sel.includes(s.id)
-            const op = p.sim && isOperable(def.sim)
+            const op = p.sim && isOperableDef(def)
             return (
               <g key={s.id} data-sym={s.id} className="sym-hit">
                 <rect x={b.x1 - 4} y={b.y1 - 4} width={b.x2 - b.x1 + 8} height={b.y2 - b.y1 + 8} className={on ? 'sel-box' : 'hit-box' + (op ? ' op' : '')} />

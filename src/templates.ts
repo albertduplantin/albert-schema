@@ -55,18 +55,67 @@ export const motorStarter = (base: Doc): Doc =>
       ['h', 't0', 'c', 't0'], ['h', 't1', 'n', 'a'],
     ])
 
-/** Vérin double effet piloté par un distributeur 4/2. */
-export const pneumaticCylinder = (base: Doc): Doc =>
-  build(base,
+const FV = (p: string) => P('5020_velves/502010_control/50201060_5_2_way/' + p)
+const CYL = P('5030_actuators/503010_cylinder_lin/50301011_double_acting/5030101100_double_effet')
+const SRC = P('5010_compressed_air/501010_air_generation/50101000_compressed_air_source')
+const SIL = P('5010_compressed_air/501016_funktion_components/50101610_flow/5010161060_silencer')
+
+/** Partie pneumatique commune : source d'air, distributeur 5/2 (valve = identifiant du symbole), vérin A1 et deux silencieux d'échappement. */
+const pneuPart = (valve: string, valveLabel: string, ports: { b: string; a: string; r1: string; p: string; r2: string }): [Spec[], Link[]] => [
+  [
+    ['a1', CYL, 180, 90, 'A1'],
+    ['v', valve, 200, 230, valveLabel],
+    ['sil1', SIL, 170, 330, ''],
+    ['src', SRC, 250, 330, ''],
+    ['sil2', SIL, 340, 330, ''],
+  ],
+  [
+    ['v', ports.b, 'a1', 't0'], ['v', ports.a, 'a1', 't1'],
+    ['v', ports.r1, 'sil1', 't0'], ['v', ports.p, 'src', 't0'], ['v', ports.r2, 'sil2', 't0'],
+  ],
+]
+
+/** Vérin double effet commandé par un distributeur 5/2 à commande manuelle : cliquer sur le distributeur en simulation. */
+export const pneumaticCylinder = (base: Doc): Doc => {
+  const [s, l] = pneuPart(FV('5020106030_man_mech/502010603010_5_2_way'), 'V1', { b: 't4', a: 't1', r1: 't2', p: 't3', r2: 't0' })
+  return build(base, s, l)
+}
+
+/** Électro-pneumatique : S1 alimente la bobine YV1 de l'électrodistributeur ; le fin de course A1+ allume H1 vérin sorti. */
+export const pneumaticElectric = (base: Doc): Doc => {
+  const [s, l] = pneuPart(FV('5020106020_elec/502010602010_5_2_way_010'), 'YV1', { b: 't3', a: 't1', r1: 't0', p: 't4', r2: 't2' })
+  return build(base,
     [
-      ['a', P('5030_actuators/503010_cylinder_lin/50301011_double_acting/5030101100_double_effet'), 300, 140],
-      ['v', P('5020_velves/502010_control/50201040_4_2_way/5020104030_man_mech/502010403000_4_2_way'), 290, 260],
-      ['s', P('5010_compressed_air/501010_air_generation/50101000_compressed_air_source'), 320, 360],
-      ['e', P('5010_compressed_air/501016_funktion_components/50101610_flow/5010161060_silencer'), 400, 360],
+      ...s,
+      ['l', 'sim-l', 480, 40], ['s1', Q('380_signaling_operating/21_selector_switches/010_switch_1pos'), 480, 110, 'S1'],
+      ['y', Q('310_relays_contactors_contacts/01_coils/bobine3'), 470, 210, 'YV1'], ['n', 'sim-n', 480, 310],
+      ['l2', 'sim-l', 600, 40], ['lm', Q('390_sensors_instruments/41_limit_switches/fin_de_course_came_2_no'), 600, 110, 'A1+'],
+      ['h', Q('380_signaling_operating/11_optical_signaling/lampe2'), 600, 210, 'H1'], ['n2', 'sim-n', 600, 310],
     ],
     [
-      ['a', 't0', 'v', 't0'], ['a', 't1', 'v', 't3'], ['s', 't0', 'v', 't1'], ['e', 't0', 'v', 't2'],
+      ...l,
+      ['l', 'a', 's1', 't0'], ['s1', 't1', 'y', 't0'], ['y', 't1', 'n', 'a'],
+      ['l2', 'a', 'lm', 't0'], ['lm', 't1', 'h', 't0'], ['h', 't1', 'n2', 'a'],
     ])
+}
+
+/** Va-et-vient automatique A+ A- : électrodistributeur bistable (YV1 sort, YV2 rentre) piloté par les fins de course A1- et A1+. */
+export const pneumaticAuto = (base: Doc): Doc => {
+  const [s, l] = pneuPart(FV('5020106020_elec/502010602030_5_2_way_030'), 'YV1/YV2', { b: 't3', a: 't0', r1: 't4', p: 't2', r2: 't1' })
+  const LS = Q('390_sensors_instruments/41_limit_switches/fin_de_course_came_2_no')
+  return build(base,
+    [
+      ...s,
+      ['l', 'sim-l', 480, 40], ['s2', Q('380_signaling_operating/20_push_buttons/poussoir'), 480, 100, 'S2'], ['m1', LS, 480, 180, 'A1-'],
+      ['y1', Q('310_relays_contactors_contacts/01_coils/bobine3'), 470, 260, 'YV1'], ['n', 'sim-n', 480, 350],
+      ['l2', 'sim-l', 620, 40], ['m2', LS, 620, 150, 'A1+'], ['y2', Q('310_relays_contactors_contacts/01_coils/bobine3'), 610, 260, 'YV2'], ['n2', 'sim-n', 620, 350],
+    ],
+    [
+      ...l,
+      ['l', 'a', 's2', 't0'], ['s2', 't1', 'm1', 't0'], ['m1', 't1', 'y1', 't0'], ['y1', 't1', 'n', 'a'],
+      ['l2', 'a', 'm2', 't0'], ['m2', 't1', 'y2', 't0'], ['y2', 't1', 'n2', 'a'],
+    ])
+}
 
 const L = (p: string) => Q('380_signaling_operating/' + p)
 const R = (p: string) => Q('310_relays_contactors_contacts/' + p)

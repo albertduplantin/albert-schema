@@ -1,5 +1,5 @@
 import type { Doc, Lang, SymbolDef } from './types'
-import { devKey, isOperable, simulate, type SimMemory } from './sim/engine'
+import { devKey, isOperableDef, simulate, type SimMemory } from './sim/engine'
 
 /** Un pas du scénario de test : on manœuvre des boutons (par repère), on laisse passer du temps, puis on vérifie l'état d'appareils (par repère). */
 export interface Step {
@@ -99,7 +99,7 @@ export function runExercise(ex: Exercise, doc: Doc, defs: Record<string, SymbolD
   for (const st of ex.steps) {
     now += st.wait ?? 100
     const pressed = new Set<string>()
-    for (const l of st.press ?? []) for (const s of byLabel(l)) if (isOperable(defs[s.defId]?.sim)) pressed.add(s.id)
+    for (const l of st.press ?? []) for (const s of byLabel(l)) if (isOperableDef(defs[s.defId])) pressed.add(s.id)
     let r = simulate(doc, defs, mem, { pressed, toggled: new Set() }, now)
     mem = r.state
     // laisse le circuit se stabiliser (retombée d'un relais, etc.)

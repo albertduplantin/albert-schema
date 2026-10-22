@@ -230,5 +230,63 @@ function rig(doc: any) {
   r = run([], [], 100); r = run([S2], [], 100); r = run([], [], 100)
   check('thermique : surcharge supprimée → réarmé, KM1 redémarre', [r.energized.has(coil.id), r.thermalTrip], [true, false])
 }
+// ── pneumatique : électrodistributeur 5/2 + vérin double effet + fin de course lié au vérin
+{
+  const id = (re: RegExp) => lib.symbols.find((s: any) => re.test(s.id)).id
+  const mk = (key: string, defId: string, label = '') => ({ id: key, defId, x: 0, y: 0, rot: 0, label, desc: '' })
+  const symbols = [
+    mk('src', id(/50101000_compressed_air_source/)), mk('v', id(/502010602010_5_2_way_010/), 'YV1'), mk('cyl', id(/5030101100_double_effet/), 'A1'),
+    mk('s1', id(/5010161060_silencer/)), mk('s2', id(/5010161060_silencer/)),
+    mk('l', 'sim-l'), mk('sw', id(/21_selector_switches\/010_switch_1pos/), 'S1'), mk('coil', id(/01_coils\/bobine3/), 'YV1'), mk('n', 'sim-n'),
+    mk('l2', 'sim-l'), mk('lim', id(/41_limit_switches\/fin_de_course_came_2_no/), 'A1+'), mk('h', id(/11_optical_signaling\/lampe2/), 'H1'), mk('n2', 'sim-n'),
+  ]
+  const W = (a: string, ap: string, b: string, bp: string, i: number) => ({ id: 'w' + i, from: { symId: a, portId: ap }, to: { symId: b, portId: bp }, label: '', color: '#000', section: '' })
+  const wires = [
+    W('src', 't0', 'v', 't4', 0), W('s1', 't0', 'v', 't0', 1), W('s2', 't0', 'v', 't2', 2),
+    W('v', 't1', 'cyl', 't1', 3), W('v', 't3', 'cyl', 't0', 4), // A → côté tige, B → côté fond
+    W('l', 'a', 'sw', 't0', 5), W('sw', 't1', 'coil', 't0', 6), W('coil', 't1', 'n', 'a', 7),
+    W('l2', 'a', 'lim', 't0', 8), W('lim', 't1', 'h', 't0', 9), W('h', 't1', 'n2', 'a', 10),
+  ]
+  const d: any = { ...base, symbols, wires }
+  let mem: any = {}, now = 1_000_000
+  const run = (toggled: string[], dt: number) => { now += dt; const r = simulate(d, SYMBOL_MAP, mem, { pressed: new Set(), toggled: new Set(toggled) }, now); mem = r.state; return r }
+  let r = run([], 0)
+  check('vérin : au repos (valve non commandée) il est rentré', r.cylPos.cyl, 0)
+  check('vérin : pression sur la tige au repos', [r.potentialOf['cyl:t1'], r.potentialOf['cyl:t0']], ['P', 'R'])
+  r = run(['sw'], 100); check('vérin : S1 → distributeur actionné, le vérin commence à sortir', [r.valveA.v, r.potentialOf['cyl:t0']], [true, 'P'])
+  r = run(['sw'], 600); check('vérin : à mi-course (~50 %)', Math.round(r.cylPos.cyl * 10) / 10 >= 0.4 && r.cylPos.cyl <= 0.6, true)
+  check('vérin : en mouvement, la simulation demande un nouveau calcul rapidement', r.pendingMs !== null && r.pendingMs <= 700, true)
+  check('vérin : fin de course A1+ pas encore fermé', r.energized.has('h'), false)
+  r = run(['sw'], 1000); check('vérin : sorti (100 %)', r.cylPos.cyl, 1)
+  r = run(['sw'], 10); check('vérin : fin de course A1+ fermé → voyant H1 allumé', r.energized.has('h'), true)
+  r = run([], 100); r = run([], 1500); check('vérin : S1 relâché → rentré', [r.cylPos.cyl, r.energized.has('h')], [0, false])
+}
+// ── exemples électro-pneumatiques
+{
+  // distributeur manuel : maintenu appuyé, le vérin sort ; relâché, il rentre
+  const d = T.pneumaticCylinder(base), g = rig(d)
+  const V = g.idOf('V1'), A = g.idOf('A1')
+  let r = g.run(); check('exemple pneumatique manuel : vérin rentré au repos', r.cylPos[A], 0)
+  r = g.run([V], [], 100); r = g.run([V], [], 2000); check('exemple pneumatique manuel : distributeur maintenu → vérin sorti', r.cylPos[A], 1)
+  r = g.run([], [], 100); r = g.run([], [], 2000); check('exemple pneumatique manuel : relâché → vérin rentré', r.cylPos[A], 0)
+}
+{
+  const d = T.pneumaticElectric(base), g = rig(d)
+  const S1 = g.idOf('S1'), A = g.idOf('A1')
+  let r = g.run(); check('exemple électro-pneumatique : repos, H1 éteint', [r.cylPos[A], g.on(r, 'H1')], [0, false])
+  r = g.run([], [S1], 100); r = g.run([], [S1], 2000); check('exemple électro-pneumatique : S1 → vérin sorti et H1 allumé', [r.cylPos[A], g.on(r, 'H1')], [1, true])
+  r = g.run([], [], 100); r = g.run([], [], 2000); check('exemple électro-pneumatique : S1 coupé → vérin rentré', [r.cylPos[A], g.on(r, 'H1')], [0, false])
+}
+{
+  const d = T.pneumaticAuto(base), g = rig(d)
+  const S2 = g.idOf('S2'), A = g.idOf('A1')
+  let r = g.run(); check('va-et-vient auto : repos, vérin rentré', r.cylPos[A], 0)
+  r = g.run([S2], [], 100)
+  let t = 0, out = false, back = false
+  for (let i = 0; i < 60; i++) { r = g.run([S2], [], 100); t += 100; if (r.cylPos[A] >= 1) out = true; if (out && r.cylPos[A] <= 0) { back = true; break } }
+  check('va-et-vient auto : S2 maintenu → le vérin sort puis rentre tout seul (A+ puis A-)', [out, back], [true, true])
+  r = g.run([], [], 100); for (let i = 0; i < 40; i++) r = g.run([], [], 100)
+  check('va-et-vient auto : S2 relâché → le vérin reste rentré', r.cylPos[A], 0)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

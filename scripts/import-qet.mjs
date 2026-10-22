@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { popularity } from './popularity.mjs'
 import { classify } from './sim-classify.mjs'
+import { classifyFluid } from './fluid-classify.mjs'
 import { animate } from './sim-animate.mjs'
 
 const [, , root, out, idsOut] = process.argv
@@ -242,6 +243,7 @@ for (const r of roots) {
     const gi = r.domain !== 'electrical' && rel.length > 3 ? 2 : 1
     const grp = rel.length > gi + 1 ? dirName(join(base, ...rel.slice(0, gi + 1))) : null
     const relFromRoot = relative(root, file).split(sep).join('/')
+    const fluid = r.domain === 'pneumatic' ? classifyFluid({ id: relFromRoot, nameFr: el.fr ?? '', ports }) : null
     const sim = r.domain === 'electrical' ? classify({ id: relFromRoot, nameFr: el.fr, nameEn: el.en, ports }) : null
     if (sim) {
       // animation : lames des contacts (CSS : rotation pilotée par --b{n}) et rotor des moteurs
@@ -259,6 +261,7 @@ for (const r of roots) {
       group: grp && (grp.fr || grp.en) ? grp : null,
       score: popularity({ rel: relFromRoot, nameFr: el.fr, nameEn: el.en }),
       sim,
+      ...(fluid ? { fluid } : {}),
       prefix: prefixFor(r.dir + '/' + rel.join('/')),
       name: el, w, h,
       svg: shapes.map((s) => s).join('').replace(/(-?\d+(?:\.\d+)?)/g, (m) => m), // inchangé, translation ci-dessous
