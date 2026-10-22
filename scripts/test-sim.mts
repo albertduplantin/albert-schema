@@ -154,5 +154,31 @@ function rig(doc: any) {
   let r = g.run([S2]); r = g.run()
   check('repère « km1 » (casse/espaces) : la bobine KM1 agit sur ses contacts (auto-maintien + moteur)', [r.energized.has(g.idOf('KM1', 'bobine')), r.energized.has(g.idOf('M1'))], [true, true])
 }
+// ── exemples ajoutés : signalisation et cascade temporisée
+{
+  const d = T.startLamps(base), g = rig(d)
+  const S2 = g.idOf('S2')
+  let r = g.run(); check('signalisation : au repos H2 allumé, H1 éteint', [g.on(r, 'H1'), g.on(r, 'H2')], [false, true])
+  r = g.run([S2]); r = g.run(); check('signalisation : en marche H1 allumé, H2 éteint', [g.on(r, 'H1'), g.on(r, 'H2')], [true, false])
+}
+{
+  const d = T.delayedCascade(base), g = rig(d)
+  const S2 = g.idOf('S2')
+  let r = g.run([S2]); r = g.run()
+  check('cascade : KM1 et KT alimentés, KM2 pas encore', [g.on(r, 'KM1', 'bobine'), g.on(r, 'KT'), g.on(r, 'KM2')], [true, true, false])
+  r = g.run([], [], 6000); r = g.run()
+  check('cascade : 5 s plus tard KM2 démarre', g.on(r, 'KM2'), true)
+}
+// ── contrôle du schéma
+{
+  const { checkDoc } = await import(ROOT + '/src/check.ts')
+  for (const [n, f] of [['moteur', T.motorStarter], ['inverseur', T.reversingStarter], ['signalisation', T.startLamps], ['cascade', T.delayedCascade], ['temporisation', T.timerOnDelay]] as const) {
+    check(`contrôle : l'exemple « ${n} » est sans erreur`, checkDoc(f(base), SYMBOL_MAP, 'fr').filter((i: any) => i.level === 'error').length, 0)
+  }
+  const d = T.startLamps(base)
+  d.symbols = d.symbols.filter((s: any) => !(s.label === 'KM1' && s.defId.includes('bobine')))
+  const issues = checkDoc(d, SYMBOL_MAP, 'fr')
+  check('contrôle : bobine supprimée → contacts KM1 signalés', issues.filter((i: any) => i.level === 'error' && /KM1/.test(i.text)).length, 3)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

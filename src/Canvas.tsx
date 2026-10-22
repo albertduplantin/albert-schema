@@ -165,6 +165,13 @@ export default function Canvas(p: Props) {
       }
       out[c.id] = rows2.sort()
     }
+    // renvoi inverse : près de chaque contact, la bobine qui le commande
+    for (const k of doc.symbols) {
+      const m = SYMBOL_MAP[k.defId]?.sim
+      if (m?.k !== 'switch' || m.ctl !== 'coil' || !k.label) continue
+      const c = doc.symbols.find((x) => SYMBOL_MAP[x.defId]?.sim?.k === 'coil' && x.label && devKey(x.label) === devKey(k.label))
+      if (c) out[k.id] = [`⇐ ${c.label} · ${zone(c)}`]
+    }
     return out
   }, [doc.symbols, doc.paper, terms])
   // tracé de tous les conducteurs, séparés en couloirs quand ils se superposeraient

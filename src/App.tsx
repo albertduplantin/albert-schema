@@ -6,9 +6,11 @@ import { uid } from './geometry'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
-import { motorStarter, motorStarterTransformer, pneumaticCylinder, reversingStarter, timerOnDelay } from './templates'
+import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticCylinder, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, effectiveTerms, ensureUnique, othersTerms, termGroups } from './terminals'
-import { DEFAULT_DELAY_S, simulate, type SimInputs, type SimMemory } from './sim/engine'
+import { DEFAULT_DELAY_S, isOperable, simulate, type SimInputs, type SimMemory } from './sim/engine'
+import Chrono, { type TraceRow } from './Chrono'
+import { checkDoc } from './check'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
 
@@ -150,16 +152,59 @@ function Editor() {
   const [simIn, setSimIn] = useState<SimInputs>({ pressed: new Set(), toggled: new Set() })
   const coilMemory = useRef<SimMemory>({})
   const [simTick, setSimTick] = useState(0) // relance le calcul à l'échéance d'une temporisation
-  const sim = useMemo(() => (simMode ? simulate(doc, SYMBOL_MAP, coilMemory.current, simIn) : null), [simMode, doc, simIn, simTick])
+  // horloge simulée : vitesse réglable, pause et avance au pas
+  const clock = useRef({ v: Date.now(), r: Date.now(), speed: 1, paused: false })
+  const [clockUi, setClockUi] = useState({ speed: 1, paused: false })
+  const vnow = () => (clock.current.paused ? clock.current.v : clock.current.v + (Date.now() - clock.current.r) * clock.current.speed)
+  const rebase = (patch: Partial<typeof clock.current>) => {
+    clock.current = { ...clock.current, v: vnow(), r: Date.now(), ...patch }
+    setClockUi({ speed: clock.current.speed, paused: clock.current.paused })
+    setSimTick((n) => n + 1)
+  }
+  const sim = useMemo(() => (simMode ? simulate(doc, SYMBOL_MAP, coilMemory.current, simIn, vnow()) : null), [simMode, doc, simIn, simTick]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sim) return
     coilMemory.current = sim.state
-    if (sim.pendingMs === null) return
-    const id = window.setTimeout(() => setSimTick((n) => n + 1), sim.pendingMs + 15)
+    if (sim.pendingMs === null || clock.current.paused) return
+    const id = window.setTimeout(() => setSimTick((n) => n + 1), sim.pendingMs / clock.current.speed + 15)
     return () => window.clearTimeout(id)
   }, [sim])
+  // chronogramme : on note chaque changement d'état des appareils repérés
+  const trace = useRef<{ t0: number; rows: TraceRow[] }>({ t0: 0, rows: [] })
+  const [chronoNow, setChronoNow] = useState(0)
+  const signalNames = useMemo(() => {
+    const names: string[] = []
+    for (const s of doc.symbols) {
+      const m = SYMBOL_MAP[s.defId]?.sim
+      if (s.label && (m?.k === 'coil' || m?.k === 'load' || isOperable(m)) && !names.includes(s.label)) names.push(s.label)
+    }
+    return names
+  }, [doc.symbols])
+  useEffect(() => {
+    if (!sim) return
+    const v: Record<string, boolean> = {}
+    for (const s of doc.symbols) {
+      const m = SYMBOL_MAP[s.defId]?.sim
+      if (!s.label) continue
+      if (m?.k === 'coil' || m?.k === 'load') v[s.label] = v[s.label] || sim.energized.has(s.id)
+      else if (isOperable(m)) v[s.label] = v[s.label] || simIn.pressed.has(s.id) || simIn.toggled.has(s.id)
+    }
+    const last = trace.current.rows[trace.current.rows.length - 1]
+    if (!last || signalNames.some((n) => !!last.v[n] !== !!v[n])) trace.current.rows.push({ t: vnow() - trace.current.t0, v })
+    setChronoNow(vnow() - trace.current.t0)
+  }, [sim]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!simMode || clockUi.paused) return
+    const id = window.setInterval(() => setChronoNow(vnow() - trace.current.t0), 250)
+    return () => window.clearInterval(id)
+  }, [simMode, clockUi.paused, clockUi.speed]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [showCheck, setShowCheck] = useState(false)
+  const issues = useMemo(() => (showCheck ? checkDoc(doc, SYMBOL_MAP, lang) : []), [showCheck, doc, lang])
   const startSim = () => {
     coilMemory.current = {}
+    clock.current = { v: Date.now(), r: Date.now(), speed: clock.current.speed, paused: false }
+    setClockUi({ speed: clock.current.speed, paused: false })
+    trace.current = { t0: clock.current.v, rows: [] }
     setSimIn({ pressed: new Set(), toggled: new Set() })
     setPlacing(null)
     setSel([])
@@ -428,11 +473,21 @@ function Editor() {
           <button onClick={autoLabel}>{t('autoLabel')}</button>
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
+          <button onClick={() => setShowCheck(true)}>{t('check')}</button>
         </div>
         <div className="group">
           <button className={'simbtn' + (simMode ? ' on' : '')} onClick={() => (simMode ? setSimMode(false) : startSim())} title={t('simTitle')}>
             {simMode ? '■ ' + t('simStop') : '▶ ' + t('simStart')}
           </button>
+          {simMode && (
+            <>
+              <button onClick={() => rebase({ paused: !clock.current.paused })}>{clockUi.paused ? '▶ ' + t('resume') : '⏸ ' + t('pause')}</button>
+              {clockUi.paused && <button onClick={() => { clock.current = { ...clock.current, v: clock.current.v + (sim?.pendingMs ?? 500) + 15 }; setSimTick((n) => n + 1) }}>⏭ {t('step')}</button>}
+              <select aria-label={t('speed')} title={t('speed')} value={clockUi.speed} onChange={(e) => rebase({ speed: Number(e.target.value) })}>
+                {[0.5, 1, 2, 5, 10].map((v) => <option key={v} value={v}>× {v}</option>)}
+              </select>
+            </>
+          )}
         </div>
         <details className="menu" ref={exportRef}>
           <summary>{t('export')} ▾</summary>
@@ -497,6 +552,10 @@ function Editor() {
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
           onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
+        {sim && signalNames.length > 0 && (
+          <Chrono rows={trace.current.rows} names={signalNames} now={chronoNow} lang={lang}
+            onClear={() => { trace.current = { t0: vnow(), rows: [] }; setChronoNow(0) }} />
+        )}
         {!doc.symbols.length && !placing && (
           <div className="empty">
             <h2>{t('emptyTitle')}</h2>
@@ -506,6 +565,8 @@ function Editor() {
               <button onClick={() => startTemplate(motorStarterTransformer)}>{t('tplTrafo')}</button>
               <button onClick={() => startTemplate(reversingStarter)}>{t('tplReversing')}</button>
               <button onClick={() => startTemplate(timerOnDelay)}>{t('tplTimer')}</button>
+              <button onClick={() => startTemplate(startLamps)}>{t('tplLamps')}</button>
+              <button onClick={() => startTemplate(delayedCascade)}>{t('tplCascade')}</button>
               <button onClick={() => startTemplate(pneumaticCylinder)}>{t('tplPneu')}</button>
             </div>
           </div>
@@ -715,6 +776,29 @@ function Editor() {
             <h3>{t('shortcutsTitle')}</h3>
             <table><tbody>{SHORTCUTS[lang].map(([k, d]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{d}</td></tr>)}</tbody></table>
             <div className="actions"><button onClick={() => setShowKeys(false)}>{t('close')}</button></div>
+          </div>
+        </div>
+      )}
+
+      {showCheck && (
+        <div className="modal" onClick={() => setShowCheck(false)}>
+          <div className="dialog" role="dialog" aria-label={t('checkTitle')} onClick={(e) => e.stopPropagation()}>
+            <h3>{t('checkTitle')}</h3>
+            {issues.length === 0 ? <p>✓ {t('checkOk')}</p> : (
+              <>
+                <p className="muted">{t('checkHelp')}</p>
+                <ul className="issues">
+                  {issues.map((i, n) => (
+                    <li key={n} className={i.level}>
+                      <button className="link" disabled={!i.symId} onClick={() => { if (i.symId) { setSel([i.symId]); setShowCheck(false) } }}>
+                        {i.level === 'error' ? '⛔' : '⚠'} {i.text}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <div className="actions"><button onClick={() => setShowCheck(false)}>{t('close')}</button></div>
           </div>
         </div>
       )}

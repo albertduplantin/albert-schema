@@ -152,3 +152,52 @@ export const motorStarterTransformer = (base: Doc): Doc =>
       ['s2', 't1', 'c', 't0'], ['a1', 't1', 'c', 't0'], ['h', 't0', 'c', 't0'],
       ['c', 't1', 't', 't3'], ['h', 't1', 't', 't3'],
     ])
+
+const AUX = '02_contacts_cross_referencing/01_auxiliary_contacts/'
+/** Colonne de commande marche/arrêt à auto-maintien (S1 NF, S2 NO, contact KM1, bobine KM1) — repère de départ pour les exemples ci-dessous. */
+const startStopColumn = (): [Spec[], Link[]] => [
+  [
+    ['l', 'sim-l', 400, 30],
+    ['s1', L('20_push_buttons/poussoir_nf'), 400, 100, 'S1'],
+    ['s2', L('20_push_buttons/poussoir'), 400, 200, 'S2'],
+    ['ka', R(AUX + 'con_simple'), 470, 170, 'KM1'],
+    ['c', R('01_coils/bobine3'), 390, 320, 'KM1'],
+    ['n', 'sim-n', 400, 420],
+  ],
+  [
+    ['l', 'a', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'ka', 't0'],
+    ['s2', 't1', 'c', 't0'], ['ka', 't1', 'c', 't0'], ['c', 't1', 'n', 'a'],
+  ],
+]
+
+/** Signalisation : H1 (marche) par un contact NO de KM1, H2 (arrêt) par un contact NF de KM1. */
+export const startLamps = (base: Doc): Doc => {
+  const [s, l] = startStopColumn()
+  return build(base,
+    [
+      ...s,
+      ['l2', 'sim-l', 580, 30], ['k2', R(AUX + 'con_simple'), 580, 100, 'KM1'], ['h1', L('11_optical_signaling/lampe2'), 580, 200, 'H1'], ['n2', 'sim-n', 580, 300],
+      ['l3', 'sim-l', 700, 30], ['k3', R(AUX + 'con_simple_nf'), 700, 100, 'KM1'], ['h2', L('11_optical_signaling/lampe2'), 700, 200, 'H2'], ['n3', 'sim-n', 700, 300],
+    ],
+    [
+      ...l,
+      ['l2', 'a', 'k2', 't0'], ['k2', 't1', 'h1', 't0'], ['h1', 't1', 'n2', 'a'],
+      ['l3', 'a', 'k3', 't0'], ['k3', 't1', 'h2', 't0'], ['h2', 't1', 'n3', 'a'],
+    ])
+}
+
+/** Démarrage en cascade : KM2 démarre 5 s après KM1 (temporisation KT à la montée). */
+export const delayedCascade = (base: Doc): Doc => {
+  const [s, l] = startStopColumn()
+  return build(base,
+    [
+      ...s,
+      ['l2', 'sim-l', 580, 30], ['k2', R(AUX + 'con_simple'), 580, 100, 'KM1'], ['kt', R('01_coils/bobine_tempo_travail'), 570, 200, 'KT', 5], ['n2', 'sim-n', 580, 300],
+      ['l3', 'sim-l', 700, 30], ['k3', R(AUX + 'con_simple'), 700, 100, 'KT'], ['c2', R('01_coils/bobine3'), 690, 200, 'KM2'], ['n3', 'sim-n', 700, 300],
+    ],
+    [
+      ...l,
+      ['l2', 'a', 'k2', 't0'], ['k2', 't1', 'kt', 't0'], ['kt', 't1', 'n2', 'a'],
+      ['l3', 'a', 'k3', 't0'], ['k3', 't1', 'c2', 't0'], ['c2', 't1', 'n3', 'a'],
+    ])
+}
