@@ -1,5 +1,5 @@
 import type { Doc, Lang } from './types'
-import { PAPER_SIZE } from './geometry'
+import { PAPER_SIZE, UNIT_MM } from './geometry'
 import { SYMBOL_MAP } from './symbols'
 
 function download(name: string, blob: Blob) {
@@ -14,7 +14,7 @@ export function sheetSvg(doc: Doc, content: SVGGElement): string {
   const { w, h } = PAPER_SIZE[doc.paper]
   const body = new XMLSerializer().serializeToString(content)
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w / 4}mm" height="${h / 4}mm">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * UNIT_MM}mm" height="${h * UNIT_MM}mm">` +
     body.replace(/ xmlns="[^"]*"/g, '') +
     `</svg>`
   )
@@ -46,7 +46,7 @@ export function printSheet(doc: Doc, content: SVGGElement) {
   const win = window.open('', '_blank')
   if (!win) return
   win.document.write(
-    `<!doctype html><title>${doc.title.title}</title><style>@page{size:${w / 4}mm ${h / 4}mm;margin:0}html,body{margin:0}svg{display:block}</style>` +
+    `<!doctype html><title>${doc.title.title}</title><style>@page{size:${w * UNIT_MM}mm ${h * UNIT_MM}mm;margin:0}html,body{margin:0}svg{display:block}</style>` +
       sheetSvg(doc, content),
   )
   win.document.close()

@@ -59,7 +59,8 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
     ['Suppr', 'Supprimer la sélection'],
     ['Échap', 'Annuler l’action en cours / désélectionner'],
     ['Molette', 'Zoom centré sur le curseur'],
-    ['Clic droit ou Espace + glisser', 'Déplacer la vue'],
+    ['Glisser avec le clic droit, ou Espace + glisser', 'Déplacer la vue'],
+    ['Clic droit (sans bouger)', 'Menu contextuel'],
     ['F', 'Ajuster la feuille à la fenêtre'],
     ['Ctrl + S', 'Enregistrer le fichier'],
     ['?', 'Afficher cette aide'],
@@ -76,7 +77,8 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
     ['Del', 'Delete the selection'],
     ['Esc', 'Cancel the current action / deselect'],
     ['Wheel', 'Zoom around the cursor'],
-    ['Right-click or Space + drag', 'Pan the view'],
+    ['Right-drag, or Space + drag', 'Pan the view'],
+    ['Right-click (no movement)', 'Context menu'],
     ['F', 'Fit the sheet to the window'],
     ['Ctrl + S', 'Save the file'],
     ['?', 'Show this help'],
@@ -94,6 +96,7 @@ export default function App() {
   const [showBom, setShowBom] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; target: string | null } | null>(null)
   const contentRef = useRef<SVGGElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const exportRef = useRef<HTMLDetailsElement>(null)
@@ -195,7 +198,7 @@ export default function App() {
       const ctrl = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       const step = e.shiftKey ? 50 : 10
-      if (e.key === 'Escape') { setPlacing(null); setSel([]); setShowKeys(false); setShowBom(false) }
+      if (e.key === 'Escape') { setMenu(null); setPlacing(null); setSel([]); setShowKeys(false); setShowBom(false) }
       else if (e.key === 'Delete' || e.key === 'Backspace') deleteSel()
       else if (k === 'r' && !ctrl) { if (!placing) rotateSel() }
       else if (e.key === '?') setShowKeys((v) => !v)
@@ -350,7 +353,7 @@ export default function App() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
         {!doc.symbols.length && !placing && (
           <div className="empty">
             <h2>{t('emptyTitle')}</h2>
@@ -401,6 +404,32 @@ export default function App() {
           ))}
         </div>
       </aside>
+
+      {menu && (
+        <div className="ctx-back" onMouseDown={() => setMenu(null)} onContextMenu={(e) => e.preventDefault()}>
+          <div className="ctx" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 220) }} onMouseDown={(e) => e.stopPropagation()}>
+            {menu.target ? (
+              <>
+                {doc.symbols.some((s) => s.id === menu.target) && (
+                  <>
+                    <button onClick={() => { rotateSel(); setMenu(null) }}><span>{t('rotate')}</span><kbd>R</kbd></button>
+                    <button onClick={() => { duplicate(); setMenu(null) }}><span>{t('duplicate')}</span><kbd>Ctrl+D</kbd></button>
+                    <button onClick={() => { copySel(); setMenu(null) }}><span>{t('copy')}</span><kbd>Ctrl+C</kbd></button>
+                    <hr />
+                  </>
+                )}
+                <button className="danger" onClick={() => { deleteSel(); setMenu(null) }}><span>{t('delete')}</span><kbd>Suppr</kbd></button>
+              </>
+            ) : (
+              <>
+                <button disabled={!clip.current} onClick={() => { paste(); setMenu(null) }}><span>{t('paste')}</span><kbd>Ctrl+V</kbd></button>
+                <button onClick={() => { setSel([...doc.symbols.map((s) => s.id), ...doc.wires.map((w) => w.id)]); setMenu(null) }}><span>{t('selectAll')}</span><kbd>Ctrl+A</kbd></button>
+                <button onClick={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' })); setMenu(null) }}><span>{t('fitShort')}</span><kbd>F</kbd></button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {showKeys && (
         <div className="modal" onClick={() => setShowKeys(false)}>

@@ -1,15 +1,16 @@
 import type { Dir, Paper, PlacedSymbol, SymbolDef } from './types'
 import { SYMBOL_MAP } from './symbols'
 
-/** 1 unité = 0,25 mm. Grille = 10 unités (2,5 mm). */
+/** 1 unité = 0,375 mm. Grille = 10 unités (3,75 mm). */
+export const UNIT_MM = 0.375
 export const GRID = 10
 export const PAPER_SIZE: Record<Paper, { w: number; h: number }> = {
-  A4: { w: 1188, h: 840 },
-  A3: { w: 1680, h: 1188 },
-  A2: { w: 2376, h: 1680 },
-  A1: { w: 3360, h: 2376 },
+  A4: { w: 792, h: 560 },
+  A3: { w: 1120, h: 792 },
+  A2: { w: 1584, h: 1120 },
+  A1: { w: 2240, h: 1584 },
 }
-export const MARGIN = 20
+export const MARGIN = 14
 
 export const snap = (v: number) => Math.round(v / GRID) * GRID
 

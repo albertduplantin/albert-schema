@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
-  GRID, PAPER_SIZE, pointsAttr, portPos, route, rotCenter, snap, symBBox, uid,
+  GRID, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, rotCenter, snap, symBBox, uid,
 } from './geometry'
 import Sheet from './Sheet'
 
@@ -19,17 +19,35 @@ interface Props {
   contentRef: RefObject<SVGGElement>
   nextLabel: (doc: Doc, defId: string) => string
   onPlaced: (defId: string) => void
+  onContext: (x: number, y: number, target: string | null) => void
   labels: { zoomIn: string; zoomOut: string; fit: string }
 }
 
 type Interaction =
   | { kind: 'none' }
-  | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number }
+  | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number; btn: number; target: string | null }
   | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; moved: boolean }
   | { kind: 'band'; x0: number; y0: number; add: boolean }
   | { kind: 'wire'; from: PortRef }
 
 const portKey = (r: PortRef) => `${r.symId}:${r.portId}`
+
+/** Alignements exacts (centres et bornes) entre symboles déplacés et les autres. */
+function alignGuides(moving: PlacedSymbol[], others: PlacedSymbol[]) {
+  const feat = (s: PlacedSymbol) => {
+    const b = symBBox(s)
+    const ps = SYMBOL_MAP[s.defId].ports.map((pt) => portPos(s, pt.id)!)
+    return { xs: [(b.x1 + b.x2) / 2, ...ps.map((q) => q.x)], ys: [(b.y1 + b.y2) / 2, ...ps.map((q) => q.y)] }
+  }
+  const o = others.map(feat)
+  const v = new Set<number>()
+  const h = new Set<number>()
+  for (const m of moving.map(feat)) {
+    for (const x of m.xs) if (o.some((f) => f.xs.includes(x))) v.add(x)
+    for (const y of m.ys) if (o.some((f) => f.ys.includes(y))) h.add(y)
+  }
+  return { v: [...v], h: [...h] }
+}
 
 export default function Canvas(p: Props) {
   const { doc, sel } = p
@@ -44,6 +62,7 @@ export default function Canvas(p: Props) {
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
   const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [hoverPort, setHoverPort] = useState<string | null>(null)
+  const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] })
   const inter = useRef<Interaction>({ kind: 'none' })
   const [wiring, setWiring] = useState<PortRef | null>(null)
   const space = useRef(false)
@@ -108,7 +127,9 @@ export default function Canvas(p: Props) {
   const onMouseDown = (e: React.MouseEvent) => {
     const pt = toSheet(e)
     if (e.button === 1 || e.button === 2 || space.current) {
-      inter.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }
+      const hit = (e.target as Element).closest('[data-sym],[data-wire]')
+      const target = hit ? (hit.getAttribute('data-sym') ?? hit.getAttribute('data-wire')) : null
+      inter.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, btn: e.button, target }
       e.preventDefault()
       return
     }
@@ -167,6 +188,8 @@ export default function Canvas(p: Props) {
         p.checkpoint()
       }
       if (it.moved) {
+        const moved = doc.symbols.filter((s) => it.orig[s.id]).map((s) => ({ ...s, x: it.orig[s.id].x + dx, y: it.orig[s.id].y + dy }))
+        setGuides(alignGuides(moved, doc.symbols.filter((s) => !it.orig[s.id])))
         p.update((d) => ({
           ...d,
           symbols: d.symbols.map((s) => (it.orig[s.id] ? { ...s, x: it.orig[s.id].x + dx, y: it.orig[s.id].y + dy } : s)),
@@ -179,6 +202,12 @@ export default function Canvas(p: Props) {
 
   const onMouseUp = (e: React.MouseEvent) => {
     const it = inter.current
+    setGuides((g) => (g.v.length || g.h.length ? { v: [], h: [] } : g))
+    if (it.kind === 'pan' && it.btn === 2 && Math.hypot(e.clientX - it.sx, e.clientY - it.sy) < 4) {
+      if (it.target && !sel.includes(it.target)) p.setSel([it.target])
+      else if (!it.target) p.setSel([])
+      p.onContext(e.clientX, e.clientY, it.target)
+    }
     if (it.kind === 'wire') {
       const target = portUnder(e.target)
       if (target && portKey(target) !== portKey(it.from)) {
@@ -250,7 +279,7 @@ export default function Canvas(p: Props) {
     >
       <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
         <rect x={-4} y={-4} width={w + 8} height={h + 8} fill="#000" opacity={0.12} />
-        <g ref={p.contentRef} color="#000" stroke="currentColor" fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fontFamily="Arial, sans-serif">
+        <g ref={p.contentRef} color="#000" stroke="currentColor" fill="none" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" fontFamily="Arial, sans-serif">
           <Sheet paper={doc.paper} title={doc.title} lang={p.lang} />
           {doc.wires.map((wr) => {
             const a = symById(wr.from.symId), b = symById(wr.to.symId)
@@ -264,8 +293,8 @@ export default function Canvas(p: Props) {
             const txt = [wr.label, wr.section && wr.section + ' mm²'].filter(Boolean).join(' ')
             return (
               <g key={wr.id}>
-                <polyline points={pointsAttr(pts)} stroke={wr.color} strokeWidth={2} />
-                {txt && <text x={mx + 4} y={my - 4} fontSize={9} fill={wr.color} stroke="none">{txt}</text>}
+                <polyline points={pointsAttr(pts)} stroke={wr.color} strokeWidth={1.6} />
+                {txt && <text x={mx + 4} y={my - 4} fontSize={7} fill={wr.color} stroke="none">{txt}</text>}
               </g>
             )
           })}
@@ -280,10 +309,10 @@ export default function Canvas(p: Props) {
                   if (!pt.label) return null
                   const pos = portPos(s, pt.id)!
                   const off = { up: [4, -3], down: [4, 9], left: [-4, -3], right: [4, -3] }[pos.dir]
-                  return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={8} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{pt.label}</text>
+                  return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{pt.label}</text>
                 })}
-                {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={12} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
-                {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 12} fontSize={9} fill="currentColor" stroke="none">{s.desc}</text>}
+                {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
+                {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{s.desc}</text>}
               </g>
             )
           })}
@@ -334,6 +363,8 @@ export default function Canvas(p: Props) {
               transform={`translate(${snap(mouse.x - ghost.w / 2)} ${snap(mouse.y - ghost.h / 2)}) rotate(${rot} ${rotCenter(ghost).cx} ${rotCenter(ghost).cy})`}
               dangerouslySetInnerHTML={{ __html: ghost.svg.replace(/var\(--bg\)/g, '#fff') }} />
           )}
+          {guides.v.map((x) => <path key={'v' + x} d={`M${x} 0V${h}`} className="guide" />)}
+          {guides.h.map((y) => <path key={'h' + y} d={`M0 ${y}H${w}`} className="guide" />)}
           {band && (
             <rect className="band" x={Math.min(band.x0, band.x1)} y={Math.min(band.y0, band.y1)}
               width={Math.abs(band.x1 - band.x0)} height={Math.abs(band.y1 - band.y0)} />
@@ -347,7 +378,7 @@ export default function Canvas(p: Props) {
       <button onClick={() => zoomBy(1.25)} title={p.labels.zoomIn} aria-label={p.labels.zoomIn}>+</button>
       <button onClick={() => fit()} title={p.labels.fit} aria-label={p.labels.fit}>⤢</button>
     </div>
-    <div className="coords">{Math.round(mouse.x / 4)} , {Math.round(mouse.y / 4)} mm</div>
+    <div className="coords">{Math.round(mouse.x * UNIT_MM)} , {Math.round(mouse.y * UNIT_MM)} mm</div>
     </>
   )
 }
