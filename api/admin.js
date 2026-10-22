@@ -4,7 +4,7 @@
 //   GET  /api/admin?action=doc&id=<id>     -> schéma joint (JSON brut)
 //   POST /api/admin { action: 'status' | 'note' | 'delete', id, status?, note? }
 //
-// Accès : en-tête `Authorization: Bearer <ADMIN_TOKEN>`. Sans variable d'environnement ADMIN_TOKEN (16 caractères minimum), l'API
+// Accès : en-tête `Authorization: Bearer <ADMIN_TOKEN>`. Sans variable d'environnement ADMIN_TOKEN (10 caractères minimum), l'API
 // répond 404 comme si elle n'existait pas. Les mauvais essais sont comptés par adresse (10 par quart d'heure, puis 429).
 import { createHash, timingSafeEqual } from 'node:crypto'
 
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   const secret = process.env.ADMIN_TOKEN
   const { url, token } = config()
   // fonction désactivée : indiscernable d'une route inexistante
-  if (!secret || secret.length < 16 || !url || !token) {
+  if (!secret || secret.length < 10 || !url || !token) {
     res.status(404).json({ error: 'not found' })
     return
   }
