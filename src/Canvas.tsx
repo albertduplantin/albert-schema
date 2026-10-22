@@ -18,6 +18,8 @@ interface Props {
   checkpoint: () => void
   contentRef: RefObject<SVGGElement>
   nextLabel: (doc: Doc, defId: string) => string
+  onPlaced: (defId: string) => void
+  labels: { zoomIn: string; zoomOut: string; fit: string }
 }
 
 type Interaction =
@@ -45,7 +47,10 @@ export default function Canvas(p: Props) {
   const inter = useRef<Interaction>({ kind: 'none' })
   const [wiring, setWiring] = useState<PortRef | null>(null)
   const space = useRef(false)
+  const [rot, setRot] = useState<0 | 90 | 180 | 270>(0)
   const fitRef = useRef<() => void>(() => {})
+  const placingRef = useRef<string | null>(null)
+  placingRef.current = p.placing
 
   const { w, h } = PAPER_SIZE[doc.paper]
   fitRef.current = () => fit()
@@ -72,6 +77,8 @@ export default function Canvas(p: Props) {
     }
     const down = (e: KeyboardEvent) => {
       if (e.key === 'f' && !e.ctrlKey && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLSelectElement)) fitRef.current()
+      if (e.key === 'Escape') { inter.current = { kind: 'none' }; setWiring(null); setBand(null); setRot(0) }
+      if (e.key.toLowerCase() === 'r' && !e.ctrlKey && placingRef.current && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) setRot((r) => (((r + 90) % 360) as 0 | 90 | 180 | 270))
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         space.current = true
         e.preventDefault()
@@ -109,11 +116,12 @@ export default function Canvas(p: Props) {
     if (p.placing) {
       const def = SYMBOL_MAP[p.placing]
       const sym: PlacedSymbol = {
-        id: uid(), defId: def.id, rot: 0, desc: '',
+        id: uid(), defId: def.id, rot, desc: '',
         x: snap(pt.x - def.w / 2), y: snap(pt.y - def.h / 2),
         label: p.nextLabel(doc, def.id),
       }
       p.commit((d) => ({ ...d, symbols: [...d.symbols, sym] }))
+      p.onPlaced(def.id)
       return
     }
     const port = portUnder(e.target)
@@ -210,10 +218,30 @@ export default function Canvas(p: Props) {
 
   const ghost = p.placing ? SYMBOL_MAP[p.placing] : null
 
+  const onDrop = (e: React.DragEvent) => {
+    const id = e.dataTransfer.getData('text/x-albert-symbol')
+    const def = SYMBOL_MAP[id]
+    if (!def) return
+    e.preventDefault()
+    const pt = toSheet(e)
+    const sym: PlacedSymbol = { id: uid(), defId: id, rot: 0, desc: '', x: snap(pt.x - def.w / 2), y: snap(pt.y - def.h / 2), label: p.nextLabel(doc, id) }
+    p.commit((d) => ({ ...d, symbols: [...d.symbols, sym] }))
+    p.setSel([sym.id])
+    p.onPlaced(id)
+  }
+  const zoomBy = (f: number) => {
+    const r = svgRef.current!.getBoundingClientRect()
+    const mx = r.width / 2, my = r.height / 2
+    setView((v) => { const k = Math.min(4, Math.max(0.1, v.k * f)); return { k, x: mx - ((mx - v.x) / v.k) * k, y: my - ((my - v.y) / v.k) * k } })
+  }
+
   return (
+    <>
     <svg
       ref={svgRef}
-      className={'canvas' + (p.placing ? ' placing' : '')}
+      onDragOver={(e) => { if (e.dataTransfer.types.includes('text/x-albert-symbol')) e.preventDefault() }}
+      onDrop={onDrop}
+      className={'canvas' + (p.placing ? ' placing' : '') + (wiring ? ' wiring' : '')}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
@@ -303,7 +331,7 @@ export default function Canvas(p: Props) {
           })()}
           {ghost && (
             <g opacity={0.5} pointerEvents="none" color="#06c" stroke="currentColor" fill="none" strokeWidth={2}
-              transform={`translate(${snap(mouse.x - ghost.w / 2)} ${snap(mouse.y - ghost.h / 2)})`}
+              transform={`translate(${snap(mouse.x - ghost.w / 2)} ${snap(mouse.y - ghost.h / 2)}) rotate(${rot} ${rotCenter(ghost).cx} ${rotCenter(ghost).cy})`}
               dangerouslySetInnerHTML={{ __html: ghost.svg.replace(/var\(--bg\)/g, '#fff') }} />
           )}
           {band && (
@@ -313,5 +341,13 @@ export default function Canvas(p: Props) {
         </g>
       </g>
     </svg>
+    <div className="zoombar">
+      <button onClick={() => zoomBy(1 / 1.25)} title={p.labels.zoomOut} aria-label={p.labels.zoomOut}>−</button>
+      <span>{Math.round(view.k * 100)} %</span>
+      <button onClick={() => zoomBy(1.25)} title={p.labels.zoomIn} aria-label={p.labels.zoomIn}>+</button>
+      <button onClick={() => fit()} title={p.labels.fit} aria-label={p.labels.fit}>⤢</button>
+    </div>
+    <div className="coords">{Math.round(mouse.x / 4)} , {Math.round(mouse.y / 4)} mm</div>
+    </>
   )
 }
