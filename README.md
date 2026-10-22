@@ -29,7 +29,8 @@ Le bouton **Simuler** passe en mode simulation (logique de relais) : les sources
 imposent un potentiel, un récepteur s'allume quand ses bornes sont à des potentiels différents, un contact prend l'état de la
 bobine de même repère. Boutons-poussoirs, interrupteurs, arrêts d'urgence et disjoncteurs se manœuvrent à la souris ; les
 courts-circuits sont signalés. Le modèle de chaque symbole est déterminé par `scripts/sim-classify.mjs` (229 symboles).
-Limites : pas de régime transitoire, de courants ni de temporisations ; contacts inverseurs, automates et variateurs non simulés.
+Contacts inverseurs et temporisations (à la montée, à la retombée, les deux) sont simulés avec une horloge réelle.
+Limites : pas de régime transitoire électrique ni de courants ; automates et variateurs non simulés. Tests du moteur : `npm test`.
 
 ## Déploiement
 

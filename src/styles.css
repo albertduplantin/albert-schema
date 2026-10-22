@@ -164,3 +164,5 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 .alert.warn { background: #e67e0020; border-color: #e67e00; font-weight: 400; }
 .simrowitem { font-size: 12px; padding: 2px 0; color: #1f8f3a; }
 .simrowitem.dim { color: var(--ui-muted); }
+
+.alert.info { background: #0b6bcb18; border-color: #0b6bcb; font-weight: 400; }

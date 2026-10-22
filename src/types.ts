@@ -11,10 +11,22 @@ export interface PortDef {
 }
 
 /** Comportement électrique pour la simulation (voir src/sim/engine.ts) */
+/** Temporisation : à la montée (`on`), à la retombée (`off`) ou les deux */
+export type TimerKind = 'on' | 'off' | 'both'
+
 export type SimModel =
   | { k: 'source'; pot: Record<string, string> }
-  | { k: 'switch'; poles: [string, string][]; ctl: 'coil' | 'momentary' | 'toggle' | 'fixed'; nc: boolean }
-  | { k: 'coil'; ports: string[] }
+  | {
+      k: 'switch'
+      poles: [string, string][]
+      /** inverseurs : [commun, repos (NF), travail (NO)] */
+      changeover?: [string, string, string][]
+      ctl: 'coil' | 'momentary' | 'toggle' | 'fixed'
+      nc: boolean
+      /** contact temporisé */
+      delay?: TimerKind
+    }
+  | { k: 'coil'; ports: string[]; timer?: TimerKind }
   | { k: 'load'; ports: string[]; role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater' }
 
 export interface SymbolDef {
@@ -52,6 +64,8 @@ export interface PlacedSymbol {
   rot: 0 | 90 | 180 | 270
   label: string
   desc: string
+  /** temporisation en secondes (bobines et contacts temporisés) */
+  delay?: number
 }
 
 export interface PortRef {

@@ -5,8 +5,8 @@ import { tr, type Key } from './i18n'
 import { uid } from './geometry'
 import Canvas from './Canvas'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
-import { motorStarter, pneumaticCylinder } from './templates'
-import { simulate, type SimInputs } from './sim/engine'
+import { motorStarter, pneumaticCylinder, reversingStarter, timerOnDelay } from './templates'
+import { DEFAULT_DELAY_S, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
 
@@ -139,9 +139,16 @@ function Editor() {
   // ── simulation
   const [simMode, setSimMode] = useState(false)
   const [simIn, setSimIn] = useState<SimInputs>({ pressed: new Set(), toggled: new Set() })
-  const coilMemory = useRef<Record<string, boolean>>({})
-  const sim = useMemo(() => (simMode ? simulate(doc, SYMBOL_MAP, coilMemory.current, simIn) : null), [simMode, doc, simIn])
-  useEffect(() => { if (sim) coilMemory.current = sim.coils }, [sim])
+  const coilMemory = useRef<SimMemory>({})
+  const [simTick, setSimTick] = useState(0) // relance le calcul à l'échéance d'une temporisation
+  const sim = useMemo(() => (simMode ? simulate(doc, SYMBOL_MAP, coilMemory.current, simIn) : null), [simMode, doc, simIn, simTick])
+  useEffect(() => {
+    if (!sim) return
+    coilMemory.current = sim.state
+    if (sim.pendingMs === null) return
+    const id = window.setTimeout(() => setSimTick((n) => n + 1), sim.pendingMs + 15)
+    return () => window.clearTimeout(id)
+  }, [sim])
   const startSim = () => {
     coilMemory.current = {}
     setSimIn({ pressed: new Set(), toggled: new Set() })
@@ -479,6 +486,8 @@ function Editor() {
             <p>{t('emptyText')}</p>
             <div className="tpls">
               <button onClick={() => startTemplate(motorStarter)}>{t('tplMotor')}</button>
+              <button onClick={() => startTemplate(reversingStarter)}>{t('tplReversing')}</button>
+              <button onClick={() => startTemplate(timerOnDelay)}>{t('tplTimer')}</button>
               <button onClick={() => startTemplate(pneumaticCylinder)}>{t('tplPneu')}</button>
             </div>
           </div>
@@ -505,6 +514,7 @@ function Editor() {
               <div className="alert" role="alert">⚠ {t('simShort')} {[...new Set(sim.shorts.flatMap((s) => s.potentials))].join(' / ')}</div>
             )}
             {sim.unstable && <div className="alert warn">{t('simUnstable')}</div>}
+            {sim.pendingMs !== null && <div className="alert info">⏱ {t('simTiming')}</div>}
             <div className="simlist">
               <div className="section">{t('simEnergized')}</div>
               {doc.symbols.filter((s) => sim.energized.has(s.id)).map((s) => (
@@ -531,6 +541,11 @@ function Editor() {
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
             <label>{t('label')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
             <label>{t('description')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
+            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return (m?.k === 'coil' && !!m.timer) || (m?.k === 'switch' && !!m.delay) })() && (
+              <label>{t('delay')}
+                <input type="number" min={0} step={0.5} value={selSym.delay ?? DEFAULT_DELAY_S} onChange={(e) => patchSym({ delay: Math.max(0, Number(e.target.value) || 0) })} />
+              </label>
+            )}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'switch' && m.ctl === 'coil' })() && (
               <label>{t('drivenBy')}
                 <select value={coilLabels.includes(selSym.label) ? selSym.label : ''} onChange={(e) => e.target.value && patchSym({ label: e.target.value })}>

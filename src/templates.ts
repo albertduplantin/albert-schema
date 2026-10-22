@@ -2,20 +2,20 @@ import type { Doc, PlacedSymbol, Wire } from './types'
 import { SYMBOL_MAP } from './symbols'
 import { uid } from './geometry'
 
-type Spec = [key: string, defId: string, x: number, y: number, label?: string]
+type Spec = [key: string, defId: string, x: number, y: number, label?: string, delay?: number]
 type Link = [from: string, fromPort: string, to: string, toPort: string]
 
 function build(base: Doc, specs: Spec[], links: Link[]): Doc {
   const ids: Record<string, string> = {}
   const counters: Record<string, number> = {}
-  const symbols: PlacedSymbol[] = specs.map(([key, defId, x, y, label]) => {
+  const symbols: PlacedSymbol[] = specs.map(([key, defId, x, y, label, delay]) => {
     const prefix = SYMBOL_MAP[defId].prefix
     ids[key] = uid()
     if (label === undefined) {
       counters[prefix] = (counters[prefix] ?? 0) + 1
       label = prefix ? prefix + counters[prefix] : ''
     }
-    return { id: ids[key], defId, x, y, rot: 0, label, desc: '' }
+    return delay === undefined ? { id: ids[key], defId, x, y, rot: 0, label, desc: '' } : { id: ids[key], defId, x, y, rot: 0, label, desc: '', delay }
   })
   const wires: Wire[] = links.map(([a, ap, b, bp]) => ({
     id: uid(), from: { symId: ids[a], portId: ap }, to: { symId: ids[b], portId: bp }, label: '', color: '#000000', section: '',
@@ -66,4 +66,61 @@ export const pneumaticCylinder = (base: Doc): Doc =>
     ],
     [
       ['a', 't0', 'v', 't0'], ['a', 't1', 'v', 't3'], ['s', 't0', 'v', 't1'], ['e', 't0', 'v', 't2'],
+    ])
+
+const L = (p: string) => Q('380_signaling_operating/' + p)
+const R = (p: string) => Q('310_relays_contactors_contacts/' + p)
+
+/** Temporisation à la montée : l'interrupteur S1 alimente le relais KT (5 s) ; son contact allume H1 après le délai. */
+export const timerOnDelay = (base: Doc): Doc =>
+  build(base,
+    [
+      ['l', 'sim-l', 400, 30],
+      ['s1', L('21_selector_switches/010_switch_1pos'), 400, 100, 'S1'],
+      ['kt', R('01_coils/bobine_tempo_travail'), 390, 200, 'KT', 5],
+      ['n1', 'sim-n', 400, 300],
+      ['l2', 'sim-l', 520, 30],
+      ['kc', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple'), 520, 100, 'KT'],
+      ['h', L('11_optical_signaling/lampe2'), 520, 200, 'H1'],
+      ['n2', 'sim-n', 520, 300],
+    ],
+    [
+      ['l', 'a', 's1', 't1'], ['s1', 't0', 'kt', 't0'], ['kt', 't1', 'n1', 'a'],
+      ['l2', 'a', 'kc', 't0'], ['kc', 't1', 'h', 't0'], ['h', 't1', 'n2', 'a'],
+    ])
+
+/**
+ * Inverseur de sens de marche : KM1 (avant) et KM2 (arrière, deux phases croisées), verrouillés l'un par l'autre
+ * (contact NF de l'autre contacteur en série avec chaque bobine).
+ */
+export const reversingStarter = (base: Doc): Doc =>
+  build(base,
+    [
+      ['l1', 'sim-l1', 120, 30], ['l2', 'sim-l2', 140, 30], ['l3', 'sim-l3', 160, 30],
+      ['q', Q('200_fuses_protective_gears/12_magneto_thermal_circuit_breakers/fa4202_disjoncteur_moteur_3p'), 100, 100, 'Q1'],
+      ['k1', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 120, 220, 'KM1'],
+      ['k2', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 240, 220, 'KM2'],
+      ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 120, 330, 'M1'],
+      ['lc', 'sim-l', 400, 30],
+      ['s1', L('20_push_buttons/poussoir_nf'), 400, 100, 'S1'],
+      ['s2', L('20_push_buttons/poussoir'), 400, 200, 'S2'],
+      ['a1', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple'), 470, 190, 'KM1'],
+      ['i2', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple_nf'), 410, 280, 'KM2'],
+      ['c1', R('01_coils/bobine3'), 390, 350, 'KM1'],
+      ['n1', 'sim-n', 400, 440],
+      ['s3', L('20_push_buttons/poussoir'), 560, 200, 'S3'],
+      ['a2', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple'), 630, 190, 'KM2'],
+      ['i1', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple_nf'), 570, 280, 'KM1'],
+      ['c2', R('01_coils/bobine3'), 550, 350, 'KM2'],
+      ['n2', 'sim-n', 560, 440],
+    ],
+    [
+      ['l1', 'a', 'q', 't0'], ['l2', 'a', 'q', 't1'], ['l3', 'a', 'q', 't2'],
+      ['q', 't5', 'k1', 't0'], ['q', 't4', 'k1', 't2'], ['q', 't3', 'k1', 't4'],
+      ['q', 't5', 'k2', 't0'], ['q', 't4', 'k2', 't2'], ['q', 't3', 'k2', 't4'],
+      ['k1', 't1', 'm', 't0'], ['k1', 't3', 'm', 't2'], ['k1', 't5', 'm', 't1'],
+      ['k2', 't1', 'm', 't0'], ['k2', 't3', 'm', 't1'], ['k2', 't5', 'm', 't2'],
+      ['lc', 'a', 's1', 't0'],
+      ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'], ['s2', 't1', 'i2', 't0'], ['a1', 't1', 'i2', 't0'], ['i2', 't1', 'c1', 't0'], ['c1', 't1', 'n1', 'a'],
+      ['s1', 't1', 's3', 't0'], ['s1', 't1', 'a2', 't0'], ['s3', 't1', 'i1', 't0'], ['a2', 't1', 'i1', 't0'], ['i1', 't1', 'c2', 't0'], ['c2', 't1', 'n2', 'a'],
     ])

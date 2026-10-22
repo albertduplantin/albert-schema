@@ -35,6 +35,30 @@ export function pairPoles(ports) {
   return poles
 }
 
+/** Type de temporisation d'après le nom : 'on' (à la montée), 'off' (à la retombée), 'both' (les deux). */
+export function timerKind(text) {
+  const t = text.toLowerCase()
+  if (/travail et (mise au )?repos|repos[- ]travail|repos et travail|travail_repos|repos_travail|tmp_t_r/.test(t)) return 'both'
+  if (/mise au travail et|travail et mise/.test(t)) return 'both'
+  if (/repos retard|mise au repos|tempo repos|tmp_r|_repos/.test(t)) return 'off'
+  if (/travail retard|mise au travail|tempo travail|tmp_t|_travail|tempo_t/.test(t)) return 'on'
+  return null
+}
+
+/** Inverseur à 3 bornes : commun = borne seule d'un côté ; contact repos (NF) à gauche/haut, contact travail (NO) à droite/bas. */
+export function changeoverPorts(ports) {
+  const by = {}
+  for (const p of ports) (by[p.dir] ||= []).push(p)
+  const dirs = Object.keys(by)
+  if (dirs.length !== 2) return null
+  const lone = dirs.find((d) => by[d].length === 1)
+  const pair = dirs.find((d) => by[d].length === 2)
+  if (!lone || !pair) return null
+  const vertical = lone === 'up' || lone === 'down'
+  const [nc, no] = [...by[pair]].sort((a, b) => (vertical ? a.x - b.x : a.y - b.y))
+  return [by[lone][0].id, nc.id, no.id]
+}
+
 const labelPot = (l) => {
   const v = (l || '').toUpperCase()
   if (['L', 'L1', 'L2', 'L3', 'N'].includes(v)) return v
@@ -70,7 +94,8 @@ export function classify({ id, nameFr, nameEn, ports }) {
   // ── bobines
   if (has(/01_coils/)) {
     if (ports.length !== 2 || /thermique|statique|polaris/.test(name)) return null
-    return { k: 'coil', ports: portIds }
+    const timer = timerKind(name + ' ' + file)
+    return timer ? { k: 'coil', ports: portIds, timer } : { k: 'coil', ports: portIds }
   }
 
   // ── contacts : inverseurs et combinés NO/NF ignorés
@@ -78,13 +103,17 @@ export function classify({ id, nameFr, nameEn, ports }) {
   const nc =
     /(^|[^a-z])(nf|nc)([^a-z]|$)/.test(name) || /_nf|_nc|nf_|nc_/.test(file) || /ouverture|normally closed/.test(name)
 
+  const delayed = has(/11_delayed_contacts/) ? timerKind(name + ' ' + file) : null
   const contact = (ctl) => {
-    if (changeover) return null
-    const poles = pairPoles(ports)
-    if (!poles.length || poles.length * 2 < ports.length - 0) {
-      if (!poles.length) return null
+    if (/position/.test(name)) return null // sélecteurs rotatifs : non modélisés
+    if (changeover) {
+      const co = ports.length === 3 ? changeoverPorts(ports) : null
+      if (!co) return null
+      return delayed ? { k: 'switch', poles: [], changeover: [co], ctl, nc: false, delay: delayed } : { k: 'switch', poles: [], changeover: [co], ctl, nc: false }
     }
-    return { k: 'switch', poles, ctl, nc }
+    const poles = pairPoles(ports)
+    if (!poles.length) return null
+    return delayed ? { k: 'switch', poles, ctl, nc, delay: delayed } : { k: 'switch', poles, ctl, nc }
   }
 
   if (has(/01_auxiliary_contacts|02_power_contacts|11_delayed_contacts/)) return contact('coil')
