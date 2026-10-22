@@ -111,5 +111,27 @@ const shown = (s: any, eff: Record<string, Record<string, string>>) => termGroup
   check('doublons saisis à la main : détectés', duplicateTerms([a1, a2], eff).size, 4)
 }
 
+// ── lampes : X1 / X2 (et non A1 / A2, réservés aux bobines)
+{
+  const lamp = sym(id('11_optical_signaling/lampe2'), 'H1')
+  const buz = sym(id('12_acoustic_signaling/' + lib.symbols.find((s: any) => /12_acoustic_signaling/.test(s.id) && s.sim?.k === 'load').id.split('/').pop()), 'H2')
+  const eff = effectiveTerms([lamp, buz], defs)
+  check('lampe : X1 en haut, X2 en bas (pas A1/A2)', shown(lamp, eff), ['X1', 'X2'])
+  check('avertisseur sonore : X1 / X2', Object.values(eff[buz.id]).sort(), ['X1', 'X2'])
+  const coil = sym(COIL, 'KM1')
+  check('bobine : toujours A1 / A2', Object.values(effectiveTerms([coil], defs)[coil.id]).sort(), ['A1', 'A2'])
+  // une lampe saisie à la main garde ses numéros
+  const custom = sym(id('11_optical_signaling/lampe2'), 'H3', { t0: 'X3', t1: 'X4' })
+  check('lampe avec bornes saisies : saisie prioritaire', Object.values(effectiveTerms([custom], defs)[custom.id]).sort(), ['X3', 'X4'])
+}
+
+// ── relais thermique : 95-96 (NF) et 97-98 (NO)
+{
+  const nf = sym(id('15_protection_contacts/contact_relais_nf_esclave'), 'F1')
+  const no = sym(id('15_protection_contacts/act_termique_no_esclave'), 'F1')
+  const eff = effectiveTerms([nf, no], defs)
+  check('relais thermique : NF 95/96, NO 97/98', [Object.values(eff[nf.id]).sort().join('/'), Object.values(eff[no.id]).sort().join('/')], ['95/96', '97/98'])
+}
+
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests de numérotation passent')
 process.exit(fails ? 1 : 0)

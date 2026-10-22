@@ -21,6 +21,26 @@ export interface TermGroup {
 }
 
 const POWER = /(02_power_contacts|11_circuit_breakers|12_magneto|20_disconnecting)/
+/** Contacts de relais thermique (nom du fichier d'origine) */
+const THERMAL = /(contact_relais|termique|thermique)/
+
+/**
+ * Repères normalisés imposés à certains symboles (ils remplacent ceux du dessin d'origine) :
+ *  - lampes et avertisseurs : X1 / X2 (A1 / A2 est réservé aux bobines) ;
+ *  - contacts de relais thermique : 95-96 (NF) et 97-98 (NO).
+ */
+function standardLabels(def: SymbolDef): Record<string, string> {
+  const m = def.sim
+  if (m?.k === 'load' && (m.role === 'lamp' || m.role === 'buzzer') && m.ports.length === 2) {
+    const [a, b] = ordered(def, m.ports)
+    return { [a]: 'X1', [b]: 'X2' }
+  }
+  if (m?.k === 'switch' && m.poles.length === 1 && !m.changeover?.length && THERMAL.test(def.id.split('/').pop() ?? '')) {
+    const [a, b] = ordered(def, m.poles[0])
+    return m.nc ? { [a]: '95', [b]: '96' } : { [a]: '97', [b]: '98' }
+  }
+  return {}
+}
 
 /** Ordre de lecture d'un jeu de bornes : de haut en bas, puis de gauche à droite (dessin d'origine). */
 function ordered(def: SymbolDef, ids: string[]): string[] {
@@ -75,8 +95,9 @@ export function effectiveTerms(symbols: PlacedSymbol[], defs: Record<string, Sym
       const def = defs[s.defId]
       if (!def) continue
       const own: Record<string, string> = {}
+      const fixed = standardLabels(def)
       for (const p of def.ports) {
-        const v = (s.id === ignoreTerms ? undefined : s.terms?.[p.id]) ?? p.label
+        const v = (s.id === ignoreTerms ? undefined : s.terms?.[p.id]) ?? fixed[p.id] ?? p.label
         if (v) {
           own[p.id] = v
           used.add(v)

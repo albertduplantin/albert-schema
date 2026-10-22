@@ -57,7 +57,7 @@ const PREFIX = [
   [/10_fuses/, 'F'], [/11_circuit_breakers/, 'Q'], [/12_magneto/, 'Q'], [/20_disconnecting/, 'Q'],
   [/30_thermal_relays/, 'F'], [/50_residual/, 'Q'], [/90_overvoltage/, 'F'],
   [/310_relays_contactors/, 'K'], [/330_transformers/, 'T'], [/340_converters/, 'U'],
-  [/380_signaling/, 'S'], [/390_sensors/, 'B'], [/391_consumers/, 'M'], [/392_generators/, 'G'],
+  [/11_optical_signaling|12_acoustic_signaling/, 'H'], [/01_human_machine_interface/, 'A'], [/380_signaling/, 'S'], [/390_sensors/, 'B'], [/391_consumers/, 'M'], [/392_generators/, 'G'],
   [/395_electronics/, 'V'], [/130_terminals/, 'X'], [/140_connectors/, 'X'], [/120_cables/, 'W'],
   [/110_network/, 'G'], [/450_high_voltage/, 'Q'], [/500_home/, 'Q'], [/114_connections/, 'X'],
   [/21_tanks/, 'T'], [/31_control_valves/, 'V'], [/45_valves/, 'V'], [/51_cylinders/, 'A'], [/61_pumps/, 'P'],
