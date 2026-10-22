@@ -1,4 +1,5 @@
 import type { SymbolDef } from './types'
+import { blendGlobal } from './globalUsage'
 
 /**
  * Apprentissage de l'usage : chaque symbole posé renforce son rang dans la palette.
@@ -8,7 +9,8 @@ import type { SymbolDef } from './types'
  * - Le classement final = score a priori de la bibliothèque (usage typique sur les machines
  *   actuelles) + bonus d'usage, plafonné à +100 : un symbole rare devient « courant » pour
  *   l’utilisateur qui s’en sert régulièrement (3 poses ≈ +63 %, 8 poses ≈ +93 %).
- * - Tout reste dans le navigateur (localStorage) ; rien n'est envoyé.
+ * - L'historique personnel reste dans le navigateur (localStorage). Un classement commun anonyme
+ *   (globalUsage.ts) s'y ajoute, et n'est alimenté que si l'utilisateur a donné son accord.
  */
 
 const KEY = 'albertschema.usage'
@@ -58,10 +60,10 @@ export function recordUse(id: string, now = Date.now()) {
   save()
 }
 
-/** Score adaptatif : a priori + bonus d'usage. */
+/** Score adaptatif : a priori + classement commun (anonyme, pondéré par la confiance) + bonus d'usage personnel (0 à 100). */
 export function adaptiveScore(def: SymbolDef, now = Date.now()): number {
   const n = usageCount(def.id, now)
-  return (def.score ?? 40) + MAX_BOOST * (1 - Math.exp(-n / SATURATION))
+  return blendGlobal(def.id, def.score ?? 40) + MAX_BOOST * (1 - Math.exp(-n / SATURATION))
 }
 
 export function hasUsage(): boolean {

@@ -1,14 +1,15 @@
 // Convertit une sélection de la collection QElectroTech (fichiers .elmt, CC-BY 3.0)
 // en bibliothèque JSON pour AlbertSchema.
 //
-// Usage : node scripts/import-qet.mjs <dossier qelectrotech-elements> <fichier de sortie.json>
+// Usage : node scripts/import-qet.mjs <dossier qelectrotech-elements> <fichier de sortie.json> [api/_ids.json]
+// Le 3e argument (facultatif) écrit la liste des identifiants valides, utilisée par /api/usage.
 //
 // Les fichiers .elmt lus sont traités comme des DONNÉES (lecture + regex), jamais exécutés.
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { popularity } from './popularity.mjs'
 
-const [, , root, out] = process.argv
+const [, , root, out, idsOut] = process.argv
 if (!root || !out) {
   console.error('usage: node scripts/import-qet.mjs <qelectrotech-elements> <out.json>')
   process.exit(1)
@@ -273,5 +274,6 @@ for (const d of Object.keys(categories)) {
   }
 }
 writeFileSync(out, JSON.stringify({ source: 'QElectroTech elements collection, CC-BY 3.0', categories, symbols }))
+if (idsOut) writeFileSync(idsOut, JSON.stringify(symbols.map((s) => s.id)))
 console.log(`${symbols.length} symboles importés, ${skipped} ignorés`)
 for (const d of Object.keys(categories)) console.log(d, symbols.filter((s) => s.domain === d).length)

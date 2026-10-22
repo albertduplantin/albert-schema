@@ -143,3 +143,9 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 
 .symbtn { position: relative; }
 .symbtn.used::after { content: ''; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+.share { display: flex; gap: 6px; align-items: flex-start; font-size: 11px; color: var(--ui-muted); cursor: pointer; }
+.share input { width: auto; margin-top: 2px; }
+.ask { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); width: min(380px, 90%); background: var(--ui-panel); border: 1px solid var(--ui-line); border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 28px #0003; font-size: 12px; z-index: 5; }
+.ask p { margin: 6px 0 8px; color: var(--ui-muted); line-height: 1.4; }
+.ask .actions { margin-top: 4px; }

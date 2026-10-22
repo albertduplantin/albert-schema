@@ -7,6 +7,7 @@ import Canvas from './Canvas'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
 import { motorStarter, pneumaticCylinder } from './templates'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
+import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
 
 const STORE = 'albertschema.doc'
 const emptyDoc = (): Doc => ({
@@ -104,6 +105,14 @@ function Editor() {
   const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
   const [showCredits, setShowCredits] = useState(false)
   const [usageTick, setUsageTick] = useState(0) // relance le classement après chaque pose
+  const [share, setShareState] = useState<ShareChoice>(getShare)
+  const [askShare, setAskShare] = useState(false)
+  const chooseShare = (v: 'yes' | 'no') => { setShare(v); setShareState(v); setAskShare(false) }
+
+  useEffect(() => {
+    // classement commun : chargé en arrière-plan, puis le classement est recalculé
+    loadGlobalUsage().then(() => setUsageTick((n) => n + 1))
+  }, [])
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
@@ -142,6 +151,8 @@ function Editor() {
 
   const onPlaced = useCallback((defId: string) => {
     recordUse(defId)
+    shareUse(defId)
+    if (getShare() === null) setAskShare(true)
     setUsageTick((n) => n + 1)
     setRecent((r) => {
       const next = [defId, ...r.filter((x) => x !== defId)].slice(0, 6)
@@ -285,7 +296,7 @@ function Editor() {
         !s.legacy && s.domain === domain &&
         (q
           ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q
-          : cat === TOP ? s.top || usageCount(s.id, now) >= 1 : s.cat === cat),
+          : cat === TOP ? s.top || usageCount(s.id, now) >= 1 || globalShare(s.id) >= 30 : s.cat === cat),
     )
     if (q || cat === TOP) {
       // recherche et « les plus utilisés » : par score adaptatif (a priori + usage de l'utilisateur)
@@ -401,6 +412,10 @@ function Editor() {
           })}
         </div>
         <p className="note">{t('adaptive')} {hasUsage() && <button className="link" onClick={() => { if (confirm(t('resetConfirm'))) { resetUsage(); setUsageTick((n) => n + 1) } }}>{t('resetUsage')}</button>}</p>
+        <label className="share" title={t('shareText')}>
+          <input type="checkbox" checked={share === 'yes'} onChange={(e) => chooseShare(e.target.checked ? 'yes' : 'no')} />
+          <span>{t('shareLabel')}</span>
+        </label>
         <p className="note">{t('warn')} <button className="link" onClick={() => setShowCredits(true)}>{t('credits')}</button></p>
       </aside>
 
@@ -415,6 +430,16 @@ function Editor() {
             <div className="tpls">
               <button onClick={() => startTemplate(motorStarter)}>{t('tplMotor')}</button>
               <button onClick={() => startTemplate(pneumaticCylinder)}>{t('tplPneu')}</button>
+            </div>
+          </div>
+        )}
+        {askShare && share === null && (
+          <div className="ask" role="dialog" aria-label={t('shareTitle')}>
+            <strong>{t('shareTitle')}</strong>
+            <p>{t('shareText')}</p>
+            <div className="actions">
+              <button onClick={() => chooseShare('no')}>{t('shareNo')}</button>
+              <button className="on" onClick={() => chooseShare('yes')}>{t('shareYes')}</button>
             </div>
           </div>
         )}
@@ -490,6 +515,8 @@ function Editor() {
           <div className="dialog" role="dialog" aria-label={t('creditsTitle')} onClick={(e) => e.stopPropagation()}>
             <h3>{t('creditsTitle')}</h3>
             <p>{t('creditsText')}</p>
+            <h3>{t('privacyTitle')}</h3>
+            <p>{t('privacyText')}</p>
             <p><a href="https://qelectrotech.org" target="_blank" rel="noreferrer">qelectrotech.org</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a> · <a href="https://github.com/qelectrotech/qelectrotech-elements" target="_blank" rel="noreferrer">qelectrotech-elements</a></p>
             <div className="actions"><button onClick={() => setShowCredits(false)}>{t('close')}</button></div>
           </div>
