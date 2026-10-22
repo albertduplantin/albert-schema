@@ -1,11 +1,12 @@
 import { electrical } from './electrical'
 import { pneumatic, hydraulic } from './fluid'
+import { simSources } from './simulation'
 import type { Domain, SymbolDef } from '../types'
 
 /** Symboles dessinés à la main : conservés pour les anciens fichiers, masqués de la palette. */
 const legacy: SymbolDef[] = [...electrical, ...pneumatic, ...hydraulic].map((s) => ({ ...s, legacy: true }))
 
-export const SYMBOLS: SymbolDef[] = [...legacy]
+export const SYMBOLS: SymbolDef[] = [...legacy, ...simSources]
 export const SYMBOL_MAP: Record<string, SymbolDef> = Object.fromEntries(SYMBOLS.map((s) => [s.id, s]))
 export const CATEGORIES: Record<Domain, { id: string; name: { fr: string; en: string } }[]> = {
   electrical: [],
@@ -29,6 +30,7 @@ export function loadLibrary(): Promise<void> {
     })
     .then((lib) => {
       for (const d of Object.keys(lib.categories) as Domain[]) CATEGORIES[d] = lib.categories[d]
+      CATEGORIES.electrical.unshift({ id: 'sim', name: { fr: 'Sources de simulation', en: 'Simulation sources' } })
       for (const s of lib.symbols) {
         s.std = 'QElectroTech'
         SYMBOLS.push(s)

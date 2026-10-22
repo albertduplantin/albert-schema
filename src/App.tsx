@@ -6,6 +6,7 @@ import { uid } from './geometry'
 import Canvas from './Canvas'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
 import { motorStarter, pneumaticCylinder } from './templates'
+import { simulate, type SimInputs } from './sim/engine'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
 
@@ -42,7 +43,16 @@ function loadRecent(): string[] {
 }
 
 const nextLabel = (doc: Doc, defId: string) => {
-  const prefix = SYMBOL_MAP[defId].prefix
+  const def = SYMBOL_MAP[defId]
+  const prefix = def.prefix
+  if (!prefix) return ''
+  // un contact commandé par bobine reprend le repère de la dernière bobine posée (même relais)
+  if (def.sim?.k === 'switch' && def.sim.ctl === 'coil') {
+    for (let i = doc.symbols.length - 1; i >= 0; i--) {
+      const s = doc.symbols[i]
+      if (SYMBOL_MAP[s.defId]?.sim?.k === 'coil' && s.label) return s.label
+    }
+  }
   const re = new RegExp('^' + prefix + '(\\d+)$')
   let max = 0
   for (const s of doc.symbols) {
@@ -125,6 +135,40 @@ function Editor() {
   const toastTimer = useRef<number>()
   const doc = h.doc
   const t = (k: Key) => tr(lang, k)
+
+  // ── simulation
+  const [simMode, setSimMode] = useState(false)
+  const [simIn, setSimIn] = useState<SimInputs>({ pressed: new Set(), toggled: new Set() })
+  const coilMemory = useRef<Record<string, boolean>>({})
+  const sim = useMemo(() => (simMode ? simulate(doc, SYMBOL_MAP, coilMemory.current, simIn) : null), [simMode, doc, simIn])
+  useEffect(() => { if (sim) coilMemory.current = sim.coils }, [sim])
+  const startSim = () => {
+    coilMemory.current = {}
+    setSimIn({ pressed: new Set(), toggled: new Set() })
+    setPlacing(null)
+    setSel([])
+    setSimMode(true)
+  }
+  const onSimPress = useCallback((id: string, down: boolean) => {
+    setSimIn((s) => {
+      const pressed = new Set(s.pressed)
+      if (down) pressed.add(id)
+      else pressed.delete(id)
+      return { ...s, pressed }
+    })
+  }, [])
+  const onSimToggle = useCallback((id: string) => {
+    setSimIn((s) => {
+      const toggled = new Set(s.toggled)
+      if (toggled.has(id)) toggled.delete(id)
+      else toggled.add(id)
+      return { ...s, toggled }
+    })
+  }, [])
+  const coilLabels = useMemo(
+    () => [...new Set(doc.symbols.filter((s) => SYMBOL_MAP[s.defId]?.sim?.k === 'coil' && s.label).map((s) => s.label))],
+    [doc.symbols],
+  )
 
   const say = useCallback((msg: string) => {
     setToast(msg)
@@ -220,6 +264,7 @@ function Editor() {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (simMode) { if (e.key === 'Escape') setSimMode(false); return }
       const ctrl = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       const step = e.shiftKey ? 50 : 10
@@ -241,7 +286,7 @@ function Editor() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deleteSel, rotateSel, undo, redo, copySel, paste, duplicate, nudge, doc, placing, say, lang])
+  }, [deleteSel, rotateSel, undo, redo, copySel, paste, duplicate, nudge, doc, placing, say, lang, simMode])
 
   const autoLabel = () => {
     commit((d) => {
@@ -324,7 +369,7 @@ function Editor() {
     if (contentRef.current) fn(contentRef.current)
   }
 
-  const hint = placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
+  const hint = simMode ? t('simHint') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
   const symButton = (s: (typeof SYMBOLS)[number]) => (
     <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '')} title={`${s.name[lang]} — ${s.std}`}
@@ -338,7 +383,7 @@ function Editor() {
   )
 
   return (
-    <div className="app">
+    <div className={'app' + (simMode ? ' simmode' : '')}>
       <header className="toolbar" role="toolbar">
         <strong className="brand">AlbertSchema</strong>
         <div className="group">
@@ -347,19 +392,24 @@ function Editor() {
           <button onClick={() => { saveJson(doc); say(t('toastSaved')) }} title="Ctrl+S">{t('save')}</button>
         </div>
         <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) openFile(f); e.target.value = '' }} />
-        <div className="group">
+        <div className="group editonly">
           <button className="icon" onClick={undo} disabled={!h.past.length} title={`${t('undo')} (Ctrl+Z)`} aria-label={t('undo')}>↶</button>
           <button className="icon" onClick={redo} disabled={!h.future.length} title={`${t('redo')} (Ctrl+Y)`} aria-label={t('redo')}>↷</button>
         </div>
-        <div className="group">
+        <div className="group editonly">
           <button className="icon" onClick={rotateSel} disabled={!sel.length} title={`${t('rotate')} (R)`} aria-label={t('rotate')}>⟳</button>
           <button className="icon" onClick={duplicate} disabled={!sel.length} title={`${t('duplicate')} (Ctrl+D)`} aria-label={t('duplicate')}>⧉</button>
           <button className="icon danger" onClick={deleteSel} disabled={!sel.length} title={`${t('delete')} (Suppr)`} aria-label={t('delete')}>🗑</button>
         </div>
-        <div className="group">
+        <div className="group editonly">
           <button onClick={autoLabel}>{t('autoLabel')}</button>
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
+        </div>
+        <div className="group editonly">
+          <button className={'simbtn' + (simMode ? ' on' : '')} onClick={() => (simMode ? setSimMode(false) : startSim())} title={t('simTitle')}>
+            {simMode ? '■ ' + t('simStop') : '▶ ' + t('simStart')}
+          </button>
         </div>
         <details className="menu" ref={exportRef}>
           <summary>{t('export')} ▾</summary>
@@ -422,7 +472,7 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
         {!doc.symbols.length && !placing && (
           <div className="empty">
             <h2>{t('emptyTitle')}</h2>
@@ -448,12 +498,47 @@ function Editor() {
       </main>
 
       <aside className="props">
+        {sim ? (
+          <>
+            <h3>{t('simTitle')}</h3>
+            {sim.shorts.length > 0 && (
+              <div className="alert" role="alert">⚠ {t('simShort')} {[...new Set(sim.shorts.flatMap((s) => s.potentials))].join(' / ')}</div>
+            )}
+            {sim.unstable && <div className="alert warn">{t('simUnstable')}</div>}
+            <div className="simlist">
+              <div className="section">{t('simEnergized')}</div>
+              {doc.symbols.filter((s) => sim.energized.has(s.id)).map((s) => (
+                <div key={s.id} className="simrowitem">● <strong>{s.label || '·'}</strong> {SYMBOL_MAP[s.defId].name[lang]}</div>
+              ))}
+              {!sim.energized.size && <p className="muted">{t('simNone')}</p>}
+              {sim.unsupported.length > 0 && (
+                <>
+                  <div className="section">{t('simUnsupported')} ({sim.unsupported.length})</div>
+                  <p className="muted">{t('simUnsupportedHelp')}</p>
+                  {doc.symbols.filter((s) => sim.unsupported.includes(s.id)).slice(0, 8).map((s) => (
+                    <div key={s.id} className="simrowitem dim">○ <strong>{s.label || '·'}</strong> {SYMBOL_MAP[s.defId].name[lang]}</div>
+                  ))}
+                </>
+              )}
+              <div className="section">{t('simLegendTitle')}</div>
+              <p className="muted">{t('simLegend')}</p>
+            </div>
+          </>
+        ) : (<>
         <h3>{t('properties')}</h3>
         {selSym ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
             <label>{t('label')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
             <label>{t('description')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
+            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'switch' && m.ctl === 'coil' })() && (
+              <label>{t('drivenBy')}
+                <select value={coilLabels.includes(selSym.label) ? selSym.label : ''} onChange={(e) => e.target.value && patchSym({ label: e.target.value })}>
+                  <option value="">—</option>
+                  {coilLabels.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </label>
+            )}
           </div>
         ) : selWire ? (
           <div className="form" onFocus={checkpoint}>
@@ -482,6 +567,7 @@ function Editor() {
             <label key={k}>{t(k === 'sheet' ? 'sheetNo' : k)}<input value={doc.title[k]} onChange={(e) => patchTitle(k, e.target.value)} /></label>
           ))}
         </div>
+        </>)}
       </aside>
 
       {menu && (

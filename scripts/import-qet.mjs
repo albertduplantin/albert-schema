@@ -8,6 +8,7 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { popularity } from './popularity.mjs'
+import { classify } from './sim-classify.mjs'
 
 const [, , root, out, idsOut] = process.argv
 if (!root || !out) {
@@ -213,6 +214,7 @@ for (const r of roots) {
       domain: r.domain, cat: catId,
       group: grp && (grp.fr || grp.en) ? grp : null,
       score: popularity({ rel: relFromRoot, nameFr: el.fr, nameEn: el.en }),
+      sim: r.domain === 'electrical' ? classify({ id: relFromRoot, nameFr: el.fr, nameEn: el.en, ports }) : null,
       prefix: prefixFor(r.dir + '/' + rel.join('/')),
       name: el, w, h,
       svg: shapes.map((s) => s).join('').replace(/(-?\d+(?:\.\d+)?)/g, (m) => m), // inchangé, translation ci-dessous
@@ -273,7 +275,9 @@ for (const d of Object.keys(categories)) {
     }
   }
 }
+for (const s of symbols) if (!s.sim) delete s.sim
+const simCount = symbols.filter((s) => s.sim).length
 writeFileSync(out, JSON.stringify({ source: 'QElectroTech elements collection, CC-BY 3.0', categories, symbols }))
 if (idsOut) writeFileSync(idsOut, JSON.stringify(symbols.map((s) => s.id)))
-console.log(`${symbols.length} symboles importés, ${skipped} ignorés`)
+console.log(`${symbols.length} symboles importés, ${skipped} ignorés, ${simCount} simulables`)
 for (const d of Object.keys(categories)) console.log(d, symbols.filter((s) => s.domain === d).length)

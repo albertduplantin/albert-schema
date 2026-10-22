@@ -5,6 +5,12 @@ import {
   GRID, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, rotCenter, snap, symBBox, uid,
 } from './geometry'
 import Sheet from './Sheet'
+import { isOperable, type SimResult } from './sim/engine'
+
+const POT_COLOR: Record<string, string> = {
+  L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
+}
+const GLOW: Record<string, string> = { lamp: '#ffd400', motor: '#35c759', valve: '#35c759', buzzer: '#ff9f0a', heater: '#ff6b35', coil: '#35c759' }
 
 interface Props {
   doc: Doc
@@ -20,6 +26,10 @@ interface Props {
   nextLabel: (doc: Doc, defId: string) => string
   onPlaced: (defId: string) => void
   onContext: (x: number, y: number, target: string | null) => void
+  /** simulation en cours (null : mode édition) */
+  sim: SimResult | null
+  onSimPress: (id: string, down: boolean) => void
+  onSimToggle: (id: string) => void
   labels: { zoomIn: string; zoomOut: string; fit: string }
 }
 
@@ -66,6 +76,7 @@ export default function Canvas(p: Props) {
   const inter = useRef<Interaction>({ kind: 'none' })
   const [wiring, setWiring] = useState<PortRef | null>(null)
   const space = useRef(false)
+  const held = useRef<string | null>(null) // bouton-poussoir maintenu appuyé en simulation
   const [rot, setRot] = useState<0 | 90 | 180 | 270>(0)
   const fitRef = useRef<() => void>(() => {})
   const placingRef = useRef<string | null>(null)
@@ -134,6 +145,15 @@ export default function Canvas(p: Props) {
       return
     }
     if (e.button !== 0) return
+    if (p.sim) {
+      // simulation : on manœuvre les organes de commande, on ne modifie pas le schéma
+      const el = (e.target as Element).closest('[data-sym]')
+      const s = el ? doc.symbols.find((x) => x.id === el.getAttribute('data-sym')) : undefined
+      const kind = s ? isOperable(SYMBOL_MAP[s.defId].sim) : null
+      if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
+      else if (s && kind === 'toggle') p.onSimToggle(s.id)
+      return
+    }
     if (p.placing) {
       const def = SYMBOL_MAP[p.placing]
       const sym: PlacedSymbol = {
@@ -202,6 +222,7 @@ export default function Canvas(p: Props) {
 
   const onMouseUp = (e: React.MouseEvent) => {
     const it = inter.current
+    if (held.current) { p.onSimPress(held.current, false); held.current = null }
     setGuides((g) => (g.v.length || g.h.length ? { v: [], h: [] } : g))
     if (it.kind === 'pan' && it.btn === 2 && Math.hypot(e.clientX - it.sx, e.clientY - it.sy) < 4) {
       if (it.target && !sel.includes(it.target)) p.setSel([it.target])
@@ -270,11 +291,11 @@ export default function Canvas(p: Props) {
       ref={svgRef}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('text/x-albert-symbol')) e.preventDefault() }}
       onDrop={onDrop}
-      className={'canvas' + (p.placing ? ' placing' : '') + (wiring ? ' wiring' : '')}
+      className={'canvas' + (p.placing ? ' placing' : '') + (wiring ? ' wiring' : '') + (p.sim ? ' simulating' : '')}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
-      onMouseLeave={() => { inter.current = { kind: 'none' }; setWiring(null); setBand(null) }}
+      onMouseLeave={() => { inter.current = { kind: 'none' }; setWiring(null); setBand(null); if (held.current) { p.onSimPress(held.current, false); held.current = null } }}
       onContextMenu={(e) => e.preventDefault()}
     >
       <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
@@ -291,9 +312,11 @@ export default function Canvas(p: Props) {
             const n = pts[Math.floor(pts.length / 2) - 1] ?? m
             const mx = (m.x + n.x) / 2, my = (m.y + n.y) / 2
             const txt = [wr.label, wr.section && wr.section + ' mm²'].filter(Boolean).join(' ')
+            const pot = p.sim ? p.sim.potentialOf[`${wr.from.symId}:${wr.from.portId}`] : null
+            const stroke = p.sim ? (pot ? POT_COLOR[pot] ?? '#d62728' : '#9aa0a8') : wr.color
             return (
               <g key={wr.id}>
-                <polyline points={pointsAttr(pts)} stroke={wr.color} strokeWidth={1.6} />
+                <polyline points={pointsAttr(pts)} stroke={stroke} strokeWidth={p.sim && pot ? 2.2 : 1.6} />
                 {txt && <text x={mx + 4} y={my - 4} fontSize={7} fill={wr.color} stroke="none">{txt}</text>}
               </g>
             )
@@ -302,8 +325,18 @@ export default function Canvas(p: Props) {
             const def = SYMBOL_MAP[s.defId]
             const { cx, cy } = rotCenter(def)
             const b = symBBox(s)
+            const model = def.sim
+            const lit = p.sim?.energized.has(s.id)
+            const closedState = p.sim && model?.k === 'switch' && model.ctl !== 'fixed' ? p.sim.closed[s.id] : undefined
             return (
               <g key={s.id}>
+                {lit && model && (model.k === 'coil' || model.k === 'load') && (
+                  <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6}
+                    fill={GLOW[model.k === 'coil' ? 'coil' : model.role]} fillOpacity={0.4} stroke={GLOW[model.k === 'coil' ? 'coil' : model.role]} strokeWidth={1.2} />
+                )}
+                {closedState !== undefined && (
+                  <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
+                )}
                 <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />
                 {def.ports.map((pt) => {
                   if (!pt.label) return null
@@ -336,10 +369,11 @@ export default function Canvas(p: Props) {
           {doc.symbols.map((s) => {
             const def = SYMBOL_MAP[s.defId]
             const b = symBBox(s)
-            const on = sel.includes(s.id)
+            const on = !p.sim && sel.includes(s.id)
+            const op = p.sim && isOperable(def.sim)
             return (
               <g key={s.id} data-sym={s.id} className="sym-hit">
-                <rect x={b.x1 - 4} y={b.y1 - 4} width={b.x2 - b.x1 + 8} height={b.y2 - b.y1 + 8} className={on ? 'sel-box' : 'hit-box'} />
+                <rect x={b.x1 - 4} y={b.y1 - 4} width={b.x2 - b.x1 + 8} height={b.y2 - b.y1 + 8} className={on ? 'sel-box' : 'hit-box' + (op ? ' op' : '')} />
                 {def.ports.map((pt) => {
                   const pos = portPos(s, pt.id)!
                   const key = `${s.id}:${pt.id}`
@@ -351,6 +385,12 @@ export default function Canvas(p: Props) {
                 })}
               </g>
             )
+          })}
+          {p.sim?.shorts.flatMap((sh) => sh.ports).map((k) => {
+            const [sid, pid] = k.split(':')
+            const s = symById(sid)
+            const pos = s && portPos(s, pid)
+            return pos ? <circle key={'short' + k} cx={pos.x} cy={pos.y} r={7} className="short" /> : null
           })}
           {wiring && (() => {
             const a = symById(wiring.symId)

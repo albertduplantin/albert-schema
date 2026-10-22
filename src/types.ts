@@ -10,6 +10,13 @@ export interface PortDef {
   label?: string
 }
 
+/** Comportement électrique pour la simulation (voir src/sim/engine.ts) */
+export type SimModel =
+  | { k: 'source'; pot: Record<string, string> }
+  | { k: 'switch'; poles: [string, string][]; ctl: 'coil' | 'momentary' | 'toggle' | 'fixed'; nc: boolean }
+  | { k: 'coil'; ports: string[] }
+  | { k: 'load'; ports: string[]; role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater' }
+
 export interface SymbolDef {
   id: string
   domain: Domain
@@ -28,6 +35,10 @@ export interface SymbolDef {
   group?: { fr: string; en: string } | null
   /** Ancien symbole dessiné à la main, masqué de la palette */
   legacy?: boolean
+  /** Modèle de simulation (absent : symbole non simulé) */
+  sim?: SimModel
+  /** Symbole purement décoratif : ne compte pas parmi les « non simulés » */
+  decor?: boolean
   /** Fréquence d'usage estimée (0-100) sur les machines actuelles ; `top` = affiché dans « Les plus utilisés » */
   score?: number
   top?: boolean
