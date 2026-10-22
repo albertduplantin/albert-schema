@@ -5,7 +5,8 @@ import { tr, type Key } from './i18n'
 import { uid } from './geometry'
 import Canvas from './Canvas'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
-import { motorStarter, pneumaticCylinder, reversingStarter, timerOnDelay } from './templates'
+import { motorStarter, motorStarterTransformer, pneumaticCylinder, reversingStarter, timerOnDelay } from './templates'
+import { defaultTerm, editTerm, suggestTerms, termGroups } from './terminals'
 import { DEFAULT_DELAY_S, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
@@ -142,6 +143,7 @@ function Editor() {
 
   // ── simulation
   const [wiringOn, setWiringOn] = useState(false)
+  const [hiPort, setHiPort] = useState<{ symId: string; portId: string } | null>(null)
   const [simMode, setSimMode] = useState(false)
   const [simIn, setSimIn] = useState<SimInputs>({ pressed: new Set(), toggled: new Set() })
   const coilMemory = useRef<SimMemory>({})
@@ -490,13 +492,14 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
         {!doc.symbols.length && !placing && (
           <div className="empty">
             <h2>{t('emptyTitle')}</h2>
             <p>{t('emptyText')}</p>
             <div className="tpls">
               <button onClick={() => startTemplate(motorStarter)}>{t('tplMotor')}</button>
+              <button onClick={() => startTemplate(motorStarterTransformer)}>{t('tplTrafo')}</button>
               <button onClick={() => startTemplate(reversingStarter)}>{t('tplReversing')}</button>
               <button onClick={() => startTemplate(timerOnDelay)}>{t('tplTimer')}</button>
               <button onClick={() => startTemplate(pneumaticCylinder)}>{t('tplPneu')}</button>
@@ -524,12 +527,16 @@ function Editor() {
             {sim.shorts.length > 0 && (
               <div className="alert" role="alert">⚠ {t('simShort')} {[...new Set(sim.shorts.flatMap((s) => s.potentials))].join(' / ')}</div>
             )}
+            {Object.entries(sim.badVoltage).map(([id, v]) => {
+              const s = doc.symbols.find((x) => x.id === id)
+              return <div key={id} className="alert" role="alert">⚠ {s?.label || SYMBOL_MAP[s?.defId ?? '']?.name[lang]} : {v.applied} V {t('simApplied')}, {v.rated} V {t('simRated')}</div>
+            })}
             {sim.unstable && <div className="alert warn">{t('simUnstable')}</div>}
             {sim.pendingMs !== null && <div className="alert info">⏱ {t('simTiming')}</div>}
             <div className="simlist">
               <div className="section">{t('simEnergized')}</div>
               {doc.symbols.filter((s) => sim.energized.has(s.id)).map((s) => (
-                <div key={s.id} className="simrowitem">● <strong>{s.label || '·'}</strong> {SYMBOL_MAP[s.defId].name[lang]}</div>
+                <div key={s.id} className="simrowitem">● <strong>{s.label || '·'}</strong> {SYMBOL_MAP[s.defId].name[lang]}{sim.volts[s.id] ? ` · ${sim.volts[s.id]} V` : ''}</div>
               ))}
               {!sim.energized.size && <p className="muted">{t('simNone')}</p>}
               {sim.unsupported.length > 0 && (
@@ -552,11 +559,56 @@ function Editor() {
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
             <label>{t('label')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
             <label>{t('description')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
+            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (
+              <label>{SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('voltsSecondary') : t('voltsRated')}
+                <input type="number" min={0} list="volts-list" placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
+                  value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
+                <datalist id="volts-list">{[12, 24, 48, 110, 230, 400].map((v) => <option key={v} value={v} />)}</datalist>
+              </label>
+            )}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return (m?.k === 'coil' && !!m.timer) || (m?.k === 'switch' && !!m.delay) })() && (
               <label>{t('delay')}
                 <input type="number" min={0} step={0.5} value={selSym.delay ?? DEFAULT_DELAY_S} onChange={(e) => patchSym({ delay: Math.max(0, Number(e.target.value) || 0) })} />
               </label>
             )}
+            {(() => {
+              const def = SYMBOL_MAP[selSym.defId]
+              const groups = termGroups(def)
+              if (!groups.length || def.ports.length > 16) return null
+              const sug = suggestTerms(def)
+              const title = (g: (typeof groups)[number], n: number) =>
+                g.kind === 'pole' ? `${t('termPole')} ${g.index + 1}` : g.kind === 'changeover' ? `${t('termChangeover')} ${g.index + 1}` : g.kind === 'winding' ? `${t('termWinding')} ${n + 1}` : `${t('termPort')} ${n + 1}`
+              const sideHint = (id: string) => {
+                const p = def.ports.find((x) => x.id === id)
+                return p ? ({ up: '↑', down: '↓', left: '←', right: '→' } as const)[p.dir] : ''
+              }
+              return (
+                <div className="terms">
+                  <div className="terms-head">
+                    <span>{t('terminals')}</span>
+                    <span>
+                      {Object.keys(sug).length > 0 && <button className="mini" title={t('termStdHelp')} onClick={() => patchSym({ terms: { ...sug } })}>{t('termStd')}</button>}
+                      {selSym.terms && Object.keys(selSym.terms).length > 0 && <button className="mini" onClick={() => patchSym({ terms: undefined })}>{t('termReset')}</button>}
+                    </span>
+                  </div>
+                  {groups.map((g, gi) => (
+                    <div key={gi} className="term-row">
+                      <span className="term-title">{title(g, gi)}</span>
+                      <span className="term-inputs">
+                        {g.ports.map((pid) => (
+                          <input key={pid} className="term-in" maxLength={6} aria-label={`${title(g, gi)} ${sideHint(pid)}`}
+                            value={selSym.terms?.[pid] ?? ''} placeholder={defaultTerm(def, pid) || sideHint(pid)}
+                            title={t('termHelp')}
+                            onFocus={() => setHiPort({ symId: selSym.id, portId: pid })} onBlur={() => setHiPort(null)}
+                            onChange={(e) => patchSym({ terms: Object.keys(editTerm(def, selSym.terms, pid, e.target.value)).length ? editTerm(def, selSym.terms, pid, e.target.value) : undefined })} />
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                  <p className="muted small">{t('termHelp')}</p>
+                </div>
+              )
+            })()}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'switch' && m.ctl === 'coil' })() && (
               <label>{t('drivenBy')}
                 <select value={coilLabels.includes(selSym.label) ? selSym.label : ''} onChange={(e) => e.target.value && patchSym({ label: e.target.value })}>

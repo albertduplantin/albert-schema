@@ -89,5 +89,55 @@ function rig(doc: any) {
   const l1 = wireBetween('', 'sim-l1', 'Q1', 'disjonct')
   check('courant : phase L1 vers le disjoncteur parcourue (moteur en marche)', r.current[l1.id], 1)
 }
+// ── 6. transformateur de commande : le secondaire alimente le circuit aval
+{
+  const tr = Object.values(SYMBOL_MAP).find((s: any) => s.id.endsWith('/10_transformers/transformator_1f_2')) as any
+  const coilDef = SYMBOL_MAP['qet:10_electric/10_allpole/310_relays_contactors_contacts/01_coils/bobine3']
+  const [p1, p2] = tr.sim.primary, [s1, s2] = tr.sim.secondary
+  const mk = (extra: any = {}, tie = false): any => ({ ...base, symbols: [
+    { id: 'L1', defId: 'sim-l1', x: 0, y: 0, rot: 0, label: '', desc: '' }, { id: 'L2', defId: 'sim-l2', x: 0, y: 0, rot: 0, label: '', desc: '' },
+    { id: 'T', defId: tr.id, x: 0, y: 0, rot: 0, label: 'T1', desc: '', ...(extra.t ?? {}) },
+    { id: 'K', defId: coilDef.id, x: 0, y: 0, rot: 0, label: 'KM1', desc: '', ...(extra.k ?? {}) },
+    ...(tie ? [{ id: 'N', defId: 'sim-n', x: 0, y: 0, rot: 0, label: '', desc: '' }] : []) ],
+    wires: [w('L1', 'a', 'T', p1), w('L2', 'a', 'T', p2), w('T', s1, 'K', 't0'), w('T', s2, 'K', 't1'), ...(tie ? [w('T', s2, 'N', 'a')] : [])] })
+  function w(a: string, ap: string, b: string, bp: string) { return { id: a + b + ap + bp, from: { symId: a, portId: ap }, to: { symId: b, portId: bp }, label: '', color: '', section: '' } }
+  let r = rig(mk()).run()
+  check('transformateur : primaire alimenté → bobine du secondaire alimentée', [r.energized.has('T'), r.energized.has('K')], [true, true])
+  check('transformateur : tension du secondaire 24 V par défaut', r.volts['K'], 24)
+  check('transformateur : pas de court-circuit', r.shorts.length, 0)
+  r = rig(mk({ t: { volts: 48 } })).run()
+  check('transformateur : tension du secondaire réglable (48 V)', r.volts['K'], 48)
+  r = rig(mk({ k: { volts: 230 } })).run()
+  check('tension nominale 230 V sous 24 V → alerte', JSON.stringify(r.badVoltage['K']), JSON.stringify({ applied: 24, rated: 230 }))
+  r = rig(mk({ k: { volts: 24 } })).run()
+  check('tension nominale 24 V sous 24 V → aucune alerte', r.badVoltage['K'], undefined)
+  r = rig(mk({}, true)).run()
+  check('secondaire relié au neutre : pas de court-circuit, bobine alimentée', [r.shorts.length, r.energized.has('K')], [0, true])
+  // primaire non alimenté : on retire un fil du primaire
+  const dead = mk(); dead.wires = dead.wires.filter((x: any) => x.id !== 'L2aTt1' && !(x.from.symId === 'L2'))
+  r = rig(dead).run()
+  check('primaire non alimenté : secondaire mort, bobine éteinte', [r.energized.has('T'), r.energized.has('K')], [false, false])
+}
+// ── 7. départ moteur avec transformateur de commande (cas d'usage réel)
+{
+  const d = T.motorStarterTransformer(base), g = rig(d)
+  const S1 = g.idOf('S1'), S2 = g.idOf('S2'), T1 = g.idOf('T1')
+  let r = g.run()
+  check('départ avec transformateur : au repos T1 alimenté, commande hors tension', [r.energized.has(T1), g.on(r, 'KM1', 'bobine'), g.on(r, 'M1')], [true, false, false])
+  r = g.run([S2])
+  check('départ avec transformateur : marche → bobine 24 V, voyant et moteur', [g.on(r, 'KM1', 'bobine'), g.on(r, 'H1'), g.on(r, 'M1'), r.volts[g.idOf('KM1', 'bobine')], Object.keys(r.badVoltage).length], [true, true, true, 24, 0])
+  r = g.run()
+  check('départ avec transformateur : auto-maintien', [g.on(r, 'KM1', 'bobine'), g.on(r, 'M1')], [true, true])
+  r = g.run([S1])
+  r = g.run()
+  check('départ avec transformateur : arrêt', [g.on(r, 'KM1', 'bobine'), g.on(r, 'M1')], [false, false])
+  // bobine 230 V alimentée en 24 V : alerte
+  const bad = T.motorStarterTransformer(base)
+  bad.symbols.find((s: any) => s.label === 'KM1' && s.defId.includes('bobine')).volts = 230
+  const g2 = rig(bad)
+  g2.run([g2.idOf('S2')])
+  const r2 = g2.run()
+  check('bobine 230 V sous 24 V : alerte de tension', Object.keys(r2.badVoltage).length, 1)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

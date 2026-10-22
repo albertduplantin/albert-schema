@@ -42,3 +42,12 @@ Tirez un fil depuis une borne, ou cliquez la borne puis cliquez dans le vide pou
 passe par chaque point), et terminez sur la borne d'arrivée. Retour arrière retire le dernier coude, Échap annule. Sur un fil
 sélectionné, les poignées ■ (coudes) se déplacent, un double-clic en retire une, et la poignée ● au milieu d'un segment crée un
 coude. Le bouton « Tracé automatique » revient au routage par défaut. Les coudes suivent les symboles qu'on déplace.
+
+## Transformateurs, tensions et numérotation des bornes
+
+- **Transformateurs** (16 symboles à enroulements séparés) : quand deux bornes du primaire sont à des potentiels différents,
+  le secondaire devient une source pour le circuit aval (fils colorés à part). Sa tension se règle dans « Tension du secondaire (V) ».
+- **Tension nominale** d'une bobine, d'un voyant ou d'un moteur : si la tension appliquée s'écarte de plus de 15 %, le récepteur
+  est entouré en rouge et une alerte s'affiche. Le panneau de simulation indique la tension aux bornes de chaque récepteur.
+- **Numérotation des bornes** : section « Bornes » des propriétés. Modifier la première borne fait suivre les autres
+  (13 → 53 donne 54 ; un contacteur 1-2/3-4/5-6 devient 7-8/9-10/11-12). « Numérotation normalisée » applique 13-14, 21-22, 1-2…, A1-A2.

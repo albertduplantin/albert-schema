@@ -106,6 +106,7 @@ function convert(xml) {
   const shapes = []
   const terminals = []
   const texts = [] // textes statiques conservés dans le dessin
+  const textShapes = [] // textes statiques conservés : { i: indice de la forme, text }
   const segs = [] // segments et polylignes ouvertes (repérage des lames de contacts)
   const rounds = [] // cercles et ellipses (rotor des moteurs)
   const box = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity }
@@ -169,6 +170,7 @@ function convert(xml) {
       const body = lines.map((l, i) => `<tspan x="${n1(tx)}" dy="${i ? n1(size * 1.2) : 0}">${escapeText(l)}</tspan>`).join('')
       const tr = rot ? ` transform="rotate(${rot} ${n1(tx)} ${n1(ty)})"` : ''
       for (const l of lines) texts.push(l.trim())
+      textShapes.push({ i: shapes.length, text: lines.map((l) => l.trim()).join('') })
       shapes.push(`<text x="${n1(tx)}" y="${n1(ty)}" font-size="${n1(size * 1.15)}" fill="currentColor" stroke="none"${tr}>${body}</text>`)
     }
   }
@@ -191,7 +193,7 @@ function convert(xml) {
     shapes[s.i] = `<path d="${d(blade)}"${s.st} fill="none"/><path d="${d(rest)}"${s.st} fill="none"/>`
     segs.splice(segs.indexOf(s), 1, { i: s.i, pts: blade }, { i: s.i, pts: rest })
   }
-  return { shapes, terminals, box, texts, segs, rounds }
+  return { shapes, terminals, box, texts, textShapes, segs, rounds }
 }
 
 const roots = [
@@ -214,16 +216,19 @@ for (const r of roots) {
     const head = /<definition\b([^>]*)>/.exec(xml)
     const def = head ? attrsOf(head[1]) : {}
     if (/report/.test(def.link_type || '')) { skipped++; continue }
-    const { shapes, terminals, box, texts, segs, rounds } = convert(xml)
+    const { shapes, terminals, box, texts, textShapes, segs, rounds } = convert(xml)
     if (!terminals.length || !shapes.length) { skipped++; continue }
     const ox = Math.floor(box.x1 / 10) * 10
     const oy = Math.floor(box.y1 / 10) * 10
     const w = Math.max(10, Math.ceil((box.x2 - ox) / 10) * 10)
     const h = Math.max(10, Math.ceil((box.y2 - oy) / 10) * 10)
+    // un texte du dessin identique au nom d'une borne est retiré : le repère s'affiche depuis la borne et reste modifiable
+    const termNames = new Set(terminals.map((t) => t.name).filter(Boolean))
+    for (const ts of textShapes) if (termNames.has(ts.text)) shapes[ts.i] = ''
     const ports = terminals.map((t, i) => {
       const p = { id: 't' + i, x: n1(t.x - ox), y: n1(t.y - oy), dir: t.dir }
       // pas d'étiquette si le dessin l'affiche déjà (évite les numéros de bornes en double)
-      if (t.name && t.name.length <= 4 && t.name.toLowerCase() !== 'terminal' && !texts.includes(t.name)) p.label = t.name
+      if (t.name && t.name.length <= 4 && t.name.toLowerCase() !== 'terminal') p.label = t.name
       return p
     })
     const el = names(xml.slice(0, xml.indexOf('</names>') + 8))

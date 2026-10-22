@@ -29,6 +29,8 @@ export type SimModel =
       blades?: { rot: number; closed: boolean }[]
     }
   | { k: 'coil'; ports: string[]; timer?: TimerKind }
+  /** transformateur : le secondaire devient une source quand le primaire est alimenté */
+  | { k: 'transformer'; primary: string[]; secondary: string[] }
   | { k: 'load'; ports: string[]; role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater'; spin?: { cx: number; cy: number; r: number } }
 
 export interface SymbolDef {
@@ -68,6 +70,10 @@ export interface PlacedSymbol {
   desc: string
   /** temporisation en secondes (bobines et contacts temporisés) */
   delay?: number
+  /** tension nominale en volts (récepteurs) ou tension du secondaire (transformateurs) */
+  volts?: number
+  /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
+  terms?: Record<string, string>
 }
 
 export interface PortRef {

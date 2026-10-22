@@ -40,6 +40,13 @@ function Rotor({ cx, cy, r }: { cx: number; cy: number; r: number }) {
 const POT_COLOR: Record<string, string> = {
   L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
 }
+const SECONDARY_COLORS = ['#8e24aa', '#00897b', '#6d4c41', '#ef6c00', '#3949ab', '#7cb342']
+/** Couleur d'un fil selon son potentiel : réseau, source continue, ou n-ième borne du secondaire d'un transformateur. */
+function potColor(pot: string): string {
+  if (POT_COLOR[pot]) return POT_COLOR[pot]
+  if (pot.startsWith('~')) return SECONDARY_COLORS[Number(pot.split(':')[1]) % SECONDARY_COLORS.length] ?? '#8e24aa'
+  return '#d62728'
+}
 const GLOW: Record<string, string> = { lamp: '#ffd400', motor: '#35c759', valve: '#35c759', buzzer: '#ff9f0a', heater: '#ff6b35', coil: '#35c759' }
 
 interface Props {
@@ -55,6 +62,8 @@ interface Props {
   contentRef: RefObject<SVGGElement>
   nextLabel: (doc: Doc, defId: string) => string
   onPlaced: (defId: string) => void
+  /** borne mise en évidence (saisie d'un repère dans le panneau) */
+  highlight?: { symId: string; portId: string } | null
   /** tracé d'un conducteur en cours (pour l'aide affichée) */
   onWiring?: (on: boolean) => void
   onContext: (x: number, y: number, target: string | null) => void
@@ -412,7 +421,7 @@ export default function Canvas(p: Props) {
             const mx = (m.x + n.x) / 2, my = (m.y + n.y) / 2
             const txt = [wr.label, wr.section && wr.section + ' mm²'].filter(Boolean).join(' ')
             const pot = p.sim ? p.sim.potentialOf[`${wr.from.symId}:${wr.from.portId}`] : null
-            const stroke = p.sim ? (pot ? POT_COLOR[pot] ?? '#d62728' : '#9aa0a8') : wr.color
+            const stroke = p.sim ? (pot ? potColor(pot) : '#9aa0a8') : wr.color
             return (
               <g key={wr.id}>
                 <polyline points={pointsAttr(pts)} stroke={stroke} strokeWidth={p.sim && pot ? 2.2 : 1.6} />
@@ -436,10 +445,13 @@ export default function Canvas(p: Props) {
               : undefined
             return (
               <g key={s.id}>
-                {lit && model && (model.k === 'coil' || model.k === 'load') && (
-                  <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6}
-                    fill={GLOW[model.k === 'coil' ? 'coil' : model.role]} fillOpacity={0.4} stroke={GLOW[model.k === 'coil' ? 'coil' : model.role]} strokeWidth={1.2} />
-                )}
+                {lit && model && (model.k === 'coil' || model.k === 'load' || model.k === 'transformer') && (() => {
+                  const bad = !!p.sim?.badVoltage[s.id]
+                  const col = bad ? '#e53935' : model.k === 'transformer' ? '#7e57c2' : GLOW[model.k === 'coil' ? 'coil' : model.role]
+                  return (
+                    <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6} fill={col} fillOpacity={bad ? 0.3 : 0.4} stroke={col} strokeWidth={bad ? 2 : 1.2} strokeDasharray={bad ? '4 2' : undefined} />
+                  )
+                })()}
                 {closedState !== undefined && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
@@ -448,10 +460,11 @@ export default function Canvas(p: Props) {
                   {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} />}
                 </g>
                 {def.ports.map((pt) => {
-                  if (!pt.label) return null
+                  const text = s.terms?.[pt.id] ?? pt.label
+                  if (!text) return null
                   const pos = portPos(s, pt.id)!
                   const off = { up: [4, -3], down: [4, 9], left: [-4, -3], right: [4, -3] }[pos.dir]
-                  return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{pt.label}</text>
+                  return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{text}</text>
                 })}
                 {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
                 {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{s.desc}</text>}
@@ -510,6 +523,11 @@ export default function Canvas(p: Props) {
               </g>
             )
           })}
+          {p.highlight && (() => {
+            const s = symById(p.highlight.symId)
+            const pos = s && portPos(s, p.highlight.portId)
+            return pos ? <circle cx={pos.x} cy={pos.y} r={8} className="port-ring" /> : null
+          })()}
           {p.sim?.shorts.flatMap((sh) => sh.ports).map((k) => {
             const [sid, pid] = k.split(':')
             const s = symById(sid)

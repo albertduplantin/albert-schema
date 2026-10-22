@@ -148,6 +148,15 @@ export function classify({ id, nameFr, nameEn, ports }) {
     return poles.length ? { k: 'switch', poles, ctl: 'fixed', nc: false } : null
   }
 
+  // ── transformateurs à enroulements séparés : primaire en haut, secondaire en bas (autotransformateurs non modélisés)
+  if (has(/330_transformers_power_supplies\/10_transformers/) && !/auto/.test(name + file)) {
+    const byX = (a, b) => a.x - b.x
+    const primary = ports.filter((p) => p.dir === 'up').sort(byX).map((p) => p.id)
+    const secondary = ports.filter((p) => p.dir === 'down').sort(byX).map((p) => p.id)
+    if (primary.length >= 2 && secondary.length >= 2 && primary.length <= 4 && secondary.length <= 6) return { k: 'transformer', primary, secondary }
+    return null
+  }
+
   // ── récepteurs
   if (has(/11_optical_signaling/)) {
     if (/carte|horloge/.test(name) || ports.length !== 2) return null

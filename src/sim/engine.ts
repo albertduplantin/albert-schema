@@ -46,6 +46,10 @@ export interface SimResult {
   pendingMs: number | null
   /** conducteurs parcourus par un courant : +1 si le courant va de la borne `from` vers la borne `to`, -1 sinon */
   current: Record<string, 1 | -1>
+  /** tension (V) aux bornes des récepteurs alimentés, quand elle est déterminable */
+  volts: Record<string, number>
+  /** récepteurs dont la tension appliquée s'écarte de plus de 15 % de leur tension nominale */
+  badVoltage: Record<string, { applied: number; rated: number }>
 }
 
 export const DEFAULT_DELAY_S = 3
@@ -104,6 +108,8 @@ interface Ctx {
   /** temporisation de chaque relais, par repère (bobines temporisées) */
   timers: Map<string, { kind: TimerKind; delay: number }>
   pending: number[]
+  /** potentiels imposés par les secondaires de transformateurs alimentés : clé de borne → potentiel (préfixe ~) */
+  derived: Map<string, string>
 }
 
 /** État « actionné » d'un contact. */
@@ -165,12 +171,26 @@ function solve(x: Ctx) {
       portsOfRoot.get(r)!.push(k)
     }
   }
-  const shorts: SimResult['shorts'] = []
-  for (const [r, set] of pots) if (set.size > 1) shorts.push({ potentials: [...set], ports: portsOfRoot.get(r) ?? [] })
-  const potOf = (symId: string, portId: string): string | null => {
-    const set = pots.get(uf.find(key(symId, portId)))
-    return set && set.size === 1 ? [...set][0] : null
+  for (const [k, pot] of x.derived) {
+    const r = uf.find(k)
+    if (!pots.has(r)) pots.set(r, new Set())
+    pots.get(r)!.add(pot)
+    if (!portsOfRoot.has(r)) portsOfRoot.set(r, [])
+    portsOfRoot.get(r)!.push(k)
   }
+  // Un secondaire de transformateur relié à un potentiel du réseau (terre, neutre…) prend ce potentiel : pas de court-circuit.
+  const resolve = (set: Set<string> | undefined): { pot: string | null; conflict: boolean } => {
+    if (!set || set.size === 0) return { pot: null, conflict: false }
+    const real = [...set].filter((v) => !v.startsWith('~'))
+    if (real.length === 1) return { pot: real[0], conflict: false }
+    if (real.length > 1) return { pot: null, conflict: true }
+    return set.size === 1 ? { pot: [...set][0], conflict: false } : { pot: null, conflict: true }
+  }
+  const shorts: SimResult['shorts'] = []
+  for (const [r, set] of pots) {
+    if (resolve(set).conflict) shorts.push({ potentials: [...set], ports: portsOfRoot.get(r) ?? [] })
+  }
+  const potOf = (symId: string, portId: string): string | null => resolve(pots.get(uf.find(key(symId, portId)))).pot
 
   const energized = new Set<string>()
   const coilOn: Record<string, boolean> = {}
@@ -182,10 +202,63 @@ function solve(x: Ctx) {
     if (on) energized.add(s.id)
     if (m.k === 'coil' && s.label) coilOn[s.label] = coilOn[s.label] || on
   }
-  return { closed, energized, coilOn, potOf, shorts, swEdges }
+  // transformateurs : alimentés quand deux bornes du primaire sont à des potentiels différents
+  const trafoOn = new Set<string>()
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k !== 'transformer') continue
+    const seen = new Set(m.primary.map((p) => potOf(s.id, p)).filter((v): v is string => v !== null))
+    if (seen.size >= 2) trafoOn.add(s.id)
+  }
+  return { closed, energized, coilOn, potOf, shorts, swEdges, trafoOn }
+}
+
+/** Calcul complet : les secondaires des transformateurs alimentés deviennent des sources, jusqu'à stabilité. */
+function solveAll(x: Ctx) {
+  let out = solve(x)
+  for (let i = 0; i < 6; i++) {
+    const next = new Map<string, string>()
+    for (const s of x.doc.symbols) {
+      const m = x.defs[s.defId]?.sim
+      if (m?.k !== 'transformer' || !out.trafoOn.has(s.id)) continue
+      m.secondary.forEach((p, n) => next.set(key(s.id, p), `~${s.id}:${n}`))
+    }
+    const same = next.size === x.derived.size && [...next].every(([k, v]) => x.derived.get(k) === v)
+    if (same) break
+    x.derived = next
+    out = solve(x)
+  }
+  return out
+}
+
+const PHASES = new Set(['L', 'L1', 'L2', 'L3'])
+
+/** Tension entre deux potentiels, si elle est déterminable (réseau 230/400 V, source continue 24 V, secondaires de transformateurs). */
+function voltBetween(a: string | null, b: string | null, doc: Doc, defs: Record<string, SymbolDef>): number | undefined {
+  if (!a || !b || a === b) return undefined
+  const aD = a.startsWith('~')
+  const bD = b.startsWith('~')
+  if (aD && bD) {
+    const [ida] = a.slice(1).split(':')
+    const [idb, nb] = b.slice(1).split(':')
+    if (ida !== idb) return undefined
+    const s = doc.symbols.find((x) => x.id === ida)
+    const volts = s?.volts ?? 24
+    const m = s && defs[s.defId]?.sim
+    // secondaire à point milieu : la moitié entre le point milieu et une extrémité
+    if (m?.k === 'transformer' && m.secondary.length === 3 && (nb === '1' || a.endsWith(':1'))) return volts / 2
+    return volts
+  }
+  if (aD || bD) return undefined
+  if (PHASES.has(a) && PHASES.has(b)) return 400
+  if ((PHASES.has(a) && b === 'N') || (PHASES.has(b) && a === 'N')) return 230
+  if ((a === '+' && b === '-') || (a === '-' && b === '+')) return 24
+  return undefined
 }
 
 const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
+/** Potentiel « chaud » : phase, +, ou première borne d'un secondaire de transformateur. */
+const isHot = (pot: string) => HOT.has(pot) || pot.endsWith(':0')
 
 /**
  * Conducteurs réellement parcourus par un courant et sens de circulation.
@@ -216,6 +289,13 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
       }
     } else if ((m?.k === 'coil' || m?.k === 'load') && out.energized.has(s.id)) {
       for (const p of m.ports) pinned.add(key(s.id, p))
+    } else if (m?.k === 'transformer' && out.trafoOn.has(s.id)) {
+      // primaire = récepteur ; secondaire = source du circuit aval
+      for (const p of m.primary) pinned.add(key(s.id, p))
+      for (const p of m.secondary) {
+        pinned.add(key(s.id, p))
+        sources.push(key(s.id, p))
+      }
     }
   }
 
@@ -261,7 +341,7 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
     if (!pot || !dist.has(u) || !dist.has(v)) continue
     const du = dist.get(u)!
     const dv = dist.get(v)!
-    const awayFromSource = HOT.has(pot)
+    const awayFromSource = isHot(pot)
     res[w.id] = du === dv ? 1 : (awayFromSource ? du < dv : du > dv) ? 1 : -1
   }
   return res
@@ -274,9 +354,9 @@ export function simulate(doc: Doc, defs: Record<string, SymbolDef>, previous: Si
     if (m?.k === 'coil' && m.timer && s.label && !timers.has(s.label)) timers.set(s.label, { kind: m.timer, delay: s.delay ?? DEFAULT_DELAY_S })
   }
   const memory: SimMemory = { ...previous }
-  const ctx: Ctx = { doc, defs, memory, inp, now, timers, pending: [] }
+  const ctx: Ctx = { doc, defs, memory, inp, now, timers, pending: [], derived: new Map() }
 
-  let out = solve(ctx)
+  let out = solveAll(ctx)
   let unstable = true
   for (let i = 0; i < 30; i++) {
     // un relais qui change d'état démarre son chronomètre
@@ -294,19 +374,36 @@ export function simulate(doc: Doc, defs: Record<string, SymbolDef>, previous: Si
       break
     }
     ctx.pending = []
-    out = solve(ctx)
+    out = solveAll(ctx)
   }
 
   ctx.pending = []
-  out = solve(ctx) // calcul final : collecte propre des échéances
+  out = solveAll(ctx) // calcul final : collecte propre des échéances
   const potentialOf: Record<string, string | null> = {}
   for (const s of doc.symbols) {
     for (const p of defs[s.defId]?.ports ?? []) potentialOf[key(s.id, p.id)] = out.potOf(s.id, p.id)
   }
+  // tensions aux bornes des récepteurs et écart avec la tension nominale
+  const volts: Record<string, number> = {}
+  const badVoltage: Record<string, { applied: number; rated: number }> = {}
+  const energized = new Set(out.energized)
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k === 'transformer' && out.trafoOn.has(s.id)) energized.add(s.id)
+    if (!m || (m.k !== 'coil' && m.k !== 'load') || !out.energized.has(s.id)) continue
+    const pots = m.ports.map((p) => out.potOf(s.id, p))
+    let v: number | undefined
+    for (let i = 0; i < pots.length; i++) for (let j = i + 1; j < pots.length; j++) v = Math.max(v ?? 0, voltBetween(pots[i], pots[j], doc, defs) ?? 0) || v
+    if (v === undefined) continue
+    volts[s.id] = v
+    if (s.volts && (v < s.volts * 0.85 || v > s.volts * 1.15)) badVoltage[s.id] = { applied: v, rated: s.volts }
+  }
   const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.decor).map((s) => s.id)
   return {
-    state: memory, energized: out.energized, closed: out.closed, potentialOf, shorts: out.shorts, unstable, unsupported,
+    state: memory, energized, closed: out.closed, potentialOf, shorts: out.shorts, unstable, unsupported,
     pendingMs: ctx.pending.length ? Math.min(...ctx.pending) : null,
     current: currentFlow(doc, defs, out),
+    volts,
+    badVoltage,
   }
 }

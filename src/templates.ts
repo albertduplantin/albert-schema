@@ -2,20 +2,20 @@ import type { Doc, PlacedSymbol, Wire } from './types'
 import { SYMBOL_MAP } from './symbols'
 import { uid } from './geometry'
 
-type Spec = [key: string, defId: string, x: number, y: number, label?: string, delay?: number]
+type Spec = [key: string, defId: string, x: number, y: number, label?: string, delay?: number, volts?: number]
 type Link = [from: string, fromPort: string, to: string, toPort: string]
 
 function build(base: Doc, specs: Spec[], links: Link[]): Doc {
   const ids: Record<string, string> = {}
   const counters: Record<string, number> = {}
-  const symbols: PlacedSymbol[] = specs.map(([key, defId, x, y, label, delay]) => {
+  const symbols: PlacedSymbol[] = specs.map(([key, defId, x, y, label, delay, volts]) => {
     const prefix = SYMBOL_MAP[defId].prefix
     ids[key] = uid()
     if (label === undefined) {
       counters[prefix] = (counters[prefix] ?? 0) + 1
       label = prefix ? prefix + counters[prefix] : ''
     }
-    return delay === undefined ? { id: ids[key], defId, x, y, rot: 0, label, desc: '' } : { id: ids[key], defId, x, y, rot: 0, label, desc: '', delay }
+    return { id: ids[key], defId, x, y, rot: 0, label, desc: '', ...(delay === undefined ? {} : { delay }), ...(volts === undefined ? {} : { volts }) }
   })
   const wires: Wire[] = links.map(([a, ap, b, bp]) => ({
     id: uid(), from: { symId: ids[a], portId: ap }, to: { symId: ids[b], portId: bp }, label: '', color: '#000000', section: '',
@@ -123,4 +123,32 @@ export const reversingStarter = (base: Doc): Doc =>
       ['lc', 'a', 's1', 't0'],
       ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'], ['s2', 't1', 'i2', 't0'], ['a1', 't1', 'i2', 't0'], ['i2', 't1', 'c1', 't0'], ['c1', 't1', 'n1', 'a'],
       ['s1', 't1', 's3', 't0'], ['s1', 't1', 'a2', 't0'], ['s3', 't1', 'i1', 't0'], ['a2', 't1', 'i1', 't0'], ['i1', 't1', 'c2', 't0'], ['c2', 't1', 'n2', 'a'],
+    ])
+
+/**
+ * Départ moteur dont la commande est alimentée en 24 V par un transformateur de commande T1 (230 V entre L1 et L2).
+ * Le secondaire de T1 alimente S1 (arrêt) → S2 (marche, shuntée par KM1) → bobine KM1 24 V et voyant H1 24 V.
+ */
+export const motorStarterTransformer = (base: Doc): Doc =>
+  build(base,
+    [
+      ['l1', 'sim-l1', 120, 30], ['l2', 'sim-l2', 140, 30], ['l3', 'sim-l3', 160, 30],
+      ['q', Q('200_fuses_protective_gears/11_circuit_breakers/disjonct-m_3f'), 120, 100, 'Q1'],
+      ['k', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 120, 200, 'KM1'],
+      ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 120, 320, 'M1'],
+      ['t', Q('330_transformers_power_supplies/10_transformers/transformator_1f_2'), 410, 40, 'T1', undefined, 24],
+      ['s1', L('20_push_buttons/poussoir_nf'), 400, 130, 'S1'],
+      ['s2', L('20_push_buttons/poussoir'), 400, 230, 'S2'],
+      ['a1', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple'), 470, 220, 'KM1'],
+      ['c', R('01_coils/bobine3'), 390, 360, 'KM1', undefined, 24],
+      ['h', L('11_optical_signaling/lampe2'), 550, 340, 'H1', undefined, 24],
+    ],
+    [
+      ['l1', 'a', 'q', 't5'], ['l2', 'a', 'q', 't4'], ['l3', 'a', 'q', 't3'],
+      ['q', 't1', 'k', 't0'], ['q', 't0', 'k', 't2'], ['q', 't2', 'k', 't4'],
+      ['k', 't1', 'm', 't0'], ['k', 't3', 'm', 't2'], ['k', 't5', 'm', 't1'],
+      ['l1', 'a', 't', 't0'], ['l2', 'a', 't', 't1'],
+      ['t', 't2', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'],
+      ['s2', 't1', 'c', 't0'], ['a1', 't1', 'c', 't0'], ['h', 't0', 'c', 't0'],
+      ['c', 't1', 't', 't3'], ['h', 't1', 't', 't3'],
     ])
