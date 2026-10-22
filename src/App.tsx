@@ -413,7 +413,7 @@ function Editor() {
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
         </div>
-        <div className="group editonly">
+        <div className="group">
           <button className={'simbtn' + (simMode ? ' on' : '')} onClick={() => (simMode ? setSimMode(false) : startSim())} title={t('simTitle')}>
             {simMode ? '■ ' + t('simStop') : '▶ ' + t('simStart')}
           </button>
