@@ -23,6 +23,11 @@ export interface SymbolDef {
   /** Contenu SVG interne (trait = currentColor) */
   svg: string
   ports: PortDef[]
+  /** Catégorie et sous-groupe (bibliothèque QElectroTech) */
+  cat?: string
+  group?: { fr: string; en: string } | null
+  /** Ancien symbole dessiné à la main, masqué de la palette */
+  legacy?: boolean
 }
 
 export interface PlacedSymbol {

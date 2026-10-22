@@ -20,29 +20,32 @@ function build(base: Doc, specs: Spec[], links: Link[]): Doc {
   return { ...base, symbols, wires }
 }
 
+const Q = (p: string) => 'qet:10_electric/10_allpole/' + p
+const P = (p: string) => 'qet:50_pneumatic/' + p
+
 /** Départ moteur : disjoncteur → contacteur → moteur, bobine à part. */
 export const motorStarter = (base: Doc): Doc =>
   build(base,
     [
-      ['q', 'el-cb3', 300, 140],
-      ['k', 'el-ct3', 300, 260],
-      ['m', 'el-motor3', 300, 400],
-      ['c', 'el-coil', 560, 260],
+      ['q', Q('200_fuses_protective_gears/12_magneto_thermal_circuit_breakers/fa4202_disjoncteur_moteur_3p'), 300, 120],
+      ['k', Q('310_relays_contactors_contacts/02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 320, 260],
+      ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 320, 400],
+      ['c', Q('310_relays_contactors_contacts/01_coils/bobine3'), 560, 260],
     ],
     [
-      ['q', 'b1', 'k', 'a1'], ['q', 'b2', 'k', 'a2'], ['q', 'b3', 'k', 'a3'],
-      ['k', 'b1', 'm', 'u'], ['k', 'b2', 'm', 'v'], ['k', 'b3', 'm', 'w'],
+      ['q', 't5', 'k', 't0'], ['q', 't4', 'k', 't2'], ['q', 't3', 'k', 't4'],
+      ['k', 't1', 'm', 't0'], ['k', 't3', 'm', 't2'], ['k', 't5', 'm', 't1'],
     ])
 
 /** Vérin double effet piloté par un distributeur 4/2. */
 export const pneumaticCylinder = (base: Doc): Doc =>
   build(base,
     [
-      ['a', 'pn-cyl-da', 300, 140],
-      ['v', 'pn-v42', 280, 260],
-      ['s', 'pn-src', 330, 380],
-      ['e', 'pn-exh', 400, 380],
+      ['a', P('5030_actuators/503010_cylinder_lin/50301011_double_acting/5030101100_double_effet'), 300, 140],
+      ['v', P('5020_velves/502010_control/50201040_4_2_way/5020104030_man_mech/502010403000_4_2_way'), 290, 260],
+      ['s', P('5010_compressed_air/501010_air_generation/50101000_compressed_air_source'), 320, 360],
+      ['e', P('5010_compressed_air/501016_funktion_components/50101610_flow/5010161060_silencer'), 400, 360],
     ],
     [
-      ['a', 'a', 'v', 'a'], ['a', 'b', 'v', 'b'], ['s', 'a', 'v', 'p'], ['e', 'a', 'v', 't'],
+      ['a', 't0', 'v', 't0'], ['a', 't1', 'v', 't3'], ['s', 't0', 'v', 't1'], ['e', 't0', 'v', 't2'],
     ])

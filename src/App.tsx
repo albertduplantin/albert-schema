@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Doc, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
-import { SYMBOLS, SYMBOL_MAP } from './symbols'
+import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
 import { uid } from './geometry'
 import Canvas from './Canvas'
@@ -16,10 +16,17 @@ const emptyDoc = (): Doc => ({
   wires: [],
 })
 
+/** Retire les symboles dont la définition n'existe plus et les conducteurs orphelins. */
+function sanitize(d: Doc): Doc {
+  const symbols = d.symbols.filter((s) => SYMBOL_MAP[s.defId])
+  const ok = new Set(symbols.map((s) => s.id))
+  return { ...d, symbols, wires: d.wires.filter((w) => ok.has(w.from.symId) && ok.has(w.to.symId)) }
+}
+
 function loadDoc(): Doc {
   try {
     const raw = localStorage.getItem(STORE)
-    if (raw) return JSON.parse(raw) as Doc
+    if (raw) return sanitize(JSON.parse(raw) as Doc)
   } catch { /* stockage indisponible : on repart d'une feuille vierge */ }
   return emptyDoc()
 }
@@ -85,13 +92,15 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
   ],
 }
 
-export default function App() {
+function Editor() {
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('albertschema.lang') as Lang) || 'fr')
   const [h, setH] = useState(() => ({ doc: loadDoc(), past: [] as Doc[], future: [] as Doc[] }))
   const [sel, setSel] = useState<string[]>([])
   const [placing, setPlacing] = useState<string | null>(null)
   const [domain, setDomain] = useState<Domain>('electrical')
   const [query, setQuery] = useState('')
+  const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
+  const [showCredits, setShowCredits] = useState(false)
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
@@ -243,7 +252,7 @@ export default function App() {
       try {
         const d = JSON.parse(txt) as Doc
         if (d.version !== 1 || !Array.isArray(d.symbols)) throw new Error('format')
-        commit(() => d)
+        commit(() => sanitize(d))
         setSel([])
       } catch {
         say(t('toastInvalid'))
@@ -256,11 +265,17 @@ export default function App() {
     setSel([])
   }
 
+  const cat = catByDomain[domain] || CATEGORIES[domain][0]?.id || ''
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return SYMBOLS.filter((s) => s.domain === domain && (!q || s.name[lang].toLowerCase().includes(q) || s.prefix.toLowerCase() === q))
-  }, [domain, query, lang])
-  const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s.domain === domain), [recent, domain])
+    const found = SYMBOLS.filter(
+      (s) =>
+        !s.legacy && s.domain === domain &&
+        (q ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q : s.cat === cat),
+    )
+    return q ? found.slice(0, 80) : found
+  }, [domain, query, lang, cat])
+  const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s && !s.legacy && s.domain === domain), [recent, domain])
 
   const selSym = sel.length === 1 ? doc.symbols.find((s) => s.id === sel[0]) : undefined
   const selWire = sel.length === 1 ? doc.wires.find((w) => w.id === sel[0]) : undefined
@@ -282,7 +297,7 @@ export default function App() {
       draggable
       onDragStart={(e) => { e.dataTransfer.setData('text/x-albert-symbol', s.id); e.dataTransfer.effectAllowed = 'copy'; setPlacing(null) }}
       onClick={() => { setPlacing(placing === s.id ? null : s.id); setSel([]) }}>
-      <svg viewBox={`-6 -6 ${s.w + 12} ${s.h + 12}`} stroke="currentColor" fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      <svg viewBox={`-6 -6 ${s.w + 12} ${s.h + 12}`} stroke="currentColor" fill="none" strokeWidth={Math.max(2, Math.max(s.w, s.h) / 28)} strokeLinecap="round" strokeLinejoin="round"
         dangerouslySetInnerHTML={{ __html: s.svg.replace(/var\(--bg\)/g, 'transparent') }} />
       <span>{s.name[lang]}</span>
     </button>
@@ -337,6 +352,11 @@ export default function App() {
           ))}
         </div>
         <input className="search" placeholder={t('search')} aria-label={t('search')} value={query} onChange={(e) => setQuery(e.target.value)} />
+        {!query && (
+          <select aria-label={t('category')} value={cat} onChange={(e) => setCatByDomain((c) => ({ ...c, [domain]: e.target.value }))}>
+            {CATEGORIES[domain].map((c) => <option key={c.id} value={c.id}>{c.name[lang]}</option>)}
+          </select>
+        )}
         <div className="symscroll">
           {!query && recents.length > 0 && (
             <>
@@ -345,9 +365,18 @@ export default function App() {
               <div className="section">{t(domain)}</div>
             </>
           )}
-          <div className="symlist">{list.map(symButton)}</div>
+          {list.map((s, i) => {
+            const g = s.group?.[lang] ?? ''
+            const prev = i > 0 ? (list[i - 1].group?.[lang] ?? '') : null
+            return (
+              <div key={s.id} className="symrow">
+                {g && g !== prev && <div className="section wide">{g}</div>}
+                {symButton(s)}
+              </div>
+            )
+          })}
         </div>
-        <p className="note">{t('warn')}</p>
+        <p className="note">{t('warn')} <button className="link" onClick={() => setShowCredits(true)}>{t('credits')}</button></p>
       </aside>
 
       <main className="stage">
@@ -431,6 +460,17 @@ export default function App() {
         </div>
       )}
 
+      {showCredits && (
+        <div className="modal" onClick={() => setShowCredits(false)}>
+          <div className="dialog" role="dialog" aria-label={t('creditsTitle')} onClick={(e) => e.stopPropagation()}>
+            <h3>{t('creditsTitle')}</h3>
+            <p>{t('creditsText')}</p>
+            <p><a href="https://qelectrotech.org" target="_blank" rel="noreferrer">qelectrotech.org</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a> · <a href="https://github.com/qelectrotech/qelectrotech-elements" target="_blank" rel="noreferrer">qelectrotech-elements</a></p>
+            <div className="actions"><button onClick={() => setShowCredits(false)}>{t('close')}</button></div>
+          </div>
+        </div>
+      )}
+
       {showKeys && (
         <div className="modal" onClick={() => setShowKeys(false)}>
           <div className="dialog" role="dialog" aria-label={t('shortcutsTitle')} onClick={(e) => e.stopPropagation()}>
@@ -461,6 +501,20 @@ export default function App() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+export default function App() {
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const lang = (localStorage.getItem('albertschema.lang') as Lang) || 'fr'
+  useEffect(() => {
+    loadLibrary().then(() => setState('ready'), () => setState('error'))
+  }, [])
+  if (state === 'ready') return <Editor />
+  return (
+    <div className="splash" role="status">
+      {state === 'loading' ? tr(lang, 'loading') : tr(lang, 'loadError')}
     </div>
   )
 }
