@@ -73,7 +73,7 @@ export function termGroups(def: SymbolDef): TermGroup[] {
 const isNum = (s: string | undefined): s is string => !!s && /^\d+$/.test(s)
 
 /** Clé d'appareil : les symboles de même repère partagent leurs numéros ; un symbole sans repère est seul. */
-const deviceKey = (s: PlacedSymbol) => (s.label ? 'L:' + s.label : 'S:' + s.id)
+const deviceKey = (s: PlacedSymbol) => (s.label ? 'L:' + s.label.replace(/\s+/g, '').toUpperCase() : 'S:' + s.id)
 
 /**
  * Repères de toutes les bornes de chaque symbole : saisie de l'utilisateur, sinon repère du symbole d'origine,

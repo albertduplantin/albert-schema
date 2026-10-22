@@ -99,6 +99,9 @@ function applyDelay(m: { on: boolean; since: number } | undefined, kind: TimerKi
   }
 }
 
+/** Repère d'appareil normalisé : « km1 », « KM1 » ou « KM1 » avec espaces désignent le même relais. */
+export const devKey = (l: string) => l.replace(/\s+/g, '').toUpperCase()
+
 interface Ctx {
   doc: Doc
   defs: Record<string, SymbolDef>
@@ -119,8 +122,8 @@ function actuated(s: PlacedSymbol, m: Extract<SimModel, { k: 'switch' }>, x: Ctx
       return false
     case 'coil': {
       if (!s.label) return false
-      const t = x.timers.get(s.label)
-      const mem = x.memory[s.label]
+      const t = x.timers.get(devKey(s.label))
+      const mem = x.memory[devKey(s.label)]
       if (t) return applyDelay(mem, t.kind, t.delay, x.now, x.pending) // bobine temporisée : ses contacts suivent sa sortie
       return applyDelay(mem, m.delay, s.delay ?? DEFAULT_DELAY_S, x.now, x.pending)
     }
@@ -200,7 +203,7 @@ function solve(x: Ctx) {
     const seen = new Set(m.ports.map((p) => potOf(s.id, p)).filter((v): v is string => v !== null))
     const on = seen.size >= 2
     if (on) energized.add(s.id)
-    if (m.k === 'coil' && s.label) coilOn[s.label] = coilOn[s.label] || on
+    if (m.k === 'coil' && s.label) coilOn[devKey(s.label)] = coilOn[devKey(s.label)] || on
   }
   // transformateurs : alimentés quand deux bornes du primaire sont à des potentiels différents
   const trafoOn = new Set<string>()
@@ -351,7 +354,7 @@ export function simulate(doc: Doc, defs: Record<string, SymbolDef>, previous: Si
   const timers = new Map<string, { kind: TimerKind; delay: number }>()
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
-    if (m?.k === 'coil' && m.timer && s.label && !timers.has(s.label)) timers.set(s.label, { kind: m.timer, delay: s.delay ?? DEFAULT_DELAY_S })
+    if (m?.k === 'coil' && m.timer && s.label && !timers.has(devKey(s.label))) timers.set(devKey(s.label), { kind: m.timer, delay: s.delay ?? DEFAULT_DELAY_S })
   }
   const memory: SimMemory = { ...previous }
   const ctx: Ctx = { doc, defs, memory, inp, now, timers, pending: [], derived: new Map() }

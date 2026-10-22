@@ -139,5 +139,15 @@ function rig(doc: any) {
   const r2 = g2.run()
   check('bobine 230 V sous 24 V : alerte de tension', Object.keys(r2.badVoltage).length, 1)
 }
+// ── repères d'appareil : casse et espaces sans importance (« km1 » = « KM1 »)
+{
+  const d = T.reversingStarter(base)
+  const g0 = rig(d)
+  const S2 = g0.idOf('S2')
+  d.symbols = d.symbols.map((s: any) => (s.label === 'KM1' && !s.defId.includes('bobine') ? { ...s, label: ' km1 ' } : s))
+  const g = rig(d)
+  let r = g.run([S2]); r = g.run()
+  check('repère « km1 » (casse/espaces) : la bobine KM1 agit sur ses contacts (auto-maintien + moteur)', [r.energized.has(g.idOf('KM1', 'bobine')), r.energized.has(g.idOf('M1'))], [true, true])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
