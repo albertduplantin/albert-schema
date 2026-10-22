@@ -4,10 +4,10 @@ import { routeAll } from './routing'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
-  GRID, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
+  GRID, MARGIN, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
 } from './geometry'
 import Sheet from './Sheet'
-import { isOperable, type SimResult } from './sim/engine'
+import { devKey, isOperable, type SimResult } from './sim/engine'
 import type { SimModel } from './types'
 
 /** Variables CSS --b{n} : rotation de chaque lame de contact selon l'état simulé (la transition CSS anime le mouvement). */
@@ -141,6 +141,32 @@ export default function Canvas(p: Props) {
   const symById = (id: string) => doc.symbols.find((s) => s.id === id)
   // repères de bornes affichés d'office : numérotation automatique, unique au sein d'un même appareil
   const terms = useMemo(() => effectiveTerms(doc.symbols, SYMBOL_MAP), [doc.symbols])
+  // renvois : sous chaque bobine, la liste de ses contacts (nature, bornes, zone de la feuille), comme dans CADe SIMU
+  const crossRefs = useMemo(() => {
+    const out: Record<string, string[]> = {}
+    const { w, h } = PAPER_SIZE[doc.paper]
+    const cols = Math.floor((w - 2 * MARGIN) / 80), rows = Math.floor((h - 2 * MARGIN) / 80)
+    const zone = (s: PlacedSymbol) => {
+      const b = symBBox(s)
+      const c = Math.min(cols, Math.max(1, Math.floor(((b.x1 + b.x2) / 2 - MARGIN) / ((w - 2 * MARGIN) / cols)) + 1))
+      const r = Math.min(rows, Math.max(1, Math.floor(((b.y1 + b.y2) / 2 - MARGIN) / ((h - 2 * MARGIN) / rows)) + 1))
+      return c + String.fromCharCode(64 + r)
+    }
+    for (const c of doc.symbols) {
+      if (SYMBOL_MAP[c.defId]?.sim?.k !== 'coil' || !c.label) continue
+      const rows2: string[] = []
+      for (const k of doc.symbols) {
+        const m = SYMBOL_MAP[k.defId]?.sim
+        if (m?.k !== 'switch' || m.ctl !== 'coil' || !k.label || devKey(k.label) !== devKey(c.label)) continue
+        const t = (id: string) => terms[k.id]?.[id] ?? ''
+        const nums = m.changeover?.length ? m.changeover.map((co) => co.map(t).join('-')) : m.poles.map((pl) => pl.map(t).join('-'))
+        const kind = m.changeover?.length ? 'CO' : m.nc ? 'NC' : 'NO'
+        rows2.push(`${kind} ${nums.join(' ')} · ${zone(k)}`)
+      }
+      out[c.id] = rows2.sort()
+    }
+    return out
+  }, [doc.symbols, doc.paper, terms])
   // tracé de tous les conducteurs, séparés en couloirs quand ils se superposeraient
   const routes = useMemo(() => routeAll(doc.wires, doc.symbols), [doc.wires, doc.symbols])
 
@@ -490,10 +516,13 @@ export default function Canvas(p: Props) {
                   const off = { up: [4, -3], down: [4, 9], left: [-4, -3], right: [4, -3] }[pos.dir]
                   return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{text}</text>
                 })}
-                {(s.label || s.desc) && (
+                {(s.label || s.desc || crossRefs[s.id]?.length) && (
                   <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>
                     {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
                     {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{s.desc}</text>}
+                    {crossRefs[s.id]?.map((r, i) => (
+                      <text key={i} x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + (s.desc ? 20 : 10) + i * 8} fontSize={6.5} fill="#444" stroke="none">{r}</text>
+                    ))}
                   </g>
                 )}
               </g>
