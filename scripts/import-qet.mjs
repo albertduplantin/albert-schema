@@ -184,9 +184,9 @@ function convert(xml) {
     const len = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1])
     const first = [P[0], P[1]]
     const last = [P[P.length - 2], P[P.length - 1]]
-    // lame prolongée par un fût qui rejoint une borne, ou longue lame (≥ 16) au bout d'un déclencheur (disjoncteurs)
-    if (diag(...first) && (atTerm(P[P.length - 1]) || len(...first) >= 16)) { blade = first; rest = P.slice(1) }
-    else if (diag(...last) && (atTerm(P[0]) || len(...last) >= 16)) { blade = last; rest = P.slice(0, -1) }
+    // lame prolongée par un fût qui rejoint une borne, ou longue lame (≥ 14) au bout d'un déclencheur (disjoncteurs)
+    if (diag(...first) && (atTerm(P[P.length - 1]) || len(...first) >= 14)) { blade = first; rest = P.slice(1) }
+    else if (diag(...last) && (atTerm(P[0]) || len(...last) >= 14)) { blade = last; rest = P.slice(0, -1) }
     if (!blade) continue
     shapes[s.i] = `<path d="${d(blade)}"${s.st} fill="none"/><path d="${d(rest)}"${s.st} fill="none"/>`
     segs.splice(segs.indexOf(s), 1, { i: s.i, pts: blade }, { i: s.i, pts: rest })

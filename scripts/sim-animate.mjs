@@ -8,9 +8,12 @@
 //
 // Sortie : { blades: [{ shape, rot, closed, origin }], spin }
 //   - `shape`  : indice de la forme SVG à animer (une lame)
-//   - `closed` : la lame est dessinée en position fermée (touche le contact fixe)
+//   - `closed` : la lame est dessinée en position fermée (sa pointe touche le contact fixe)
 //   - `rot`    : rotation (degrés, sens horaire) qui fait passer la lame de la position dessinée à l'autre position
 //   - `origin` : pivot en pourcentage de la boîte de la lame (transform-box: fill-box)
+//
+// Le contact fixe est l'ensemble des traits reliés au fût de la borne d'en face (fût + petite barre ou crochet
+// éventuels) : un contact NF dessiné fermé touche cette barre, un contact NO dessiné ouvert en est éloigné.
 
 const ang = (p, q) => (Math.atan2(q[1] - p[1], q[0] - p[0]) * 180) / Math.PI
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1])
@@ -26,28 +29,79 @@ const rotate = (p, c, deg) => {
   return [c[0] + dx * Math.cos(a) - dy * Math.sin(a), c[1] + dx * Math.sin(a) + dy * Math.cos(a)]
 }
 
+/** Point du segment [a,b] le plus proche de p. */
+function nearestOnSegment(p, a, b) {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const l2 = dx * dx + dy * dy
+  const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+  return [a[0] + t * dx, a[1] + t * dy]
+}
+
+/** Point le plus proche de p sur un ensemble de polylignes : { d, pt }. */
+function nearestOnSegs(p, segs) {
+  let best = null
+  for (const s of segs) {
+    for (let k = 0; k + 1 < s.pts.length; k++) {
+      const pt = nearestOnSegment(p, s.pts[k], s.pts[k + 1])
+      const d = dist(p, pt)
+      if (!best || d < best.d) best = { d, pt }
+    }
+  }
+  return best
+}
+
 const isBlade = (s) => {
   if (s.pts.length !== 2) return false
   const [a, b] = s.pts
   return Math.abs(a[0] - b[0]) > 2 && Math.abs(a[1] - b[1]) > 2 && dist(a, b) >= 8
 }
 
+const MIN_BLADE = 14
+
 export function animate({ sim, terminals, segs, rounds }) {
   const out = { blades: [], spin: null }
 
   if (sim?.k === 'switch' && sim.ctl !== 'fixed') {
     const portAt = (pt) => terminals.findIndex((t) => dist([t.x, t.y], pt) <= 2.5)
-    // fût de chaque borne : segment non diagonal qui part de la borne ; on retient son autre extrémité
+    const fixed = segs.filter((s) => !isBlade(s))
+
+    // fût de chaque borne : trait non diagonal qui part de la borne ; on retient son autre extrémité
     const stemEnd = new Map()
-    for (const s of segs) {
-      if (isBlade(s)) continue
+    const stemSegs = new Map()
+    for (const s of fixed) {
       const first = s.pts[0]
       const last = s.pts[s.pts.length - 1]
       for (const [from, to] of [[first, last], [last, first]]) {
         const pi = portAt(from)
-        if (pi >= 0 && !stemEnd.has(pi)) stemEnd.set(pi, to)
+        if (pi >= 0 && !stemEnd.has(pi)) {
+          stemEnd.set(pi, to)
+          stemSegs.set(pi, s)
+        }
       }
     }
+
+    // contact fixe d'une borne : fût + traits reliés à son extrémité (barre, crochet…)
+    const contactOf = (pi) => {
+      const seed = stemSegs.get(pi)
+      if (!seed) return []
+      const comp = new Set([seed])
+      const touches = (a, b) =>
+        [a.pts[0], a.pts[a.pts.length - 1]].some((p) => [b.pts[0], b.pts[b.pts.length - 1]].some((q) => dist(p, q) <= 1.5))
+      let grew = true
+      while (grew) {
+        grew = false
+        for (const s of fixed) {
+          if (comp.has(s)) continue
+          if ([...comp].some((c) => touches(c, s))) {
+            comp.add(s)
+            grew = true
+          }
+        }
+      }
+      return [...comp]
+    }
+
     const partnerOf = (pi) => {
       const id = 't' + pi
       for (const [a, b] of sim.poles) {
@@ -60,6 +114,7 @@ export function animate({ sim, terminals, segs, rounds }) {
 
     for (const s of segs.filter(isBlade)) {
       const [A, B] = s.pts
+
       // pivot = extrémité de la lame la plus proche d'un fût (ou d'une borne)
       let best = null
       for (const [pivot, tip] of [[A, B], [B, A]]) {
@@ -70,29 +125,38 @@ export function animate({ sim, terminals, segs, rounds }) {
       }
       let pivot
       let tip
-      let S
+      let contact = []
       if (best) {
         const partner = partnerOf(best.pi)
-        S = partner >= 0 ? stemEnd.get(partner) : undefined
+        contact = partner >= 0 ? contactOf(partner) : []
         ;({ pivot, tip } = best)
-      } else {
-        // pivot relié à autre chose qu'une borne (disjoncteurs : déclencheur) : le contact fixe est le fût le plus proche d'une extrémité
+      } else if (dist(A, B) >= MIN_BLADE) {
+        // pivot relié à autre chose qu'une borne (disjoncteurs : déclencheur) : contact fixe = fût le plus proche d'une extrémité
         let near = null
         for (const [end, other] of [[A, B], [B, A]]) {
-          for (const [, stem] of stemEnd) {
+          for (const [pi, stem] of stemEnd) {
             const d = dist(end, stem)
-            if (d <= 10 && dist(A, B) >= 16 && (!near || d < near.d)) near = { d, tip: end, pivot: other, S: stem }
+            if (d <= 10 && (!near || d < near.d)) near = { d, tip: end, pivot: other, pi }
           }
         }
-        if (near) ({ pivot, tip, S } = near)
+        if (near) {
+          ;({ pivot, tip } = near)
+          contact = contactOf(near.pi)
+        }
       }
-      if (!S || !pivot) continue
-      const theta = norm(ang(pivot, S) - ang(pivot, tip))
-      const closed = Math.abs(theta) < 8
-      let rot = theta
+      if (!pivot || !contact.length) continue
+
+      const touch = nearestOnSegs(tip, contact)
+      const closed = touch.d <= 2
+      let rot
       if (closed) {
-        // ouverture : 30° dans le sens qui éloigne la lame du contact fixe
-        rot = dist(rotate(tip, pivot, 30), S) >= dist(rotate(tip, pivot, -30), S) ? 30 : -30
+        // ouverture : 25° dans le sens qui éloigne le plus la pointe du contact fixe
+        const away = (deg) => nearestOnSegs(rotate(tip, pivot, deg), contact).d
+        rot = away(25) >= away(-25) ? 25 : -25
+      } else {
+        // fermeture : la lame vise le point le plus proche du contact fixe
+        rot = norm(ang(pivot, touch.pt) - ang(pivot, tip))
+        if (Math.abs(rot) > 60) continue
       }
       const minx = Math.min(A[0], B[0]), maxx = Math.max(A[0], B[0])
       const miny = Math.min(A[1], B[1]), maxy = Math.max(A[1], B[1])
