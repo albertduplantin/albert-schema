@@ -73,7 +73,10 @@ interface Props {
   sim: SimResult | null
   onSimPress: (id: string, down: boolean) => void
   onSimToggle: (id: string) => void
-  labels: { zoomIn: string; zoomOut: string; fit: string }
+  /** défauts injectés (fils coupés, appareils ouverts) et bascule d'un défaut */
+  faults?: ReadonlySet<string>
+  onSimFault?: (id: string) => void
+  labels: { zoomIn: string; zoomOut: string; fit: string; grid: string }
 }
 
 type Pt = { x: number; y: number }
@@ -84,6 +87,7 @@ type Interaction =
   | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number; btn: number; target: string | null }
   | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
   | { kind: 'label'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
+  | { kind: 'note'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'band'; x0: number; y0: number; add: boolean }
   | { kind: 'handle'; wireId: string; idx: number; moved: boolean; mid: boolean }
 
@@ -118,6 +122,7 @@ export default function Canvas(p: Props) {
   }
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
   const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const [showGrid, setShowGrid] = useState(() => { try { return localStorage.getItem('albertschema.grid') === '1' } catch { return false } })
   const [hoverPort, setHoverPort] = useState<string | null>(null)
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] })
   const inter = useRef<Interaction>({ kind: 'none' })
@@ -251,6 +256,11 @@ export default function Canvas(p: Props) {
       const kind = s ? isOperable(SYMBOL_MAP[s.defId].sim) : null
       if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
+      else if (s && (() => { const m = SYMBOL_MAP[s.defId].sim; return m?.k === 'switch' && m.ctl === 'fixed' })()) p.onSimFault?.(s.id)
+      else if (!s) {
+        const we = (e.target as Element).closest('[data-wire]')
+        if (we) p.onSimFault?.(we.getAttribute('data-wire')!)
+      }
       return
     }
     if (wiringRef.current) return // tracé en cours : le coude ou la borne d'arrivée est pris au relâchement
@@ -264,6 +274,16 @@ export default function Canvas(p: Props) {
       p.commit((d) => ({ ...d, symbols: [...d.symbols, sym] }))
       p.onPlaced(def.id)
       return
+    }
+    const noteEl = (e.target as Element).closest('[data-note]')
+    if (noteEl) {
+      const id = noteEl.getAttribute('data-note')!
+      const n = (doc.notes ?? []).find((x) => x.id === id)
+      if (n) {
+        p.setSel([id])
+        inter.current = { kind: 'note', id, sx: pt.x, sy: pt.y, ox: n.x, oy: n.y, moved: false }
+        return
+      }
     }
     const lblEl = (e.target as Element).closest('[data-lbl]')
     if (lblEl) {
@@ -334,6 +354,13 @@ export default function Canvas(p: Props) {
           wires: d.wires.map((w) => (it.vias[w.id] ? { ...w, via: it.vias[w.id].map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w)),
         }))
       }
+    } else if (it.kind === 'note') {
+      const nx = snap(it.ox + pt.x - it.sx), ny = snap(it.oy + pt.y - it.sy)
+      if (!it.moved && (nx !== it.ox || ny !== it.oy)) {
+        it.moved = true
+        p.checkpoint()
+      }
+      if (it.moved) p.update((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === it.id ? { ...n, x: nx, y: ny } : n)) }))
     } else if (it.kind === 'label') {
       const off = { x: it.ox + Math.round(pt.x - it.sx), y: it.oy + Math.round(pt.y - it.sy) }
       if (!it.moved && (off.x !== it.ox || off.y !== it.oy)) {
@@ -481,7 +508,8 @@ export default function Canvas(p: Props) {
             const stroke = p.sim ? (pot ? potColor(pot) : '#9aa0a8') : wr.color
             return (
               <g key={wr.id}>
-                <polyline points={pointsAttr(pts)} stroke={stroke} strokeWidth={p.sim && pot ? 2.2 : 1.6} />
+                <polyline points={pointsAttr(pts)} stroke={p.faults?.has(wr.id) ? '#e53935' : stroke} strokeWidth={p.sim && pot ? 2.2 : 1.6} strokeDasharray={p.faults?.has(wr.id) ? '3 5' : undefined} />
+                {p.faults?.has(wr.id) && <text x={mx - 4} y={my + 4} fontSize={12} fill="#e53935" stroke="none">✂</text>}
                 {p.sim?.current[wr.id] && (
                   <polyline points={pointsAttr(pts)} stroke="#fff" strokeOpacity={0.95} strokeWidth={1.3} strokeDasharray="2 6" strokeLinecap="butt">
                     <animate attributeName="stroke-dashoffset" from="0" to={p.sim.current[wr.id] > 0 ? '-8' : '8'} dur="0.45s" repeatCount="indefinite" />
@@ -491,6 +519,13 @@ export default function Canvas(p: Props) {
               </g>
             )
           })}
+          {(doc.notes ?? []).map((n) => (
+            <g key={n.id}>
+              {n.text.split('\n').map((line, i) => (
+                <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fill="currentColor" stroke="none">{line}</text>
+              ))}
+            </g>
+          ))}
           {doc.symbols.map((s) => {
             const def = SYMBOL_MAP[s.defId]
             const { cx, cy } = rotCenter(def)
@@ -509,6 +544,7 @@ export default function Canvas(p: Props) {
                     <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6} fill={col} fillOpacity={bad ? 0.3 : 0.4} stroke={col} strokeWidth={bad ? 2 : 1.2} strokeDasharray={bad ? '4 2' : undefined} />
                   )
                 })()}
+                {p.faults?.has(s.id) && <text x={b.x2 + 2} y={b.y1 + 10} fontSize={14} fill="#e53935" stroke="none" fontWeight={700}>✕</text>}
                 {closedState !== undefined && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
@@ -539,6 +575,12 @@ export default function Canvas(p: Props) {
 
         {/* Couche interface : hors export */}
         <g className="ui">
+          {showGrid && !p.sim && (
+            <>
+              <defs><pattern id="grid-dots" width={GRID} height={GRID} patternUnits="userSpaceOnUse"><circle cx={0} cy={0} r={0.7} fill="#7a8696" fillOpacity={0.55} /></pattern></defs>
+              <rect x={MARGIN} y={MARGIN} width={PAPER_SIZE[doc.paper].w - 2 * MARGIN} height={PAPER_SIZE[doc.paper].h - 2 * MARGIN} fill="url(#grid-dots)" pointerEvents="none" />
+            </>
+          )}
           {doc.wires.map((wr) => {
             const a = symById(wr.from.symId), b = symById(wr.to.symId)
             if (!a || !b) return null
@@ -592,6 +634,11 @@ export default function Canvas(p: Props) {
               </g>
             )
           })}
+          {!p.sim && (doc.notes ?? []).map((n) => {
+            const lines = n.text.split('\n')
+            const w = Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
+            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={lines.length * n.size * 1.2 + 4} />
+          })}
           {p.highlight && (() => {
             const s = symById(p.highlight.symId)
             const pos = s && portPos(s, p.highlight.portId)
@@ -630,6 +677,7 @@ export default function Canvas(p: Props) {
       </g>
     </svg>
     <div className="zoombar">
+      <button className={showGrid ? 'on' : ''} onClick={() => { setShowGrid(!showGrid); try { localStorage.setItem('albertschema.grid', showGrid ? '0' : '1') } catch { /* ignoré */ } }} title={p.labels.grid} aria-label={p.labels.grid} aria-pressed={showGrid}>⋮⋮</button>
       <button onClick={() => zoomBy(1 / 1.25)} title={p.labels.zoomOut} aria-label={p.labels.zoomOut}>−</button>
       <span>{Math.round(view.k * 100)} %</span>
       <button onClick={() => zoomBy(1.25)} title={p.labels.zoomIn} aria-label={p.labels.zoomIn}>+</button>

@@ -180,5 +180,19 @@ function rig(doc: any) {
   const issues = checkDoc(d, SYMBOL_MAP, 'fr')
   check('contrôle : bobine supprimée → contacts KM1 signalés', issues.filter((i: any) => i.level === 'error' && /KM1/.test(i.text)).length, 3)
 }
+// ── défauts injectés et repères de fils par potentiel
+{
+  const d = T.motorStarter(base)
+  const S2 = d.symbols.find((s: any) => s.label === 'S2').id
+  const coilWire = d.wires.find((w: any) => d.symbols.find((s: any) => s.id === w.to.symId)?.label === 'KM1' && d.symbols.find((s: any) => s.id === w.to.symId)?.defId.includes('bobine') && d.symbols.find((s: any) => s.id === w.from.symId)?.label === 'S2')
+  const coil = d.symbols.find((s: any) => s.label === 'KM1' && s.defId.includes('bobine')).id
+  const run = (cut: string[]) => simulate(d, SYMBOL_MAP, {}, { pressed: new Set([S2]), toggled: new Set(), cut: new Set(cut) }, 0)
+  check('défaut : sans défaut, KM1 est alimentée', run([]).energized.has(coil), true)
+  check('défaut : fil de S2 coupé → KM1 reste au repos', run([coilWire.id]).energized.has(coil), false)
+  const { netLabels } = await import(ROOT + '/src/nets.ts')
+  const nl = netLabels(d, SYMBOL_MAP)
+  const lbl = (def: string, ap: string) => nl[d.wires.find((w: any) => w.from.symId === d.symbols.find((s: any) => s.defId === def).id && w.from.portId === ap).id]
+  check('repères de fils : le fil de L1 porte « L1 »', lbl('sim-l1', 'a'), 'L1')
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

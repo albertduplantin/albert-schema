@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Doc, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
+import type { Doc, Note, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
 import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
-import { uid } from './geometry'
+import { symBBox, uid } from './geometry'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
 import { bomRows, exportCsv, exportPng, exportSvg, printSheet, saveJson, wireRows } from './exporters'
@@ -11,6 +11,7 @@ import { duplicateTerms, editTerm, effectiveTerms, ensureUnique, othersTerms, te
 import { DEFAULT_DELAY_S, isOperable, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
+import { netLabels } from './nets'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
 
@@ -132,6 +133,12 @@ function Editor() {
     // classement commun : chargé en arrière-plan, puis le classement est recalculé
     loadGlobalUsage().then(() => setUsageTick((n) => n + 1))
   }, [])
+  const toggleTheme = () => {
+    const root = document.documentElement
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+    root.dataset.theme = dark ? 'light' : 'dark'
+    try { localStorage.setItem('albertschema.theme', root.dataset.theme) } catch { /* ignoré */ }
+  }
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
   const [showKeys, setShowKeys] = useState(false)
@@ -140,6 +147,15 @@ function Editor() {
   const contentRef = useRef<SVGGElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const exportRef = useRef<HTMLDetailsElement>(null)
+  // blocs personnels : groupes de symboles câblés, enregistrés sur cet appareil
+  interface Block { id: string; name: string; symbols: PlacedSymbol[]; wires: Wire[] }
+  const [blocks, setBlocks] = useState<Block[]>(() => {
+    try { return JSON.parse(localStorage.getItem('albertschema.blocks') || '[]') } catch { return [] }
+  })
+  const storeBlocks = (next: Block[]) => {
+    setBlocks(next)
+    try { localStorage.setItem('albertschema.blocks', JSON.stringify(next)) } catch { /* stockage plein ou refusé */ }
+  }
   const clip = useRef<{ symbols: PlacedSymbol[]; wires: Wire[] } | null>(null)
   const toastTimer = useRef<number>()
   const doc = h.doc
@@ -149,7 +165,7 @@ function Editor() {
   const [wiringOn, setWiringOn] = useState(false)
   const [hiPort, setHiPort] = useState<{ symId: string; portId: string } | null>(null)
   const [simMode, setSimMode] = useState(false)
-  const [simIn, setSimIn] = useState<SimInputs>({ pressed: new Set(), toggled: new Set() })
+  const [simIn, setSimIn] = useState<SimInputs>({ pressed: new Set(), toggled: new Set(), cut: new Set() })
   const coilMemory = useRef<SimMemory>({})
   const [simTick, setSimTick] = useState(0) // relance le calcul à l'échéance d'une temporisation
   // horloge simulée : vitesse réglable, pause et avance au pas
@@ -205,7 +221,7 @@ function Editor() {
     clock.current = { v: Date.now(), r: Date.now(), speed: clock.current.speed, paused: false }
     setClockUi({ speed: clock.current.speed, paused: false })
     trace.current = { t0: clock.current.v, rows: [] }
-    setSimIn({ pressed: new Set(), toggled: new Set() })
+    setSimIn({ pressed: new Set(), toggled: new Set(), cut: new Set() })
     setPlacing(null)
     setSel([])
     setSimMode(true)
@@ -216,6 +232,14 @@ function Editor() {
       if (down) pressed.add(id)
       else pressed.delete(id)
       return { ...s, pressed }
+    })
+  }, [])
+  const onSimFault = useCallback((id: string) => {
+    setSimIn((s) => {
+      const cut = new Set(s.cut)
+      if (cut.has(id)) cut.delete(id)
+      else cut.add(id)
+      return { ...s, cut }
     })
   }, [])
   const onSimToggle = useCallback((id: string) => {
@@ -274,6 +298,7 @@ function Editor() {
         ...d,
         symbols: d.symbols.filter((s) => !gone.has(s.id)),
         wires: d.wires.filter((w) => !gone.has(w.id) && !gone.has(w.from.symId) && !gone.has(w.to.symId)),
+        notes: (d.notes ?? []).filter((n) => !gone.has(n.id)),
       }
     })
     setSel([])
@@ -315,6 +340,87 @@ function Editor() {
     })
     setSel(Array.from(map.values()))
   }, [commit])
+
+  /** aligne ou répartit les symboles sélectionnés (au moins deux ; trois pour répartir) */
+  const alignSel = useCallback((kind: 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'distH' | 'distV') => {
+    const items = doc.symbols.filter((s) => sel.includes(s.id)).map((s) => ({ s, b: symBBox(s) }))
+    if (items.length < 2) return
+    const delta = new Map<string, { dx: number; dy: number }>()
+    const minX = Math.min(...items.map((i) => i.b.x1)), maxX = Math.max(...items.map((i) => i.b.x2))
+    const minY = Math.min(...items.map((i) => i.b.y1)), maxY = Math.max(...items.map((i) => i.b.y2))
+    if (kind === 'distH' || kind === 'distV') {
+      if (items.length < 3) return
+      const h = kind === 'distH'
+      const sorted = [...items].sort((a, b) => (h ? a.b.x1 - b.b.x1 : a.b.y1 - b.b.y1))
+      const size = sorted.reduce((t, i) => t + (h ? i.b.x2 - i.b.x1 : i.b.y2 - i.b.y1), 0)
+      const gap = ((h ? maxX - minX : maxY - minY) - size) / (sorted.length - 1)
+      let pos = h ? minX : minY
+      for (const i of sorted) {
+        const cur = h ? i.b.x1 : i.b.y1
+        const d = Math.round((pos - cur) / 10) * 10
+        delta.set(i.s.id, h ? { dx: d, dy: 0 } : { dx: 0, dy: d })
+        pos += (h ? i.b.x2 - i.b.x1 : i.b.y2 - i.b.y1) + gap
+      }
+    } else {
+      for (const i of items) {
+        const cx = (i.b.x1 + i.b.x2) / 2, cy = (i.b.y1 + i.b.y2) / 2
+        const dx = kind === 'left' ? minX - i.b.x1 : kind === 'right' ? maxX - i.b.x2 : kind === 'hcenter' ? (minX + maxX) / 2 - cx : 0
+        const dy = kind === 'top' ? minY - i.b.y1 : kind === 'bottom' ? maxY - i.b.y2 : kind === 'vcenter' ? (minY + maxY) / 2 - cy : 0
+        delta.set(i.s.id, { dx: Math.round(dx / 10) * 10, dy: Math.round(dy / 10) * 10 })
+      }
+    }
+    commit((d) => ({ ...d, symbols: d.symbols.map((s) => { const m = delta.get(s.id); return m ? { ...s, x: s.x + m.dx, y: s.y + m.dy } : s }) }))
+  }, [doc.symbols, sel, commit])
+
+  const saveBlock = () => {
+    const syms = doc.symbols.filter((s) => sel.includes(s.id))
+    if (!syms.length) return
+    const name = window.prompt(tr(lang, 'blockName'), '')?.trim()
+    if (!name) return
+    const b = syms.map((s) => symBBox(s))
+    const ox = Math.min(...b.map((i) => i.x1)), oy = Math.min(...b.map((i) => i.y1))
+    const ids = new Set(syms.map((s) => s.id))
+    storeBlocks([...blocks, {
+      id: uid(), name,
+      symbols: syms.map((s) => ({ ...s, x: s.x - ox, y: s.y - oy })),
+      wires: doc.wires.filter((w) => ids.has(w.from.symId) && ids.has(w.to.symId)).map((w) => ({ ...w, via: w.via?.map((v) => ({ x: v.x - ox, y: v.y - oy })) })),
+    }])
+    say(tr(lang, 'blockSaved'))
+  }
+  const insertBlock = (blk: Block) => {
+    const map = new Map<string, string>(blk.symbols.map((s) => [s.id, uid()]))
+    // un repère par appareil : tous les symboles d'un même repère (bobine et contacts) en reçoivent un nouveau, ensemble
+    commit((d) => {
+      const relabel = new Map<string, string>()
+      const added: PlacedSymbol[] = []
+      const groups = new Map<string, PlacedSymbol[]>()
+      for (const s of blk.symbols) if (s.label) groups.set(s.label, [...(groups.get(s.label) ?? []), s])
+      const work: Doc = { ...d, symbols: [...d.symbols] }
+      for (const [label, members] of groups) {
+        const rep = members.find((m) => SYMBOL_MAP[m.defId]?.sim?.k === 'coil') ?? members[0]
+        // on garde le préfixe d'origine (KM, KT, S…) avec le premier numéro libre
+        const pre = /^([A-Za-z]+)\d*$/.exec(label)?.[1]
+        let nl = nextLabel(work, rep.defId)
+        if (pre) {
+          const re = new RegExp('^' + pre + '(\\d+)$')
+          nl = pre + (1 + Math.max(0, ...work.symbols.map((x) => Number(re.exec(x.label)?.[1] ?? 0))))
+        }
+        relabel.set(label, nl)
+        work.symbols.push({ ...rep, id: '_', label: nl })
+      }
+      const ox = 120, oy = 120
+      for (const s of blk.symbols) added.push({ ...s, id: map.get(s.id)!, x: s.x + ox, y: s.y + oy, label: s.label ? relabel.get(s.label)! : '', terms: undefined })
+      const wires = blk.wires.map((w) => ({
+        ...w, id: uid(),
+        from: { ...w.from, symId: map.get(w.from.symId)! },
+        to: { ...w.to, symId: map.get(w.to.symId)! },
+        ...(w.via?.length ? { via: w.via.map((v) => ({ x: v.x + ox, y: v.y + oy })) } : {}),
+      }))
+      return { ...d, symbols: [...d.symbols, ...added], wires: [...d.wires, ...wires] }
+    })
+    setSel(Array.from(map.values()))
+    setDomain('electrical')
+  }
 
   const duplicate = useCallback(() => { copySel(); paste() }, [copySel, paste])
 
@@ -372,7 +478,8 @@ function Editor() {
   }
 
   const autoWire = () => {
-    commit((d) => ({ ...d, wires: d.wires.map((w, i) => ({ ...w, label: String(i + 1) })) }))
+    const labels = netLabels(doc, SYMBOL_MAP)
+    commit((d) => ({ ...d, wires: d.wires.map((w) => ({ ...w, label: labels[w.id] ?? w.label })) }))
     say(t('toastWires'))
   }
 
@@ -425,6 +532,13 @@ function Editor() {
   const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s && !s.legacy && s.domain === domain), [recent, domain])
 
   const selSym = sel.length === 1 ? doc.symbols.find((s) => s.id === sel[0]) : undefined
+  const selNote = sel.length === 1 ? (doc.notes ?? []).find((n) => n.id === sel[0]) : undefined
+  const patchNote = (patch: Partial<Note>) => update((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === sel[0] ? { ...n, ...patch } : n)) }))
+  const addNote = () => {
+    const id = uid()
+    commit((d) => ({ ...d, notes: [...(d.notes ?? []), { id, x: 160 + 10 * (d.notes?.length ?? 0), y: 120 + 10 * (d.notes?.length ?? 0), text: tr(lang, 'noteDefault'), size: 12 }] }))
+    setSel([id])
+  }
   const selWire = sel.length === 1 ? doc.wires.find((w) => w.id === sel[0]) : undefined
   const patchSym = (patch: Partial<PlacedSymbol>) =>
     update((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === sel[0] ? { ...s, ...patch } : s)) }))
@@ -467,6 +581,21 @@ function Editor() {
         <div className="group editonly">
           <button className="icon" onClick={rotateSel} disabled={!sel.length} title={`${t('rotate')} (R)`} aria-label={t('rotate')}>⟳</button>
           <button className="icon" onClick={duplicate} disabled={!sel.length} title={`${t('duplicate')} (Ctrl+D)`} aria-label={t('duplicate')}>⧉</button>
+          <details className="menu">
+            <summary className={sel.length < 2 ? 'dis' : ''} title={t('align')}>⇔ {t('align')} ▾</summary>
+            {sel.length >= 2 && (
+              <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
+                <button onClick={() => alignSel('left')}>{t('alignLeft')}</button>
+                <button onClick={() => alignSel('hcenter')}>{t('alignHCenter')}</button>
+                <button onClick={() => alignSel('right')}>{t('alignRight')}</button>
+                <button onClick={() => alignSel('top')}>{t('alignTop')}</button>
+                <button onClick={() => alignSel('vcenter')}>{t('alignVCenter')}</button>
+                <button onClick={() => alignSel('bottom')}>{t('alignBottom')}</button>
+                <button onClick={() => alignSel('distH')} disabled={sel.length < 3}>{t('distH')}</button>
+                <button onClick={() => alignSel('distV')} disabled={sel.length < 3}>{t('distV')}</button>
+              </div>
+            )}
+          </details>
           <button className="icon danger" onClick={deleteSel} disabled={!sel.length} title={`${t('delete')} (Suppr)`} aria-label={t('delete')}>🗑</button>
         </div>
         <div className="group editonly">
@@ -474,6 +603,20 @@ function Editor() {
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
           <button onClick={() => setShowCheck(true)}>{t('check')}</button>
+          <button onClick={addNote} title={t('note')}>T {t('note')}</button>
+          <details className="menu">
+            <summary>▦ {t('blocks')} ▾</summary>
+            <div className="menu-list" onClick={(e) => { if ((e.target as HTMLElement).closest('.del')) return; (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open') }}>
+              <button onClick={saveBlock} disabled={!sel.length}>{t('blockSave')}</button>
+              {blocks.length === 0 && <p className="muted" style={{ margin: '6px 10px', fontSize: 11 }}>{t('blockNone')}</p>}
+              {blocks.map((blk) => (
+                <div key={blk.id} style={{ display: 'flex' }}>
+                  <button style={{ flex: 1 }} onClick={() => insertBlock(blk)}>{blk.name} <span className="muted">({blk.symbols.length})</span></button>
+                  <button className="del" title={t('delete')} aria-label={t('delete')} onClick={() => storeBlocks(blocks.filter((x) => x.id !== blk.id))}>×</button>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
         <div className="group">
           <button className={'simbtn' + (simMode ? ' on' : '')} onClick={() => (simMode ? setSimMode(false) : startSim())} title={t('simTitle')}>
@@ -503,6 +646,7 @@ function Editor() {
         <button className="feedback-btn" onClick={() => setShowFeedback(true)} title={t('feedbackHelp')}>💬 <span>{t('feedback')}</span></button>
         <button className="icon" onClick={() => setShowKeys(true)} title={`${t('shortcuts')} (?)`} aria-label={t('shortcuts')}>?</button>
         <div className="group">
+          <button className="icon" onClick={toggleTheme} title={t('theme')} aria-label={t('theme')}>◐</button>
           <button className={lang === 'fr' ? 'on' : ''} onClick={() => setLang('fr')}>FR</button>
           <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
         </div>
@@ -551,7 +695,7 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         {sim && signalNames.length > 0 && (
           <Chrono rows={trace.current.rows} names={signalNames} now={chronoNow} lang={lang}
             onClear={() => { trace.current = { t0: vnow(), rows: [] }; setChronoNow(0) }} />
@@ -615,6 +759,7 @@ function Editor() {
               )}
               <div className="section">{t('simLegendTitle')}</div>
               <p className="muted">{t('simLegend')}</p>
+              <p className="muted">⚡ {t('simFaultHelp')}</p>
             </div>
           </>
         ) : (<>
@@ -690,6 +835,16 @@ function Editor() {
                 </select>
               </label>
             )}
+          </div>
+        ) : selNote ? (
+          <div className="form" onFocus={checkpoint}>
+            <h3>{t('note')}</h3>
+            <label>{t('noteText')}<textarea rows={4} value={selNote.text} onChange={(e) => patchNote({ text: e.target.value })} /></label>
+            <label>{t('noteSize')}
+              <select value={selNote.size} onChange={(e) => patchNote({ size: Number(e.target.value) })}>
+                {[8, 10, 12, 16, 20, 28].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
           </div>
         ) : selWire ? (
           <div className="form" onFocus={checkpoint}>

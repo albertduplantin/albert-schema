@@ -22,6 +22,8 @@ export interface SimInputs {
   pressed: ReadonlySet<string>
   /** organes basculés (interrupteurs, disjoncteurs, arrêts d'urgence…) */
   toggled: ReadonlySet<string>
+  /** défauts injectés : fils coupés et appareils ouverts (fusible fondu, relais thermique déclenché) */
+  cut?: ReadonlySet<string>
 }
 
 /** Mémoire de simulation : état de chaque relais (par repère) et instant du dernier changement. */
@@ -350,7 +352,9 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
   return res
 }
 
-export function simulate(doc: Doc, defs: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now = Date.now()): SimResult {
+export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now = Date.now()): SimResult {
+  const cut = inp.cut
+  const doc: Doc = cut?.size ? { ...docIn, wires: docIn.wires.filter((w) => !cut.has(w.id) && !cut.has(w.from.symId) && !cut.has(w.to.symId)) } : docIn
   const timers = new Map<string, { kind: TimerKind; delay: number }>()
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim

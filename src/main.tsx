@@ -31,6 +31,16 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean
   }
 }
 
+try {
+  const th = localStorage.getItem('albertschema.theme')
+  if (th) document.documentElement.dataset.theme = th
+} catch { /* ignoré */ }
+
+// application installable et utilisable hors connexion (production uniquement)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => undefined))
+}
+
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
     <App />

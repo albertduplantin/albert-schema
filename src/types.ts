@@ -105,10 +105,20 @@ export interface TitleBlock {
 
 export type Paper = 'A4' | 'A3' | 'A2' | 'A1'
 
+/** Annotation libre posée sur la feuille. */
+export interface Note {
+  id: string
+  x: number
+  y: number
+  text: string
+  size: number
+}
+
 export interface Doc {
   version: 1
   paper: Paper
   title: TitleBlock
   symbols: PlacedSymbol[]
   wires: Wire[]
+  notes?: Note[]
 }

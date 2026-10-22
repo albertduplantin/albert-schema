@@ -1,0 +1,11 @@
+{
+  "name": "AlbertSchema",
+  "short_name": "AlbertSchema",
+  "description": "Éditeur gratuit de schémas électriques, pneumatiques et hydrauliques avec simulation.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0b6bcb",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

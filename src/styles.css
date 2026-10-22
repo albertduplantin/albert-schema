@@ -13,7 +13,7 @@
   font-size: 13px;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --ui-bg: #1d2026;
     --ui-panel: #262a32;
     --ui-line: #3a404b;
@@ -24,6 +24,17 @@
     --thumb: #e6e8ec;
     color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+  --ui-bg: #1d2026;
+  --ui-panel: #262a32;
+  --ui-line: #3a404b;
+  --ui-text: #e6e8ec;
+  --ui-muted: #98a2b3;
+  --accent: #4d9cf0;
+  --canvas: #2b2f36;
+  --thumb: #e6e8ec;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
@@ -214,3 +225,4 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 .issues { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; }
 .issues li button.link { text-align: left; }
 .issues li.error button { color: #c62828; }
+.menu summary.dis { opacity: .5; }
