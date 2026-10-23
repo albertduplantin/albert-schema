@@ -49,16 +49,19 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
   const knobAngle = -120 + (ranges.length > 1 ? (idx * 240) / (ranges.length - 1) : 0)
   const btnDx = kind === 'voltmeter' ? 41 : 21
 
-  const lcd = (x: number, y: number, ww: number, hh: number) => (
-    <g>
-      <rect x={x} y={y} width={ww} height={hh} rx={3} fill="#cdd8bf" stroke="#2d3328" strokeWidth={1} />
-      <text x={x + ww - 14} y={y + hh * 0.72} textAnchor="end" fontSize={Math.min(26, hh * 0.62)} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">
-        {value === undefined ? '----' : value === null ? '----' : over ? 'OL' : (value < 0 ? '-' : '') + formatReading(value, range, lang)}
-      </text>
-      <text x={x + ww - 4} y={y + hh * 0.72} textAnchor="end" fontSize={9} fontFamily="'IBM Plex Mono', monospace" fill="#1d2418" stroke="none">{unit}</text>
-      <text x={x + 4} y={y + 9} fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill="#46503b" stroke="none">{kind === 'voltmeter' ? 'AC' : 'AC'}</text>
-    </g>
-  )
+  const lcd = (x: number, y: number, ww: number, hh: number) => {
+    const txt = value === undefined || value === null ? '----' : over ? 'OL' : (value < 0 ? '-' : '') + formatReading(value, range, lang)
+    // la taille des chiffres s'adapte à la largeur de l'afficheur : le nombre ne déborde jamais
+    const fs = Math.min(hh * 0.58, (ww - 10) / (Math.max(txt.length, 3) * 0.62))
+    return (
+      <g>
+        <rect x={x} y={y} width={ww} height={hh} rx={3} fill="#cdd8bf" stroke="#2d3328" strokeWidth={1} />
+        <text x={x + ww - 5} y={y + hh - 6} textAnchor="end" fontSize={fs} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{txt}</text>
+        <text x={x + ww - 4} y={y + 8} textAnchor="end" fontSize={7} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{unit}</text>
+        <text x={x + 4} y={y + 8} fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill="#46503b" stroke="none">AC</text>
+      </g>
+    )
+  }
 
   const dial = (cx: number, cy: number, R: number, x: number, y: number, ww: number, hh: number) => {
     const A = 46 // demi-ouverture de l'échelle, en degrés
@@ -153,7 +156,7 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
       <circle cx={JAW.x} cy={JAW.y} r={24.5} fill="none" stroke="#2b2b2b" strokeWidth={11} strokeDasharray="140 14" transform={`rotate(-82 ${JAW.x} ${JAW.y})`} />
       <circle cx={JAW.x} cy={JAW.y} r={24.5} fill="none" stroke="#ffffff22" strokeWidth={2} strokeDasharray="140 14" transform={`rotate(-82 ${JAW.x} ${JAW.y})`} />
       <rect x={14} y={60} width={62} height={h - 62} rx={11} fill="#e8731a" stroke="#222" strokeWidth={1.4} />
-      {style === 'digital' ? lcd(20, 68, 50, 40) : dial(45, 100, 32, 20, 66, 50, 44)}
+      {style === 'digital' ? lcd(17, 66, 56, 42) : dial(45, 100, 32, 20, 66, 50, 44)}
       {controls}
       <text x={w / 2} y={h - 6} textAnchor="middle" fontSize={5.2} fontFamily="'IBM Plex Mono', monospace" fill="#3a1d05" stroke="none">PINCE · ALBERT</text>
       <circle cx={JAW.x} cy={JAW.y} r={14} fill={touching[0] ? '#2f9e4433' : 'none'} stroke={touching[0] ? '#2f9e44' : '#999'} strokeWidth={1.2} strokeDasharray={touching[0] ? undefined : '3 3'} />
