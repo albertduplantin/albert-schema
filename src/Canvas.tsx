@@ -84,6 +84,8 @@ interface Props {
   sheetLabel?: string
   /** double-clic sur le cartouche */
   onEditTitle?: () => void
+  /** double-clic sur un symbole : ouvre ses propriétés */
+  onEditSymbol?: (id: string, x: number, y: number) => void
   onSimFault?: (id: string) => void
   labels: { zoomIn: string; zoomOut: string; fit: string; grid: string }
 }
@@ -505,6 +507,12 @@ export default function Canvas(p: Props) {
       onContextMenu={(e) => e.preventDefault()}
       onDoubleClick={(e) => {
         if ((e.target as Element).closest('[data-titleblock]')) { p.onEditTitle?.(); return }
+        const symEl = (e.target as Element).closest('[data-sym]')
+        if (symEl && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl]')) {
+          const sy = doc.symbols.find((x) => x.id === symEl.getAttribute('data-sym'))
+          // en simulation, un double-clic sur un organe de commande le manœuvre : on n'ouvre alors pas la fenêtre
+          if (sy && !(p.sim && isOperableDef(SYMBOL_MAP[sy.defId]))) { p.onEditSymbol?.(sy.id, e.clientX, e.clientY); return }
+        }
         const el = (e.target as Element).closest('[data-handle]')
         if (!el) return
         const [wireId, idx, kind] = el.getAttribute('data-handle')!.split('|')

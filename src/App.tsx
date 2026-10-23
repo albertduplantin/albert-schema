@@ -107,6 +107,7 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
     ['Glisser ou cliquer depuis une borne', 'Tracer un conducteur (les clics sur le vide posent des coudes)'],
     ['Retour arrière (pendant un tracé)', 'Retirer le dernier coude'],
     ['Poignées d’un conducteur sélectionné', 'Créer, déplacer ou retirer (double-clic) un coude'],
+    ['Double-clic, Entrée ou clic droit › Propriétés', 'Ouvrir les propriétés du symbole (repère, caractéristiques, réglages, bornes)'],
     ['R', 'Pivoter (symbole sélectionné ou en cours de pose)'],
     ['Flèches (+ Maj)', 'Déplacer la sélection (pas de grille ×5)'],
     ['Ctrl + A / Ctrl + D', 'Tout sélectionner / dupliquer'],
@@ -127,6 +128,7 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
     ['Drag or click from a terminal', 'Draw a conductor (clicks on empty space add bends)'],
     ['Backspace (while drawing)', 'Remove the last bend'],
     ['Handles of a selected conductor', 'Create, move or remove (double-click) a bend'],
+    ['Double-click, Enter or right-click › Properties', 'Open the symbol properties (tag, ratings, settings, terminals)'],
     ['R', 'Rotate (selected symbol or while placing)'],
     ['Arrows (+ Shift)', 'Move the selection (grid step ×5)'],
     ['Ctrl + A / Ctrl + D', 'Select all / duplicate'],
@@ -538,6 +540,7 @@ function Editor() {
       if (e.key === 'Escape') { setMenu(null); setPlacing(null); setSel([]); setShowKeys(false); setShowBom(false); setShowFeedback(false); setShowCredits(false) }
       else if (e.key === 'Delete' || e.key === 'Backspace') deleteSel()
       else if (k === 'r' && !ctrl) { if (!placing) rotateSel() }
+      else if (e.key === 'Enter' && !ctrl && sel.length === 1 && doc.symbols.some((x) => x.id === sel[0])) { e.preventDefault(); openProps(sel[0]) }
       else if (e.key === '?') setShowKeys((v) => !v)
       else if (e.key === 'ArrowLeft') { e.preventDefault(); nudge(-step, 0) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); nudge(step, 0) }
@@ -553,7 +556,7 @@ function Editor() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deleteSel, rotateSel, undo, redo, copySel, paste, duplicate, nudge, doc, placing, say, lang, simMode, wiringOn])
+  }, [deleteSel, rotateSel, undo, redo, copySel, paste, duplicate, nudge, doc, placing, say, lang, simMode, wiringOn, sel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const autoLabel = () => {
     commit((d) => {
@@ -645,6 +648,24 @@ function Editor() {
   }
   const TB_FIELDS: (keyof Doc['title'])[] = ['title', 'project', 'docNumber', 'company', 'author', 'approver', 'date', 'revision', 'sheet']
   const [showTitleBlock, setShowTitleBlock] = useState(false)
+  // fenêtre « Propriétés » flottante d'un symbole (clic droit, double-clic ou Entrée) : repère, tensions, caractéristiques, réglages, bornes
+  const [propsId, setPropsId] = useState<string | null>(null)
+  const [propsPos, setPropsPos] = useState({ x: 380, y: 90 })
+  const openProps = (id: string, x?: number, y?: number) => {
+    setSel([id])
+    setPropsId(id)
+    if (x !== undefined && y !== undefined) setPropsPos({ x: Math.max(8, Math.min(x + 12, window.innerWidth - 350)), y: Math.max(8, Math.min(y - 20, window.innerHeight - 260)) })
+  }
+  useEffect(() => { if (propsId && sel[0] !== propsId) setPropsId(null) }, [sel, propsId])
+  const dragProps = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    const dx = e.clientX - propsPos.x
+    const dy = e.clientY - propsPos.y
+    const move = (ev: MouseEvent) => setPropsPos({ x: Math.max(0, Math.min(ev.clientX - dx, window.innerWidth - 120)), y: Math.max(0, Math.min(ev.clientY - dy, window.innerHeight - 60)) })
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
 
   /** impression de toutes les feuilles : on affiche chaque page à son tour pour en capturer le dessin, puis on revient à la page d'origine */
   const printAllPages = async () => {
@@ -667,6 +688,131 @@ function Editor() {
     if (exportRef.current) exportRef.current.open = false
     if (contentRef.current) fn(contentRef.current)
   }
+
+  const symForm = selSym ? (
+          <div className="form" onFocus={checkpoint}>
+            <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
+            <label>{t('label')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
+            <label>{t('description')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
+            {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
+              const def = SYMBOL_MAP[selSym.defId]
+              const info = transformerInfo(selSym, def)
+              const topo = transformerTopology(all, SYMBOL_MAP)
+              const sec = def.sim?.k === 'transformer' ? def.sim.secondary.length : 0
+              return (
+                <>
+                  <label>{t('voltsPrimary')}
+                    <input type="number" min={0} list="volts-list-p" placeholder="230" value={selSym.voltsPrimary ?? ''}
+                      onChange={(e) => patchSym({ voltsPrimary: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
+                    <datalist id="volts-list-p">{[230, 400, 690].map((v) => <option key={v} value={v} />)}</datalist>
+                  </label>
+                  <label>{t('power')}
+                    <input type="number" min={0} list="power-list" placeholder="100" value={selSym.power ?? ''}
+                      onChange={(e) => patchSym({ power: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
+                    <datalist id="power-list">{[40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500].map((v) => <option key={v} value={v} />)}</datalist>
+                  </label>
+                  {describeInfo(info, lang).map((line, i) => <p key={i} className="muted small">⚡ {line}</p>)}
+                  {!selSym.power && <p className="muted small">💡 {t('trafoPowerHint')}</p>}
+                  {sec === 2 && <p className="muted small">{topo.earthed[selSym.id] ? '⏚ ' + t('trafoEarthed') : '◌ ' + t('trafoIsolated')}</p>}
+                </>
+              )
+            })()}
+            {(() => {
+              const def = SYMBOL_MAP[selSym.defId]
+              const kind = kindOf(def)
+              if (!kind) return null
+              const setR = (key: string, raw: string, text?: boolean) => {
+                const next = { ...(selSym.rated ?? {}) } as Record<string, unknown>
+                const v = text ? raw.trim() : Number(raw)
+                if (text ? v === '' : !(Number(raw) > 0)) delete next[key]
+                else next[key] = v
+                patchSym({ rated: Object.keys(next).length ? (next as Ratings) : undefined })
+              }
+              const mc = kind === 'motor' ? motorCurrent(selSym, def) : undefined
+              return (
+                <fieldset className="ratings">
+                  <legend>{t('ratings')}</legend>
+                  {FIELDS[kind].map((f) => (
+                    <label key={f.key}>{fieldLabel(f, lang)}
+                      <input type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} list={f.list ? `rl-${kind}-${f.key}` : undefined}
+                        placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
+                        value={String(selSym.rated?.[f.key] ?? '')} onChange={(e) => setR(f.key, e.target.value, f.text)} />
+                      {f.list && <datalist id={`rl-${kind}-${f.key}`}>{f.list.map((v) => <option key={String(v)} value={v} />)}</datalist>}
+                    </label>
+                  ))}
+                  {mc?.estimated && <p className="muted small">⚡ {t('motorEstimated')} {String(mc.value).replace('.', lang === 'fr' ? ',' : '.')} A</p>}
+                  {kind === 'consumer' && <p className="muted small">{t('wattsHint')}</p>}
+                </fieldset>
+              )
+            })()}
+            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (
+              <label>{SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('voltsSecondary') : t('voltsRated')}
+                <input type="number" min={0} list="volts-list" placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
+                  value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
+                <datalist id="volts-list">{[12, 24, 48, 110, 230, 400].map((v) => <option key={v} value={v} />)}</datalist>
+              </label>
+            )}
+            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return (m?.k === 'coil' && !!m.timer) || (m?.k === 'switch' && !!m.delay) })() && (
+              <label>{t('delay')}
+                <input type="number" min={0} step={0.5} value={selSym.delay ?? DEFAULT_DELAY_S} onChange={(e) => patchSym({ delay: Math.max(0, Number(e.target.value) || 0) })} />
+              </label>
+            )}
+            {(() => {
+              const def = SYMBOL_MAP[selSym.defId]
+              const groups = termGroups(def)
+              if (!groups.length || def.ports.length > 16) return null
+              // repères affichés : saisie, sinon numérotation automatique (unique au sein de l'appareil)
+              const eff = termsWithTopology(all, SYMBOL_MAP)
+              const defaults = termsWithTopology(all, SYMBOL_MAP, selSym.id)[selSym.id] ?? {}
+              const dups = duplicateTerms(all.symbols, eff)
+              const others = othersTerms(all.symbols, eff, selSym.id)
+              const title = (g: (typeof groups)[number], n: number) =>
+                g.kind === 'pole' ? `${t('termPole')} ${g.index + 1}` : g.kind === 'changeover' ? `${t('termChangeover')} ${g.index + 1}` : g.kind === 'winding' ? `${t('termWinding')} ${n + 1}` : `${t('termPort')} ${n + 1}`
+              const sideHint = (id: string) => {
+                const p = def.ports.find((x) => x.id === id)
+                return p ? ({ up: '↑', down: '↓', left: '←', right: '→' } as const)[p.dir] : ''
+              }
+              const store = (next: Record<string, string> | undefined) => patchSym({ terms: next && Object.keys(next).length ? next : undefined })
+              const device = selSym.label || ''
+              return (
+                <div className="terms">
+                  <div className="terms-head">
+                    <span>{t('terminals')}</span>
+                    {selSym.terms && Object.keys(selSym.terms).length > 0 && <button className="mini" title={t('termResetHelp')} onClick={() => store(undefined)}>{t('termReset')}</button>}
+                  </div>
+                  {groups.map((g, gi) => (
+                    <div key={gi} className="term-row">
+                      <span className="term-title">{title(g, gi)}</span>
+                      <span className="term-inputs">
+                        {g.ports.map((pid) => {
+                          const explicit = selSym.terms?.[pid]
+                          const dup = dups.has(`${selSym.id}:${pid}`)
+                          return (
+                            <input key={pid} className={'term-in' + (explicit === undefined ? ' auto' : '') + (dup ? ' dup' : '')} maxLength={6}
+                              aria-label={`${title(g, gi)} ${sideHint(pid)}`} value={explicit ?? eff[selSym.id]?.[pid] ?? ''} placeholder={sideHint(pid)}
+                              title={dup ? t('termDup') : t('termHelp')}
+                              onFocus={() => setHiPort({ symId: selSym.id, portId: pid })}
+                              onBlur={() => { setHiPort(null); store(ensureUnique(def, selSym.terms, others)) }}
+                              onChange={(e) => store(editTerm(def, selSym.terms, pid, e.target.value, defaults))} />
+                          )
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                  <p className="muted small">{device ? `${t('termDevice')} ${device} · ` : ''}{t('termHelp')}</p>
+                </div>
+              )
+            })()}
+            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'switch' && m.ctl === 'coil' })() && (
+              <label>{t('drivenBy')}
+                <select value={coilLabels.includes(selSym.label) ? selSym.label : ''} onChange={(e) => e.target.value && patchSym({ label: e.target.value })}>
+                  <option value="">—</option>
+                  {coilLabels.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
+  ) : null
 
   const hint = simMode ? t('simHint') : wiringOn ? t('hintWiring') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
@@ -815,7 +961,7 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
           {pageTabs.map((pg, i) => (
             <button key={i} role="tab" aria-selected={i === (doc.page ?? 0)} className={i === (doc.page ?? 0) ? 'on' : ''}
@@ -907,128 +1053,7 @@ function Editor() {
         )}
         <h3>{t('properties')}</h3>
         {selSym ? (
-          <div className="form" onFocus={checkpoint}>
-            <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
-            <label>{t('label')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
-            <label>{t('description')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
-            {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
-              const def = SYMBOL_MAP[selSym.defId]
-              const info = transformerInfo(selSym, def)
-              const topo = transformerTopology(all, SYMBOL_MAP)
-              const sec = def.sim?.k === 'transformer' ? def.sim.secondary.length : 0
-              return (
-                <>
-                  <label>{t('voltsPrimary')}
-                    <input type="number" min={0} list="volts-list-p" placeholder="230" value={selSym.voltsPrimary ?? ''}
-                      onChange={(e) => patchSym({ voltsPrimary: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
-                    <datalist id="volts-list-p">{[230, 400, 690].map((v) => <option key={v} value={v} />)}</datalist>
-                  </label>
-                  <label>{t('power')}
-                    <input type="number" min={0} list="power-list" placeholder="100" value={selSym.power ?? ''}
-                      onChange={(e) => patchSym({ power: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
-                    <datalist id="power-list">{[40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500].map((v) => <option key={v} value={v} />)}</datalist>
-                  </label>
-                  {describeInfo(info, lang).map((line, i) => <p key={i} className="muted small">⚡ {line}</p>)}
-                  {!selSym.power && <p className="muted small">💡 {t('trafoPowerHint')}</p>}
-                  {sec === 2 && <p className="muted small">{topo.earthed[selSym.id] ? '⏚ ' + t('trafoEarthed') : '◌ ' + t('trafoIsolated')}</p>}
-                </>
-              )
-            })()}
-            {(() => {
-              const def = SYMBOL_MAP[selSym.defId]
-              const kind = kindOf(def)
-              if (!kind) return null
-              const setR = (key: string, raw: string, text?: boolean) => {
-                const next = { ...(selSym.rated ?? {}) } as Record<string, unknown>
-                const v = text ? raw.trim() : Number(raw)
-                if (text ? v === '' : !(Number(raw) > 0)) delete next[key]
-                else next[key] = v
-                patchSym({ rated: Object.keys(next).length ? (next as Ratings) : undefined })
-              }
-              const mc = kind === 'motor' ? motorCurrent(selSym, def) : undefined
-              return (
-                <fieldset className="ratings">
-                  <legend>{t('ratings')}</legend>
-                  {FIELDS[kind].map((f) => (
-                    <label key={f.key}>{fieldLabel(f, lang)}
-                      <input type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} list={f.list ? `rl-${kind}-${f.key}` : undefined}
-                        placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
-                        value={String(selSym.rated?.[f.key] ?? '')} onChange={(e) => setR(f.key, e.target.value, f.text)} />
-                      {f.list && <datalist id={`rl-${kind}-${f.key}`}>{f.list.map((v) => <option key={String(v)} value={v} />)}</datalist>}
-                    </label>
-                  ))}
-                  {mc?.estimated && <p className="muted small">⚡ {t('motorEstimated')} {String(mc.value).replace('.', lang === 'fr' ? ',' : '.')} A</p>}
-                  {kind === 'consumer' && <p className="muted small">{t('wattsHint')}</p>}
-                </fieldset>
-              )
-            })()}
-            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (
-              <label>{SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('voltsSecondary') : t('voltsRated')}
-                <input type="number" min={0} list="volts-list" placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
-                  value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
-                <datalist id="volts-list">{[12, 24, 48, 110, 230, 400].map((v) => <option key={v} value={v} />)}</datalist>
-              </label>
-            )}
-            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return (m?.k === 'coil' && !!m.timer) || (m?.k === 'switch' && !!m.delay) })() && (
-              <label>{t('delay')}
-                <input type="number" min={0} step={0.5} value={selSym.delay ?? DEFAULT_DELAY_S} onChange={(e) => patchSym({ delay: Math.max(0, Number(e.target.value) || 0) })} />
-              </label>
-            )}
-            {(() => {
-              const def = SYMBOL_MAP[selSym.defId]
-              const groups = termGroups(def)
-              if (!groups.length || def.ports.length > 16) return null
-              // repères affichés : saisie, sinon numérotation automatique (unique au sein de l'appareil)
-              const eff = termsWithTopology(all, SYMBOL_MAP)
-              const defaults = termsWithTopology(all, SYMBOL_MAP, selSym.id)[selSym.id] ?? {}
-              const dups = duplicateTerms(all.symbols, eff)
-              const others = othersTerms(all.symbols, eff, selSym.id)
-              const title = (g: (typeof groups)[number], n: number) =>
-                g.kind === 'pole' ? `${t('termPole')} ${g.index + 1}` : g.kind === 'changeover' ? `${t('termChangeover')} ${g.index + 1}` : g.kind === 'winding' ? `${t('termWinding')} ${n + 1}` : `${t('termPort')} ${n + 1}`
-              const sideHint = (id: string) => {
-                const p = def.ports.find((x) => x.id === id)
-                return p ? ({ up: '↑', down: '↓', left: '←', right: '→' } as const)[p.dir] : ''
-              }
-              const store = (next: Record<string, string> | undefined) => patchSym({ terms: next && Object.keys(next).length ? next : undefined })
-              const device = selSym.label || ''
-              return (
-                <div className="terms">
-                  <div className="terms-head">
-                    <span>{t('terminals')}</span>
-                    {selSym.terms && Object.keys(selSym.terms).length > 0 && <button className="mini" title={t('termResetHelp')} onClick={() => store(undefined)}>{t('termReset')}</button>}
-                  </div>
-                  {groups.map((g, gi) => (
-                    <div key={gi} className="term-row">
-                      <span className="term-title">{title(g, gi)}</span>
-                      <span className="term-inputs">
-                        {g.ports.map((pid) => {
-                          const explicit = selSym.terms?.[pid]
-                          const dup = dups.has(`${selSym.id}:${pid}`)
-                          return (
-                            <input key={pid} className={'term-in' + (explicit === undefined ? ' auto' : '') + (dup ? ' dup' : '')} maxLength={6}
-                              aria-label={`${title(g, gi)} ${sideHint(pid)}`} value={explicit ?? eff[selSym.id]?.[pid] ?? ''} placeholder={sideHint(pid)}
-                              title={dup ? t('termDup') : t('termHelp')}
-                              onFocus={() => setHiPort({ symId: selSym.id, portId: pid })}
-                              onBlur={() => { setHiPort(null); store(ensureUnique(def, selSym.terms, others)) }}
-                              onChange={(e) => store(editTerm(def, selSym.terms, pid, e.target.value, defaults))} />
-                          )
-                        })}
-                      </span>
-                    </div>
-                  ))}
-                  <p className="muted small">{device ? `${t('termDevice')} ${device} · ` : ''}{t('termHelp')}</p>
-                </div>
-              )
-            })()}
-            {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'switch' && m.ctl === 'coil' })() && (
-              <label>{t('drivenBy')}
-                <select value={coilLabels.includes(selSym.label) ? selSym.label : ''} onChange={(e) => e.target.value && patchSym({ label: e.target.value })}>
-                  <option value="">—</option>
-                  {coilLabels.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
-              </label>
-            )}
-          </div>
+          symForm
         ) : selNote ? (
           <div className="form" onFocus={checkpoint}>
             <h3>{t('note')}</h3>
@@ -1075,6 +1100,16 @@ function Editor() {
         </>)}
       </aside>
 
+      {propsId && selSym && selSym.id === propsId && (
+        <div className="propspop" role="dialog" aria-label={t('propsTitle')} style={{ left: propsPos.x, top: propsPos.y }}>
+          <div className="propspop-head" onMouseDown={dragProps}>
+            <strong>{t('propsTitle')} · {selSym.label || SYMBOL_MAP[selSym.defId].name[lang]}</strong>
+            <button className="icon" onClick={() => setPropsId(null)} aria-label={t('close')} title={t('close')}>✕</button>
+          </div>
+          <div className="propspop-body">{symForm}</div>
+        </div>
+      )}
+
       {menu && (
         <div className="ctx-back" onMouseDown={() => setMenu(null)} onContextMenu={(e) => e.preventDefault()}>
           <div className="ctx" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 220) }} onMouseDown={(e) => e.stopPropagation()}>
@@ -1082,6 +1117,8 @@ function Editor() {
               <>
                 {doc.symbols.some((s) => s.id === menu.target) && (
                   <>
+                    <button onClick={() => { openProps(menu.target!, menu.x, menu.y); setMenu(null) }}><span>⚙ {t('propsMenu')}</span><kbd>Entrée</kbd></button>
+                    <hr />
                     <button onClick={() => { rotateSel(); setMenu(null) }}><span>{t('rotate')}</span><kbd>R</kbd></button>
                     <button onClick={() => { duplicate(); setMenu(null) }}><span>{t('duplicate')}</span><kbd>Ctrl+D</kbd></button>
                     <button onClick={() => { copySel(); setMenu(null) }}><span>{t('copy')}</span><kbd>Ctrl+C</kbd></button>

@@ -364,3 +364,8 @@ a, .dialog a { color: var(--lien); }
 
 .ratings { border: 1px solid var(--ui-line); padding: 8px; display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
 .ratings legend { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--sombre); padding: 0 6px; }
+
+.propspop { position: fixed; z-index: 35; width: 330px; max-height: min(82vh, 700px); display: flex; flex-direction: column; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-top: 5px solid var(--accent-olive); box-shadow: var(--ombre), 0 14px 44px #00000050; }
+.propspop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 12px; cursor: move; border-bottom: 1px solid var(--ui-line); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; user-select: none; }
+.propspop-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.propspop-body { padding: 10px 12px 12px; overflow: auto; }
