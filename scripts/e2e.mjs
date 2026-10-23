@@ -1,0 +1,102 @@
+// Tests de bout en bout dans un vrai navigateur : npm run test:e2e
+// Prérequis : Chrome ou Chromium installé (variable CHROME_PATH pour un chemin particulier).
+import puppeteer from 'puppeteer-core'
+import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+
+const PORT = 5199
+const URL = `http://localhost:${PORT}/`
+const CANDIDATES = [
+  process.env.CHROME_PATH,
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+  '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+].filter(Boolean)
+const chrome = CANDIDATES.find((p) => existsSync(p))
+if (!chrome) { console.error('Chrome introuvable : définissez CHROME_PATH'); process.exit(2) }
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+let fails = 0
+const check = (name, ok, info = '') => { if (!ok) fails++; console.log(ok ? 'ok   ' : 'ÉCHEC', name, ok ? '' : info) }
+
+const server = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['vite', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', shell: process.platform === 'win32' })
+const stop = () => { try { process.platform === 'win32' ? spawn('taskkill', ['/pid', String(server.pid), '/T', '/F']) : server.kill() } catch { /* déjà arrêté */ } }
+process.on('exit', stop)
+
+async function waitServer() {
+  for (let i = 0; i < 60; i++) {
+    try { const r = await fetch(URL); if (r.ok) return } catch { /* pas encore prêt */ }
+    await sleep(500)
+  }
+  throw new Error('le serveur de développement ne répond pas')
+}
+
+try {
+  await waitServer()
+  const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new' })
+  const page = await browser.newPage()
+  await page.setViewport({ width: 1500, height: 900 })
+  const errors = []
+  page.on('pageerror', (e) => errors.push(String(e)))
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  const click = (re, sel = 'button') => page.evaluate((src, s) => { const r = new RegExp(src); const el = [...document.querySelectorAll(s)].find((x) => r.test(x.textContent)); el?.click(); return !!el }, re.source, sel)
+  const menu = async (n) => { const s = await page.$$('.toolbar details.menu summary'); await s[n].click() }
+  const doc = () => page.evaluate(() => JSON.parse(localStorage.getItem('albertschema.doc') || '{}'))
+
+  // ── démarrage : visite guidée, puis exemple
+  await page.goto(URL, { waitUntil: 'networkidle0' })
+  check('visite guidée proposée au premier lancement', await page.evaluate(() => !!document.querySelector('.tour')))
+  await click(/Passer/, '.tour button')
+  check('bandeau d’outils sur une seule ligne (44 px)', (await page.evaluate(() => document.querySelector('.toolbar').getBoundingClientRect().height)) <= 48)
+  await click(/Relais en 24 V/)
+  await sleep(500)
+  check('exemple « relais 24 V » chargé', (await doc()).symbols?.length > 10)
+
+  // ── formes : cadre en pointillés, redimensionnement, annulation
+  await menu(1); await click(/Cadre en pointillés/, '.toolbar .menu-list button')
+  await page.mouse.move(790, 345); await page.mouse.down(); await page.mouse.move(890, 480, { steps: 5 }); await page.mouse.up(); await sleep(300)
+  let d = await doc()
+  check('cadre en pointillés créé', d.shapes?.length === 1 && d.shapes[0].stroke === 'dashed', JSON.stringify(d.shapes))
+  await page.keyboard.down('Control'); await page.keyboard.press('z'); await page.keyboard.up('Control'); await sleep(300)
+  check('annulation du cadre', ((await doc()).shapes ?? []).length === 0)
+
+  // ── clic droit sur une forme : épaisseur et couleur
+  await menu(1); await click(/Ellipse/, '.toolbar .menu-list button')
+  await page.mouse.move(1000, 560); await page.mouse.down(); await page.mouse.move(1100, 620, { steps: 4 }); await page.mouse.up(); await sleep(250)
+  const edge = await page.evaluate(() => { const r = document.querySelector('.canvas g[color] ellipse').getBoundingClientRect(); return [r.x + r.width / 2, r.y] })
+  await page.keyboard.press('Escape')
+  await page.mouse.click(edge[0], edge[1], { button: 'right' }); await sleep(300)
+  await page.evaluate(() => { document.querySelectorAll('.ctx .chip')[4]?.click(); document.querySelectorAll('.ctx .ctx-colors .swatch')[1]?.click() })
+  await sleep(200)
+  d = await doc()
+  check('clic droit : épaisseur 3,5 et couleur rouge appliquées', d.shapes?.[0]?.width === 3.5 && d.shapes[0].color === '#c80000', JSON.stringify(d.shapes?.[0]))
+  await page.keyboard.press('Escape')
+
+  // ── annotation sur plusieurs lignes
+  await menu(1); await click(/^T Texte/, '.toolbar .menu-list button'); await sleep(300)
+  const pos = await page.evaluate(() => { const r = document.querySelector('[data-note]').getBoundingClientRect(); return [r.x + 10, r.y + 6] })
+  await page.mouse.click(pos[0], pos[1], { count: 2 }); await sleep(300)
+  await page.keyboard.type('Ligne 1'); await page.keyboard.press('Enter'); await page.keyboard.type('Ligne 2')
+  await page.keyboard.down('Control'); await page.keyboard.press('Enter'); await page.keyboard.up('Control'); await sleep(300)
+  d = await doc()
+  check('annotation : Entrée passe à la ligne', d.notes?.some((n) => n.text === 'Ligne 1\nLigne 2'), JSON.stringify(d.notes))
+
+  // ── nomenclature et export DXF présents dans le menu Fichier
+  await menu(0)
+  const items = await page.evaluate(() => [...document.querySelectorAll('.toolbar .menu-list')[0].querySelectorAll('button')].map((x) => x.textContent.trim()))
+  check('menu Fichier : DXF, versions, nomenclature', ['DXF (AutoCAD, EPLAN…)', 'Versions…', 'Nomenclature'].every((x) => items.includes(x)), items.join(' | '))
+  await page.keyboard.press('Escape')
+
+  // ── simulation : marche, voyants
+  await click(/Simuler/); await sleep(400)
+  check('simulation démarrée', await page.evaluate(() => !!document.querySelector('.toolbar .simbtn.on')))
+  check('aucune erreur de console', errors.length === 0, errors.join(' | '))
+  await browser.close()
+} catch (e) {
+  fails++
+  console.error('ÉCHEC', e)
+}
+stop()
+console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests e2e passent')
+process.exit(fails ? 1 : 0)

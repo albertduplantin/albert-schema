@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "test:e2e": "node scripts/e2e.mjs",
     "test": "tsx scripts/test-sim.mts && tsx scripts/test-routing.mts && tsx scripts/test-terminals.mts && tsx scripts/test-share.mts && tsx scripts/test-export.mts && node scripts/test-feedback-api.mjs && node scripts/test-admin-api.mjs && node scripts/test-examples-api.mjs"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "puppeteer-core": "^25.16.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
