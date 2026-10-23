@@ -56,6 +56,7 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
     return (
       <g>
         <rect x={x} y={y} width={ww} height={hh} rx={3} fill="#cdd8bf" stroke="#2d3328" strokeWidth={1} />
+        {value === null && <title>{lang === 'fr' ? 'Mesure indéterminée : les deux pointes touchent des circuits séparés (par exemple le primaire et le secondaire d’un transformateur, sans terre commune).' : 'Undetermined reading: the two probes touch separate circuits (for example the primary and secondary of a transformer, with no common earth).'}</title>}
         <text x={x + ww - 5} y={y + hh - 6} textAnchor="end" fontSize={fs} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{txt}</text>
         <text x={x + ww - 4} y={y + 8} textAnchor="end" fontSize={7} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{unit}</text>
         <text x={x + 4} y={y + 8} fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill="#46503b" stroke="none">AC</text>
@@ -76,6 +77,8 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
     return (
       <g>
         <rect x={x} y={y} width={ww} height={hh} rx={3} fill="#f6f1df" stroke="#2d3328" strokeWidth={1} />
+        {value === null && <title>{lang === 'fr' ? 'Mesure indéterminée : les deux pointes touchent des circuits séparés.' : 'Undetermined reading: the two probes touch separate circuits.'}</title>}
+        {value === null && <text x={x + 4} y={y + 9} fontSize={6.5} fill="#c0211b" stroke="none">{lang === 'fr' ? 'INDÉTERMINÉ' : 'UNDETERMINED'}</text>}
         <path d={`M${arc0.x} ${arc0.y} A${R} ${R} 0 0 1 ${arc1.x} ${arc1.y}`} fill="none" stroke="#222" strokeWidth={0.9} />
         {ticks.map((f, i) => {
           const a = pt(f, R)

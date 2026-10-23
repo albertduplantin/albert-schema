@@ -1,6 +1,6 @@
 import type { Doc, Instrument, PlacedSymbol, SymbolDef } from './types'
 import { portPos } from './geometry'
-import { voltageBetween, type SimResult } from './sim/engine'
+import { reachedSources, voltageBetween, type SimResult } from './sim/engine'
 
 type P = { x: number; y: number }
 
@@ -97,7 +97,13 @@ export function readVoltage(instr: Instrument, ctx: PickContext, sim: SimResult,
   const [a, b] = probesOf(instr)
   const pa = pickAt(a, ctx)
   const pb = pickAt(b, ctx)
-  const pot = (k: Pick) => (k.node ? sim.potentialOf[k.node] ?? null : null)
+  // un conducteur relié à la terre (symbole terre, masse) est au potentiel de la terre, même s'il appartient à un circuit séparé
+  // (secondaire d'un transformateur) : toutes les terres du schéma sont la même terre.
+  const pot = (k: Pick) => {
+    if (!k.node) return null
+    if (reachedSources(doc, defs, k.node).pe) return 'PE'
+    return sim.potentialOf[k.node] ?? null
+  }
   const v = voltageBetween(pot(pa), pot(pb), doc, defs)
   return v === undefined ? null : v
 }

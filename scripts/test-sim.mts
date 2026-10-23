@@ -477,6 +477,10 @@ function rig(doc: any) {
   check('voltmètre : entre trois phases (L2, L3) = 400 V', volt(wl2, wl3), 400)
   check('voltmètre : deux pointes sur le même conducteur = 0 V', volt(wl1, { x: wl1.x, y: wl1.y + 1 }), 0)
   check('voltmètre : une pointe en l\'air = 0 V', volt(wl1, { x: 5, y: 5 }), 0)
+  // la terre est la même partout : phase – conducteur relié à la terre du secondaire = 230 V ; phase du secondaire – terre = 24 V
+  check('voltmètre : phase L1 – conducteur relié à la terre (secondaire) = 230 V', volt(wl1, mid(wireOf('KM1', 'T1'))), 230)
+  check('voltmètre : phase du secondaire – terre = 24 V', volt(mid(wireOf('F2', 'S1')), mid(wireOf('KM1', 'T1'))), 24)
+  check('voltmètre : phase du secondaire – phase L1 (circuits séparés) = indéterminé', volt(mid(wireOf('F2', 'S1')), wl1), null)
   const trT = d.symbols.find((s: any) => s.label === 'T1')
   // au secondaire : phase (via F2) – terre : 24 V ; neutre – terre : 0 V
   const sec = mid(wireOf('F2', 'S1')), ret = mid(wireOf('KM1', 'T1'))
