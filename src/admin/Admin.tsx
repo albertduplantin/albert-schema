@@ -60,7 +60,7 @@ function Login({ onLogin, error }: { onLogin: (pw: string) => void; error: strin
   return (
     <main className="login">
       <h1>Administration</h1>
-      <p className="muted">AlbertSchema — retours des utilisateurs</p>
+      <p className="muted">Albert Schema Studio — retours des utilisateurs</p>
       <form onSubmit={(e) => { e.preventDefault(); if (pw) onLogin(pw) }}>
         <label>Mot de passe
           <input type="password" autoComplete="current-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} />

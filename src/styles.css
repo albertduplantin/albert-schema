@@ -455,3 +455,5 @@ textarea.inlineedit { resize: both; }
 
 .ctx .ctx-colors .swatch { padding: 0; display: block; border-radius: 50%; }
 .ctx .ctx-colors { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.brand .studio { font-weight: 400; opacity: 0.75; }

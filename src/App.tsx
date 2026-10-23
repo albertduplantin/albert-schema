@@ -1005,7 +1005,7 @@ function Editor() {
   return (
     <div className={'app' + (simMode ? ' simmode' : '')}>
       <header className="toolbar" role="toolbar">
-        <span className="brand"><span className="vis" aria-hidden="true" />Albert<b>Schema</b></span>
+        <span className="brand"><span className="vis" aria-hidden="true" />Albert<b>Schema</b><span className="studio"> Studio</span></span>
 
         {/* Fichier : ouvrir, enregistrer, exporter, exemples, nomenclature */}
         <details className="menu" ref={exportRef}>

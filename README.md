@@ -1,4 +1,4 @@
-# AlbertSchema
+# Albert Schema Studio
 
 Éditeur web gratuit de schémas électriques, pneumatiques et hydrauliques (FR/EN).
 Aucun serveur : tout est stocké localement (localStorage + fichiers `.albert.json`).

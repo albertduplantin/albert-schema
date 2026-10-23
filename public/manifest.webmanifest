@@ -1,6 +1,6 @@
 {
-  "name": "AlbertSchema",
-  "short_name": "AlbertSchema",
+  "name": "Albert Schema Studio",
+  "short_name": "Albert Schema Studio",
   "description": "Éditeur gratuit de schémas électriques, pneumatiques et hydrauliques avec simulation.",
   "start_url": "./",
   "scope": "./",

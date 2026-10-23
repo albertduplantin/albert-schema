@@ -5,7 +5,7 @@ const source = (id: string, pot: string, text: string, fr: string, en: string, d
   const port: PortDef = down ? { id: 'a', x: 10, y: 20, dir: 'down' } : { id: 'a', x: 10, y: 0, dir: 'up' }
   const fs = text.length > 3 ? 6 : 7.5
   return {
-    id, domain: 'electrical', prefix: '', name: { fr, en }, std: 'AlbertSchema', w: 20, h: 20,
+    id, domain: 'electrical', prefix: '', name: { fr, en }, std: 'Albert Schema Studio', w: 20, h: 20,
     svg: down
       ? `<path d="M10 14V20"/><rect x="0" y="0" width="20" height="14"/><text x="10" y="10" text-anchor="middle" font-size="${fs}" fill="currentColor" stroke="none">${text}</text>`
       : `<path d="M10 0V6"/><rect x="0" y="6" width="20" height="14"/><text x="10" y="16" text-anchor="middle" font-size="${fs}" fill="currentColor" stroke="none">${text}</text>`,

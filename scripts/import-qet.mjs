@@ -1,5 +1,5 @@
 // Convertit une sélection de la collection QElectroTech (fichiers .elmt, CC-BY 3.0)
-// en bibliothèque JSON pour AlbertSchema.
+// en bibliothèque JSON pour Albert Schema Studio.
 //
 // Usage : node scripts/import-qet.mjs <dossier qelectrotech-elements> <fichier de sortie.json> [api/_ids.json]
 // Le 3e argument (facultatif) écrit la liste des identifiants valides, utilisée par /api/usage.
