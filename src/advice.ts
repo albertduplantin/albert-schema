@@ -153,7 +153,6 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
       text: S(lang, `Transformateur ${nm(s)} : primaire sans protection (fusible ou disjoncteur).`, `Transformer ${nm(s)}: unprotected primary (fuse or circuit breaker).`) + (info.prot1 ? S(lang, ` Calibre conseillé : ${info.prot1} A.`, ` Suggested rating: ${info.prot1} A.`) : ''),
       why: S(lang, 'Un court-circuit au primaire ou dans les enroulements n’est coupé que par la protection générale, trop forte : échauffement, risque d’incendie, destruction du transformateur.', 'A short circuit in the primary or windings is only cleared by the upstream protection, which is too large: overheating, fire risk, destroyed transformer.'),
     })
-    describeInfo(info, lang).forEach((line) => out.push({ level: 'info', symId: s.id, text: `${nm(s)} : ${line}` }))
     if (!s.power) out.push({
       level: 'info', symId: s.id,
       text: S(lang, `Transformateur ${nm(s)} : renseignez sa puissance (VA) pour obtenir les courants et les protections conseillées.`, `Transformer ${nm(s)}: enter its power (VA) to get the currents and suggested protection.`),
@@ -376,6 +375,32 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
         } else st.push(e.to)
       }
     }
+  }
+
+  // transformateurs : rappel des courants et des protections conseillées, seulement tant que la protection n'est pas choisie
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k !== 'transformer') continue
+    const info = transformerInfo(s, defs[s.defId])
+    const isProt = (d: PlacedSymbol) => { const k = kindOf(defs[d.defId]); return (k === 'fuse' || k === 'breaker') && !!d.rated?.in }
+    const primDone = upstream(portsOf(s, m.primary)).some(isProt)
+    let secDone = false
+    const hotS = key(s.id, m.secondary[0])
+    const seenS = new Set([hotS])
+    const stS = [hotS]
+    while (stS.length) {
+      const n = stS.pop()!
+      for (const e of adj.get(n) ?? []) {
+        if ((dist.get(e.to) ?? -1) <= (dist.get(n) ?? 0) || seenS.has(e.to)) continue
+        seenS.add(e.to)
+        const d = e.sym ? byId.get(e.sym) : undefined
+        if (d && e.sc) { if (isProt(d)) secDone = true } else stS.push(e.to)
+      }
+    }
+    describeInfo(info, lang).forEach((line, i) => {
+      const done = i === 0 && info.in1 !== undefined ? primDone : secDone
+      if (!done) out.push({ level: 'info', symId: s.id, text: `${nm(s)} : ${line}` })
+    })
   }
 
   // transformateurs : calibres des protections et bilan de puissance
