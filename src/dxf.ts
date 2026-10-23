@@ -2,7 +2,7 @@ import type { Doc, PlacedSymbol, Shape } from './types'
 import { MARGIN, PAPER_SIZE, TB_H, TB_W, UNIT_MM, rotCenter } from './geometry'
 import { routeAll } from './routing'
 import { SYMBOL_MAP } from './symbols'
-import { arcPath, polyPoints, shapeBox } from './shapes'
+import { arcPath, polyPoints, rotatePt, shapeBox } from './shapes'
 
 /**
  * Export DXF (AutoCAD R12, texte) : feuille, symboles, conducteurs, formes et textes, en millimètres, axe Y vers le haut.
@@ -188,12 +188,13 @@ export function dxfOf(doc: Doc): string {
   for (const s of doc.shapes ?? []) {
     const b = shapeBox(s)
     const layer = 'SHAPES'
-    if (s.kind === 'rect') poly([[b.x1, b.y1], [b.x2, b.y1], [b.x2, b.y2], [b.x1, b.y2]], true, layer, COLORS[s.color])
-    else if (s.kind === 'line') line([s.x, s.y], [s.x + s.w, s.y + s.h], layer, COLORS[s.color])
-    else if (s.kind === 'poly') poly([[s.x, s.y], ...polyPoints(s).map((p) => [p.x, p.y] as Pt)], !!s.closed, layer, COLORS[s.color])
+    const ctr = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 }
+    const rot = (pts: Pt[]): Pt[] => (s.rot ? pts.map((p) => { const q = rotatePt({ x: p[0], y: p[1] }, s.rot!, ctr); return [q.x, q.y] as Pt }) : pts)
+    if (s.kind === 'rect') poly(rot([[b.x1, b.y1], [b.x2, b.y1], [b.x2, b.y2], [b.x1, b.y2]]), true, layer, COLORS[s.color])
+    else if (s.kind === 'line') poly(rot([[s.x, s.y], [s.x + s.w, s.y + s.h]]), false, layer, COLORS[s.color])
+    else if (s.kind === 'poly') poly(rot([[s.x, s.y], ...polyPoints(s).map((p) => [p.x, p.y] as Pt)]), !!s.closed, layer, COLORS[s.color])
     else if (s.kind === 'ellipse' || s.kind === 'arc') {
-      const sp = ellipsePoints(s)
-      poly(sp, s.kind === 'ellipse', layer, COLORS[s.color])
+      poly(rot(ellipsePoints(s)), s.kind === 'ellipse', layer, COLORS[s.color])
     }
     if (s.label && s.kind === 'rect') text(b.x1 + 8, b.y1 + 13, 10, s.label, 'TEXT')
   }

@@ -81,6 +81,27 @@ export function snapTargets(symbols: PlacedSymbol[], shapes: Shape[], skip?: str
   return { xs, ys }
 }
 
+/** Point `p` tourné de `deg` degrés autour de `c`. */
+export function rotatePt(p: { x: number; y: number }, deg: number, c: { x: number; y: number }) {
+  const r = (deg * Math.PI) / 180, cs = Math.cos(r), sn = Math.sin(r)
+  return { x: c.x + (p.x - c.x) * cs - (p.y - c.y) * sn, y: c.y + (p.x - c.x) * sn + (p.y - c.y) * cs }
+}
+
+/** Redimensionne une forme pivotée : le pointeur est ramené dans le repère de la forme, et le bord opposé reste en place à l'écran. */
+export function resizeRotated(o: Shape, code: string, pt: { x: number; y: number }): Shape {
+  if (!o.rot || o.kind === 'line' || o.kind === 'poly') return resizeShape(o, code, pt)
+  const b = shapeBox(o)
+  const c0 = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 }
+  const next = resizeShape(o, code, rotatePt(pt, -o.rot, c0))
+  const ax = code.includes('e') ? b.x1 : code.includes('w') ? b.x2 : c0.x
+  const ay = code.includes('s') ? b.y1 : code.includes('n') ? b.y2 : c0.y
+  const nb = shapeBox(next)
+  const c1 = { x: (nb.x1 + nb.x2) / 2, y: (nb.y1 + nb.y2) / 2 }
+  const before = rotatePt({ x: ax, y: ay }, o.rot, c0)
+  const after = rotatePt({ x: ax, y: ay }, o.rot, c1)
+  return { ...next, x: next.x + before.x - after.x, y: next.y + before.y - after.y }
+}
+
 /** Valeur calée sur la grille, ou sur le bord le plus proche s'il est à moins de `tol` unités. */
 export function snapTo(v: number, grid: (n: number) => number, targets: number[], tol = 5): number {
   let best = grid(v), d = Infinity
@@ -113,6 +134,10 @@ export function arcPath(s: Shape): string {
 
 /** Dessin d'une forme (aussi utilisé pour l'export : tout est en attributs SVG, sans style externe). */
 export function ShapeView({ s, opacity }: { s: Shape; opacity?: number }) {
+  if (s.rot) {
+    const b = shapeBox(s)
+    return <g transform={`rotate(${s.rot} ${(b.x1 + b.x2) / 2} ${(b.y1 + b.y2) / 2})`}><ShapeView s={{ ...s, rot: undefined }} opacity={opacity} /></g>
+  }
   const dash = dashArray(s.stroke, s.width)
   const common = { stroke: s.color, strokeWidth: s.width, strokeDasharray: dash, strokeLinecap: (s.stroke === 'dotted' ? 'round' : 'butt') as 'round' | 'butt', opacity }
   const fillProps = s.fill ? { fill: s.fill, fillOpacity: 0.16 } : { fill: 'none' }

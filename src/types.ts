@@ -106,6 +106,9 @@ export interface Ratings {
 
 export interface PlacedSymbol {
   id: string
+  /** groupe : cliquer un membre sélectionne tout le groupe ; `locked` : le symbole ne se déplace plus à la souris */
+  group?: string
+  locked?: boolean
   defId: string
   x: number
   y: number
@@ -189,6 +192,8 @@ export interface Note {
   font?: string
   bold?: boolean
   italic?: boolean
+  /** rotation en degrés (sens horaire) autour du coin haut gauche du texte */
+  rot?: number
 }
 
 /** Trait d'une forme : continu, tirets, pointillés ou trait-point. */
@@ -224,6 +229,8 @@ export interface Shape {
   a1?: number
   /** image (logo, photo) : adresse de données, redimensionnée à l'import */
   href?: string
+  /** rotation en degrés (sens horaire) autour du centre de la forme */
+  rot?: number
   /** cadre qui emporte avec lui les symboles, textes et formes qu'il contient quand on le déplace */
   carry?: boolean
 }

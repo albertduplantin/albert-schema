@@ -66,5 +66,38 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   const bad = runExercise(ex('sequence'), T.delayedCascade(base), SYMBOL_MAP, 'fr')
   check('exercice « séquentiel » : refusé pour un montage sans verrouillage', !bad.ok)
 }
+// ── formes pivotées : le bord opposé à la poignée reste en place à l'écran
+{
+  const { resizeRotated, rotatePt, shapeBox } = await import(ROOT + '/src/shapes.tsx')
+  const o: any = { id: 'r', kind: 'rect', x: 100, y: 100, w: 100, h: 50, stroke: 'solid', width: 1.6, color: '#000000', rot: 30 }
+  const b = shapeBox(o)
+  const c0 = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 }
+  const westBefore = rotatePt({ x: b.x1, y: c0.y }, 30, c0)
+  // on tire la poignée est : le pointeur se trouve 60 unités plus loin le long de l'axe tourné
+  const handle = rotatePt({ x: b.x2, y: c0.y }, 30, c0)
+  const target = { x: handle.x + 60 * Math.cos(Math.PI / 6), y: handle.y + 60 * Math.sin(Math.PI / 6) }
+  const n = resizeRotated(o, 'e', target)
+  const nb = shapeBox(n)
+  const c1 = { x: (nb.x1 + nb.x2) / 2, y: (nb.y1 + nb.y2) / 2 }
+  const westAfter = rotatePt({ x: nb.x1, y: c1.y }, 30, c1)
+  check('forme pivotée : largeur 160 et bord ouest immobile', Math.abs(n.w - 160) < 0.01 && Math.abs(westAfter.x - westBefore.x) < 0.01 && Math.abs(westAfter.y - westBefore.y) < 0.01, JSON.stringify({ w: n.w, westBefore, westAfter }))
+}
+// ── renvois de feuille : deux renvois de même repère relient deux feuilles pour la simulation
+{
+  const { mergedDoc, switchPage } = await import(ROOT + '/src/pages.ts')
+  const { simulate } = await import(ROOT + '/src/sim/engine.ts')
+  const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  // feuille 1 : L → S2 (marche) → renvoi « A » ; feuille 2 : renvoi « A » → bobine KM1 → N
+  const p1 = T.build(base, [['l', 'sim-l', 100, 30], ['s2', Q('380_signaling_operating/20_push_buttons/poussoir'), 100, 100, 'S2'], ['r1', 'sim-ref', 100, 200, 'A']], [['l', 'a', 's2', 't0'], ['s2', 't1', 'r1', 'a']])
+  const p2 = T.build(base, [['r2', 'sim-ref', 100, 30, 'A'], ['c', Q('310_relays_contactors_contacts/01_coils/bobine3'), 90, 100, 'KM1'], ['n', 'sim-n', 100, 200]], [['r2', 'a', 'c', 't0'], ['c', 't1', 'n', 'a']])
+  const withPages: any = { ...p1, pages: [{ name: '1', symbols: p1.symbols, wires: p1.wires }, { name: '2', symbols: p2.symbols, wires: p2.wires }], page: 0 }
+  const all = mergedDoc(withPages)
+  const idOf = (l: string, part = '') => all.symbols.find((s: any) => s.label === l && s.defId.includes(part)).id
+  const st = (press: string[]) => simulate(all, SYMBOL_MAP, {}, { pressed: new Set(press), toggled: new Set() }, 1_000_000)
+  check('renvoi de feuille : S2 relâché, la bobine de la feuille 2 est coupée', !st([]).energized.has(idOf('KM1', 'bobine')))
+  check('renvoi de feuille : S2 appuyé sur la feuille 1, la bobine de la feuille 2 est alimentée', st([idOf('S2')]).energized.has(idOf('KM1', 'bobine')))
+  check('renvoi de feuille : un repère différent ne relie rien', !(() => { const w2: any = { ...withPages, pages: [withPages.pages[0], { ...withPages.pages[1], symbols: p2.symbols.map((s: any) => (s.defId === 'sim-ref' ? { ...s, label: 'B' } : s)) }] }; const a2 = mergedDoc(w2); return simulate(a2, SYMBOL_MAP, {}, { pressed: new Set([idOf('S2')]), toggled: new Set() }, 1_000_000).energized.has(idOf('KM1', 'bobine')) })())
+  void switchPage
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

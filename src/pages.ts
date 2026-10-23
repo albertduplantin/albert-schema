@@ -1,4 +1,4 @@
-import type { Doc, Page } from './types'
+import type { Doc, Page, Wire } from './types'
 
 const contentOf = (d: Doc): Page => ({ name: '', symbols: d.symbols, wires: d.wires, ...(d.notes ? { notes: d.notes } : {}), ...(d.shapes ? { shapes: d.shapes } : {}), ...(d.instruments ? { instruments: d.instruments } : {}) })
 
@@ -40,9 +40,28 @@ export function renamePage(doc: Doc, idx: number, name: string): Doc {
 
 /** Le projet entier en une seule feuille de calcul : pour la simulation, le contrôle, la nomenclature et les repères de fils. */
 export function mergedDoc(doc: Doc): Doc {
-  if (!doc.pages || doc.pages.length < 2) return doc
-  const pages = pagesOf(doc)
-  return { ...doc, symbols: pages.flatMap((p) => p.symbols), wires: pages.flatMap((p) => p.wires) }
+  const base: Doc = !doc.pages || doc.pages.length < 2 ? doc : (() => {
+    const pages = pagesOf(doc)
+    return { ...doc, symbols: pages.flatMap((p) => p.symbols), wires: pages.flatMap((p) => p.wires) }
+  })()
+  return withSheetLinks(base)
+}
+
+/** Les renvois de feuille de même repère sont reliés par des conducteurs virtuels (le schéma est alors un seul réseau pour la simulation et le contrôle). */
+export function withSheetLinks(doc: Doc): Doc {
+  const groups = new Map<string, string[]>()
+  for (const s of doc.symbols) {
+    if (s.defId !== 'sim-ref' || !s.label.trim()) continue
+    const k = s.label.trim().toUpperCase()
+    groups.set(k, [...(groups.get(k) ?? []), s.id])
+  }
+  const wires: Wire[] = []
+  for (const ids of groups.values()) {
+    for (let i = 1; i < ids.length; i++) {
+      wires.push({ id: 'ref:' + ids[i - 1] + ':' + ids[i], from: { symId: ids[i - 1], portId: 'a' }, to: { symId: ids[i], portId: 'a' }, label: '', color: '#000000', section: '' })
+    }
+  }
+  return wires.length ? { ...doc, wires: [...doc.wires, ...wires] } : doc
 }
 
 /** Page (0-based) de chaque symbole du projet. */

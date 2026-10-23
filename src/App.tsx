@@ -133,6 +133,7 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
     ['R', 'Pivoter (symbole sélectionné ou en cours de pose)'],
     ['Flèches (+ Maj)', 'Déplacer la sélection (pas de grille ×5)'],
     ['Ctrl + A / Ctrl + D', 'Tout sélectionner / dupliquer'],
+    ['Ctrl + G / Ctrl + Maj + G', 'Grouper / dégrouper la sélection'],
     ['Ctrl + C / Ctrl + V', 'Copier / coller'],
     ['Ctrl + Z / Ctrl + Y', 'Annuler / rétablir'],
     ['Suppr', 'Supprimer la sélection'],
@@ -154,6 +155,7 @@ const SHORTCUTS: Record<Lang, [string, string][]> = {
     ['R', 'Rotate (selected symbol or while placing)'],
     ['Arrows (+ Shift)', 'Move the selection (grid step ×5)'],
     ['Ctrl + A / Ctrl + D', 'Select all / duplicate'],
+    ['Ctrl + G / Ctrl + Shift + G', 'Group / ungroup the selection'],
     ['Ctrl + C / Ctrl + V', 'Copy / paste'],
     ['Ctrl + Z / Ctrl + Y', 'Undo / redo'],
     ['Del', 'Delete the selection'],
@@ -491,9 +493,21 @@ function Editor() {
     setSel([])
   }, [sel, commit])
 
+  /** regroupe les symboles sélectionnés (ils se sélectionnent et se déplacent ensemble) ; dégroupe si `on` est faux */
+  const groupSel = (on: boolean) => {
+    const g = uid()
+    commit((d) => ({ ...d, symbols: d.symbols.map((s) => (sel.includes(s.id) ? { ...s, group: on ? g : undefined } : s)) }))
+  }
+  const lockSel = (on: boolean) => commit((d) => ({ ...d, symbols: d.symbols.map((s) => (sel.includes(s.id) ? { ...s, locked: on || undefined } : s)) }))
+
   const rotateSel = useCallback(() => {
     if (!sel.length) return
-    commit((d) => ({ ...d, symbols: d.symbols.map((s) => (sel.includes(s.id) ? { ...s, rot: (((s.rot + 90) % 360) as PlacedSymbol['rot']) } : s)) }))
+    commit((d) => ({
+      ...d,
+      symbols: d.symbols.map((s) => (sel.includes(s.id) ? { ...s, rot: (((s.rot + 90) % 360) as PlacedSymbol['rot']) } : s)),
+      ...(d.shapes ? { shapes: d.shapes.map((s) => (sel.includes(s.id) ? { ...s, rot: ((s.rot ?? 0) + 90) % 360 || undefined } : s)) } : {}),
+      ...(d.notes ? { notes: d.notes.map((n) => (sel.includes(n.id) ? { ...n, rot: ((n.rot ?? 0) + 90) % 360 || undefined } : n)) } : {}),
+    }))
   }, [sel, commit])
 
   const copySel = useCallback(() => {
@@ -650,6 +664,7 @@ function Editor() {
       else if (e.key === 'ArrowUp') { e.preventDefault(); nudge(0, -step) }
       else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(0, step) }
       else if (ctrl && k === 'a') { e.preventDefault(); setSel([...doc.symbols.map((s) => s.id), ...doc.wires.map((w) => w.id)]) }
+      else if (ctrl && k === 'g') { e.preventDefault(); groupSel(!e.shiftKey) }
       else if (ctrl && k === 'd') { e.preventDefault(); duplicate() }
       else if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
       else if (ctrl && k === 'y') { e.preventDefault(); redo() }
@@ -1126,6 +1141,10 @@ function Editor() {
                 <button className="keep" title={t('delete')} aria-label={t('delete')} onClick={() => storeBlocks(blocks.filter((x) => x.id !== blk.id))}>×</button>
               </div>
             ))}
+            <p className="menu-title">{t('organize')}</p>
+            <button disabled={sel.length < 2} onClick={() => groupSel(true)}><span>{t('group')}</span><kbd>Ctrl+G</kbd></button>
+            <button disabled={!doc.symbols.some((s) => sel.includes(s.id) && s.group)} onClick={() => groupSel(false)}><span>{t('ungroup')}</span><kbd>Ctrl+Maj+G</kbd></button>
+            <button disabled={!sel.length} onClick={() => lockSel(!doc.symbols.some((s) => sel.includes(s.id) && s.locked))}>{doc.symbols.some((s) => sel.includes(s.id) && s.locked) ? t('unlock') : t('lock')}</button>
             <p className="menu-title">{t('shapes')}</p>
             <button onClick={() => startTool('rect', { stroke: 'solid' })}>▭ {t('shapeRect')}</button>
             <button onClick={() => startTool('rect', { stroke: 'dashed', width: 1.2 })}>▭ {t('shapeRectDashed')}</button>
@@ -1392,6 +1411,7 @@ function Editor() {
                 </select>
               </label>
             )}
+            <label data-tip={t('helpRotation')}>{t('rotation')}{tip('helpRotation')}<input type="number" step={15} value={selShape.rot ?? 0} onChange={(e) => patchShape({ rot: ((Number(e.target.value) % 360) + 360) % 360 || undefined })} /></label>
             <p className="muted small">{t(selShape.kind === 'image' ? 'imageHelp' : 'shapeHelp')}</p>
           </div>
         ) : selNote ? (
@@ -1412,6 +1432,7 @@ function Editor() {
               <button className={selNote.bold ? 'on' : ''} onClick={() => patchNote({ bold: !selNote.bold })}><b>B</b></button>
               <button className={selNote.italic ? 'on' : ''} onClick={() => patchNote({ italic: !selNote.italic })}><i>I</i></button>
             </div>
+            <label data-tip={t('helpRotation')}>{t('rotation')}{tip('helpRotation')}<input type="number" step={15} value={selNote.rot ?? 0} onChange={(e) => patchNote({ rot: ((Number(e.target.value) % 360) + 360) % 360 || undefined })} /></label>
           </div>
         ) : selWire ? (
           <div className="form" onFocus={checkpoint}>

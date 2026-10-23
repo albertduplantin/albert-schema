@@ -15,7 +15,16 @@ const source = (id: string, pot: string, text: string, fr: string, en: string, d
   }
 }
 
+/** Renvoi de feuille : deux renvois de même repère (sur la même feuille ou sur deux feuilles) sont le même conducteur. */
+const sheetLink: SymbolDef = {
+  id: 'sim-ref', domain: 'electrical', prefix: 'REF', name: { fr: 'Renvoi de feuille (suite du schéma)', en: 'Sheet link (continuation)' }, std: 'ISO 7200 / IEC 61082', w: 20, h: 20,
+  svg: '<path d="M10 0V6"/><path d="M0 6H20V15L10 20L0 15Z"/>',
+  ports: [{ id: 'a', x: 10, y: 0, dir: 'up' }],
+  cat: 'sim', group: null, score: 91, top: true, decor: false,
+}
+
 export const simSources: SymbolDef[] = [
+  sheetLink,
   source('sim-l1', 'L1', 'L1', 'Phase L1 (simulation)', 'Phase L1 (simulation)', true),
   source('sim-l2', 'L2', 'L2', 'Phase L2 (simulation)', 'Phase L2 (simulation)', true),
   source('sim-l3', 'L3', 'L3', 'Phase L3 (simulation)', 'Phase L3 (simulation)', true),

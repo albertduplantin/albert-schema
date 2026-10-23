@@ -5,7 +5,7 @@ import { autoConnect } from './splice'
 import { fontCss } from './fonts'
 import InstrumentView from './InstrumentView'
 import { jawPoint, pickAt, probesOf, readCurrent, readVoltage, stepRange, type PickContext } from './instruments'
-import { ShapeView, arcPath, dashArray, insideOf, polyPoints, resizeShape, shapeBox, shapeHandles, snapTargets, snapTo, straighten } from './shapes'
+import { ShapeView, arcPath, dashArray, insideOf, polyPoints, resizeRotated, shapeBox, shapeHandles, snapTargets, snapTo, straighten } from './shapes'
 import type { Doc, Instrument, Lang, PlacedSymbol, PortRef, Shape } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
@@ -205,6 +205,12 @@ export default function Canvas(p: Props) {
         rows2.push(`${kind} ${nums.join(' ')} · ${zone(k)}`)
       }
       out[c.id] = rows2.sort()
+    }
+    // renvois de feuille : pour chaque renvoi, où se poursuit le conducteur (feuille et zone)
+    for (const r of everyone) {
+      if (r.defId !== 'sim-ref' || !r.label.trim()) continue
+      const others = everyone.filter((x) => x.defId === 'sim-ref' && x.id !== r.id && x.label.trim().toUpperCase() === r.label.trim().toUpperCase())
+      out[r.id] = others.length ? others.map((o) => `→ ${zone(o)}`) : ['→ ?']
     }
     // renvoi inverse : près de chaque contact, la bobine qui le commande
     for (const k of everyone) {
@@ -457,11 +463,15 @@ export default function Canvas(p: Props) {
     if (symEl) {
       const id = symEl.getAttribute('data-sym')!
       let ids = sel
-      if (e.shiftKey) ids = sel.includes(id) ? sel.filter((s) => s !== id) : [...sel, id]
-      else if (!sel.includes(id)) ids = [id]
+      const withGroup = (list: string[]) => {
+        const groups = new Set(doc.symbols.filter((s) => list.includes(s.id) && s.group).map((s) => s.group))
+        return groups.size ? Array.from(new Set([...list, ...doc.symbols.filter((s) => s.group && groups.has(s.group)).map((s) => s.id)])) : list
+      }
+      if (e.shiftKey) ids = sel.includes(id) ? sel.filter((s) => s !== id) : withGroup([...sel, id])
+      else if (!sel.includes(id)) ids = withGroup([id])
       p.setSel(ids)
       const orig: Record<string, { x: number; y: number }> = {}
-      for (const s of doc.symbols) if (ids.includes(s.id)) orig[s.id] = { x: s.x, y: s.y }
+      for (const s of doc.symbols) if (ids.includes(s.id) && !s.locked) orig[s.id] = { x: s.x, y: s.y }
       const vias: Record<string, Pt[]> = {}
       for (const w of doc.wires) if (w.via?.length && orig[w.from.symId] && orig[w.to.symId]) vias[w.id] = w.via
       const so: Record<string, { x: number; y: number }> = {}
@@ -495,7 +505,18 @@ export default function Canvas(p: Props) {
       }
       if (it.moved) {
         const moved = doc.symbols.filter((s) => it.orig[s.id]).map((s) => ({ ...s, x: it.orig[s.id].x + dx, y: it.orig[s.id].y + dy }))
-        setGuides(alignGuides(moved, doc.symbols.filter((s) => !it.orig[s.id])))
+        const g = alignGuides(moved, doc.symbols.filter((s) => !it.orig[s.id]))
+        // formes déplacées : leurs bords et leur centre s'alignent sur les bords et centres des symboles et des autres formes
+        const movedShapes = (doc.shapes ?? []).filter((s) => it.so[s.id]).map((s) => ({ ...s, x: it.so[s.id].x + dx, y: it.so[s.id].y + dy }))
+        if (movedShapes.length) {
+          const tg = snapTargets(doc.symbols.filter((s) => !it.orig[s.id]), (doc.shapes ?? []).filter((s) => !it.so[s.id]))
+          for (const s of movedShapes) {
+            const b = shapeBox(s)
+            for (const x of [b.x1, (b.x1 + b.x2) / 2, b.x2]) if (tg.xs.includes(x)) g.v.push(x)
+            for (const y of [b.y1, (b.y1 + b.y2) / 2, b.y2]) if (tg.ys.includes(y)) g.h.push(y)
+          }
+        }
+        setGuides({ v: [...new Set(g.v)], h: [...new Set(g.h)] })
         p.update((d) => ({
           ...d,
           symbols: d.symbols.map((s) => (it.orig[s.id] ? { ...s, x: it.orig[s.id].x + dx, y: it.orig[s.id].y + dy } : s)),
@@ -514,7 +535,7 @@ export default function Canvas(p: Props) {
       })
     } else if (it.kind === 'sresize') {
       const tg = targets(it.id)
-      const next = resizeShape(it.orig, it.code, { x: snapTo(pt.x, snap, tg.xs), y: snapTo(pt.y, snap, tg.ys) })
+      const next = resizeRotated(it.orig, it.code, { x: snapTo(pt.x, snap, tg.xs), y: snapTo(pt.y, snap, tg.ys) })
       if (!it.moved && (next.x !== it.orig.x || next.y !== it.orig.y || next.w !== it.orig.w || next.h !== it.orig.h)) { it.moved = true; p.checkpoint() }
       if (it.moved) p.update((d) => ({ ...d, shapes: (d.shapes ?? []).map((s) => (s.id === it.id ? next : s)) }))
     } else if (it.kind === 'note') {
@@ -728,7 +749,7 @@ export default function Canvas(p: Props) {
           })}
           {junctions.map((j) => <circle key={j.x + ',' + j.y} cx={j.x} cy={j.y} r={2.8} fill="currentColor" stroke="none" />)}
           {(doc.notes ?? []).map((n) => (
-            <g key={n.id}>
+            <g key={n.id} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined}>
               {n.text.split('\n').map((line, i) => (
                 <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fontFamily={fontCss(n.font)} fontWeight={n.bold ? 700 : 400} fontStyle={n.italic ? 'italic' : 'normal'} fill="currentColor" stroke="none">{line}</text>
               ))}
@@ -776,6 +797,7 @@ export default function Canvas(p: Props) {
                   )
                 })()}
                 {p.faults?.has('ovl:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚠ {p.lang === 'fr' ? 'SURCHARGE' : 'OVERLOAD'}</text>}
+                {s.locked && !p.sim && <text x={b.x2 - 6} y={b.y1 + 8} fontSize={9} stroke="none" fill="#666">🔒</text>}
                 {p.faults?.has('stuck:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚠ {p.lang === 'fr' ? 'COLLÉ' : 'STUCK'}</text>}
                 {p.faults?.has('short:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚡ {p.lang === 'fr' ? 'COURT-CIRCUIT' : 'SHORT'}</text>}
                 {p.faults?.has(s.id) && <text x={b.x2 + 2} y={b.y1 + 10} fontSize={14} fill="#e53935" stroke="none" fontWeight={700}>✕</text>}
@@ -824,7 +846,7 @@ export default function Canvas(p: Props) {
             const on = sel.includes(s.id)
             const boxed = s.kind === 'rect' || s.kind === 'ellipse' || s.kind === 'image' || s.kind === 'arc'
             return (
-              <g key={s.id} data-shape={s.id} className={'shape-hit' + (s.kind === 'image' ? ' solid' : '')}>
+              <g key={s.id} data-shape={s.id} className={'shape-hit' + (s.kind === 'image' ? ' solid' : '')} transform={s.rot ? `rotate(${s.rot} ${(b.x1 + b.x2) / 2} ${(b.y1 + b.y2) / 2})` : undefined}>
                 {s.kind === 'line'
                   ? <line x1={s.x} y1={s.y} x2={s.x + s.w} y2={s.y + s.h} />
                   : s.kind === 'ellipse'
@@ -912,7 +934,7 @@ export default function Canvas(p: Props) {
           {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')
             const w = Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
-            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={lines.length * n.size * 1.2 + 4} />
+            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={lines.length * n.size * 1.2 + 4} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined} />
           })}
           {(doc.instruments ?? []).map((ins) => {
             const simDoc = { ...doc, symbols: [...doc.symbols, ...(p.extra ?? [])] }
