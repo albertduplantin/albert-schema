@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isTerminal, stripOf, terminalRows } from './strips'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
 import type { Doc, Instrument, Note, Shape, StrokeStyle, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
 import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
@@ -72,9 +73,6 @@ function loadRecent(): string[] {
   }
 }
 
-/** Borne de bornier (X1.1, X1.2…) : le repère est celui du bornier suivi du numéro de la borne. */
-const isTerminal = (defId: string) => !!SYMBOL_MAP[defId]?.id.includes('130_terminals_terminal_strips')
-const stripOf = (label: string) => (/^(.*?)\.(\d+)$/.exec(label)?.[1] ?? label).replace(/\.$/, '')
 /** Bornier en cours : celui de la dernière borne posée ou renommée à la main (X1, puis X2 si l'on saisit X2.1…). */
 let activeStrip = ''
 export const setActiveStrip = (label: string) => { if (label.trim()) activeStrip = stripOf(label.trim()) }
@@ -1633,6 +1631,18 @@ function Editor() {
               <thead><tr><th>{t('label')}</th><th>{t('from')}</th><th>{t('to')}</th><th>{t('section')}</th></tr></thead>
               <tbody>{wireRows(all).map((r, i) => <tr key={i}><td>{r.label}</td><td>{r.from}</td><td>{r.to}</td><td>{r.section}</td></tr>)}</tbody>
             </table>
+            {(() => {
+              const rows = terminalRows(all, lang)
+              return rows.length ? (
+                <>
+                  <h3>{t('strips')}</h3>
+                  <table>
+                    <thead><tr><th>{t('strip')}</th><th>{t('terminal')}</th><th>{t('incoming')}</th><th>{t('outgoing')}</th></tr></thead>
+                    <tbody>{rows.map((r, i) => <tr key={i}><td>{r.strip}</td><td>{r.terminal}</td><td>{r.inWires.join(' ; ')}</td><td>{r.outWires.join(' ; ')}</td></tr>)}</tbody>
+                  </table>
+                </>
+              ) : null
+            })()}
             <div className="actions">
               <button onClick={() => exportCsv(all, lang)}>{t('csv')}</button>
               <button onClick={() => setShowBom(false)}>{t('close')}</button>

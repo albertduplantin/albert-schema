@@ -1,6 +1,7 @@
 import type { Doc, Lang } from './types'
 import { PAPER_SIZE, UNIT_MM } from './geometry'
 import { SYMBOL_MAP } from './symbols'
+import { terminalRows } from './strips'
 
 function download(name: string, blob: Blob) {
   const a = document.createElement('a')
@@ -103,5 +104,11 @@ export function exportCsv(doc: Doc, lang: Lang) {
   lines.push('')
   lines.push(['Wire', 'From', 'To', 'Section', 'Color'].map(csvCell).join(';'))
   for (const r of wireRows(doc)) lines.push([r.label, r.from, r.to, r.section, r.color].map(csvCell).join(';'))
+  const terms = terminalRows(doc, lang)
+  if (terms.length) {
+    lines.push('')
+    lines.push(['Strip', 'Terminal', 'Incoming', 'Outgoing'].map(csvCell).join(';'))
+    for (const r of terms) lines.push([r.strip, r.terminal, r.inWires.join(' | '), r.outWires.join(' | ')].map(csvCell).join(';'))
+  }
   download(fileBase(doc) + '.csv', new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
 }
