@@ -515,5 +515,14 @@ function rig(doc: any) {
   check('propositions appliquées : plus aucune proposition', checkDoc(m, SYMBOL_MAP, 'fr').filter((i: any) => i.fix).length, 0)
   check('… et aucune erreur de caractéristiques', checkDoc(m, SYMBOL_MAP, 'fr').filter((i: any) => i.level === 'error').length, 0)
 }
+// ── tous les disjoncteurs (y compris les disjoncteurs-moteurs GV) permettent de choisir la courbe de déclenchement
+{
+  const { fieldsFor, kindOf } = await import(ROOT + '/src/ratings.ts')
+  const brk = lib.symbols.filter((s: any) => /11_circuit_breakers|12_magneto|50_residual_current_circuit_breaker/.test(s.id) && s.sim && /^Disjoncteur/i.test(s.name.fr))
+  const sans = brk.filter((s: any) => !fieldsFor(SYMBOL_MAP[s.id]).some((f: any) => f.key === 'curve' && f.list?.includes('D')))
+  check(`disjoncteurs (${brk.length}) : tous proposent la courbe B / C / D…`, sans.map((s: any) => s.name.fr + ' ' + kindOf(SYMBOL_MAP[s.id])).join(' | '), '')
+  const gv = lib.symbols.find((s: any) => s.name.fr === 'Disjoncteur Magnéto-thermique GV 2P')
+  check('disjoncteur GV 2P : calibre, courbe, plage, réglage, pouvoir de coupure', fieldsFor(SYMBOL_MAP[gv.id]).map((f: any) => f.key).join(), 'in,curve,min,max,set,icu')
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

@@ -215,6 +215,8 @@ function Editor() {
   const toastTimer = useRef<number>()
   const doc = h.doc
   const t = (k: Key) => tr(lang, k)
+  /** pastille « ? » : l'explication s'affiche au survol (et se lit avec un lecteur d'écran) */
+  const tip = (k: Key) => <span className="tip" title={t(k)} aria-label={t(k)}>?</span>
 
   // ── simulation
   const [wiringOn, setWiringOn] = useState(false)
@@ -726,8 +728,8 @@ function Editor() {
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
-            <label>{t('label')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
-            <label>{t('description')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
+            <label title={t('helpLabel')}>{t('label')}{tip('helpLabel')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
+            <label title={t('helpDesc')}>{t('description')}{tip('helpDesc')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
             {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
               const def = SYMBOL_MAP[selSym.defId]
               const info = transformerInfo(selSym, def)
@@ -735,12 +737,12 @@ function Editor() {
               const sec = def.sim?.k === 'transformer' ? def.sim.secondary.length : 0
               return (
                 <>
-                  <label>{t('voltsPrimary')}
+                  <label title={t('helpVoltsPrimary')}>{t('voltsPrimary')}{tip('helpVoltsPrimary')}
                     <input type="number" min={0} list="volts-list-p" placeholder="230" value={selSym.voltsPrimary ?? ''}
                       onChange={(e) => patchSym({ voltsPrimary: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                     <datalist id="volts-list-p">{[230, 400, 690].map((v) => <option key={v} value={v} />)}</datalist>
                   </label>
-                  <label>{t('power')}
+                  <label title={t('helpPower')}>{t('power')}{tip('helpPower')}
                     <input type="number" min={0} list="power-list" placeholder="100" value={selSym.power ?? ''}
                       onChange={(e) => patchSym({ power: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                     <datalist id="power-list">{[40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500].map((v) => <option key={v} value={v} />)}</datalist>
@@ -764,10 +766,10 @@ function Editor() {
               }
               const mc = kind === 'motor' ? motorCurrent(selSym, def) : undefined
               return (
-                <fieldset className="ratings">
-                  <legend>{t('ratings')}</legend>
+                <fieldset className="ratings" title={t('helpRatings')}>
+                  <legend>{t('ratings')} {tip('helpRatings')}</legend>
                   {fieldsFor(def).map((f) => (
-                    <label key={f.key}>{fieldLabel(f, lang)}
+                    <label key={f.key} title={f.help[lang]}>{fieldLabel(f, lang)}<span className="tip" title={f.help[lang]} aria-label={f.help[lang]}>?</span>
                       <input type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} list={f.list ? `rl-${kind}-${f.key}` : undefined}
                         placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
                         value={String(selSym.rated?.[f.key] ?? '')} onChange={(e) => setR(f.key, e.target.value, f.text)} />
@@ -780,14 +782,14 @@ function Editor() {
               )
             })()}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (
-              <label>{SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('voltsSecondary') : t('voltsRated')}
+              <label title={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('helpVoltsSecondary') : t('helpVoltsRated')}>{SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('voltsSecondary') : t('voltsRated')}{tip(SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? 'helpVoltsSecondary' : 'helpVoltsRated')}
                 <input type="number" min={0} list="volts-list" placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
                   value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                 <datalist id="volts-list">{[12, 24, 48, 110, 230, 400].map((v) => <option key={v} value={v} />)}</datalist>
               </label>
             )}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return (m?.k === 'coil' && !!m.timer) || (m?.k === 'switch' && !!m.delay) })() && (
-              <label>{t('delay')}
+              <label title={t('helpDelay')}>{t('delay')}{tip('helpDelay')}
                 <input type="number" min={0} step={0.5} value={selSym.delay ?? DEFAULT_DELAY_S} onChange={(e) => patchSym({ delay: Math.max(0, Number(e.target.value) || 0) })} />
               </label>
             )}
@@ -811,7 +813,7 @@ function Editor() {
               return (
                 <div className="terms">
                   <div className="terms-head">
-                    <span>{t('terminals')}</span>
+                    <span title={t('helpTerms')}>{t('terminals')}{tip('helpTerms')}</span>
                     {selSym.terms && Object.keys(selSym.terms).length > 0 && <button className="mini" title={t('termResetHelp')} onClick={() => store(undefined)}>{t('termReset')}</button>}
                   </div>
                   {groups.map((g, gi) => (
@@ -838,7 +840,7 @@ function Editor() {
               )
             })()}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'switch' && m.ctl === 'coil' })() && (
-              <label>{t('drivenBy')}
+              <label title={t('helpDrivenBy')}>{t('drivenBy')}{tip('helpDrivenBy')}
                 <select value={coilLabels.includes(selSym.label) ? selSym.label : ''} onChange={(e) => e.target.value && patchSym({ label: e.target.value })}>
                   <option value="">—</option>
                   {coilLabels.map((l) => <option key={l} value={l}>{l}</option>)}
@@ -1141,8 +1143,8 @@ function Editor() {
         ) : selWire ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{t('wire')}</div>
-            <label>{t('label')}<input value={selWire.label} onChange={(e) => patchWire({ label: e.target.value })} /></label>
-            <label>{t('section')}<input value={selWire.section} onChange={(e) => patchWire({ section: e.target.value })} /></label>
+            <label title={t('helpWireLabel')}>{t('label')}{tip('helpWireLabel')}<input value={selWire.label} onChange={(e) => patchWire({ label: e.target.value })} /></label>
+            <label title={t('helpWireSection')}>{t('section')} (mm²){tip('helpWireSection')}<input value={selWire.section} onChange={(e) => patchWire({ section: e.target.value })} /></label>
             {selWire.via?.length ? (
               <button onClick={() => commit((d) => ({ ...d, wires: d.wires.map((w) => (w.id === selWire.id ? { ...w, via: undefined } : w)) }))}>{t('autoRoute')}</button>
             ) : (
@@ -1161,13 +1163,13 @@ function Editor() {
 
         <h3>{t('sheet')}</h3>
         <div className="form" onFocus={checkpoint}>
-          <label>{t('paper')}
+          <label title={t('helpPaper')}>{t('paper')}{tip('helpPaper')}
             <select value={doc.paper} onChange={(e) => commit((d) => ({ ...d, paper: e.target.value as Paper }))}>
               {['A4', 'A3', 'A2', 'A1'].map((p) => <option key={p}>{p}</option>)}
             </select>
           </label>
           {TB_FIELDS.map((k) => (
-            <label key={k}>{t(k === 'sheet' ? 'sheetNo' : k)}<input value={doc.title[k] ?? ''} onChange={(e) => patchTitle(k, e.target.value)} /></label>
+            <label key={k} title={t(('tbH_' + k) as Key)}>{t(k === 'sheet' ? 'sheetNo' : k)}{tip(('tbH_' + k) as Key)}<input value={doc.title[k] ?? ''} onChange={(e) => patchTitle(k, e.target.value)} /></label>
           ))}
           <button onClick={() => setShowTitleBlock(true)}>{t('tbEdit')}</button>
         </div>
@@ -1313,7 +1315,7 @@ function Editor() {
             <p className="muted">{t('tbHelp')}</p>
             <div className="form">
               {TB_FIELDS.map((k) => (
-                <label key={k}>{t(k === 'sheet' ? 'sheetNo' : k)}<input autoFocus={k === 'title'} value={doc.title[k] ?? ''} onChange={(e) => patchTitle(k, e.target.value)} /></label>
+                <label key={k} title={t(('tbH_' + k) as Key)}>{t(k === 'sheet' ? 'sheetNo' : k)}{tip(('tbH_' + k) as Key)}<input autoFocus={k === 'title'} value={doc.title[k] ?? ''} onChange={(e) => patchTitle(k, e.target.value)} /></label>
               ))}
             </div>
             <p className="muted small">{t('tbRemember')}</p>

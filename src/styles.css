@@ -385,3 +385,9 @@ textarea.inlineedit { resize: both; }
 .namestyle .row button { width: 36px; }
 .form .row { display: flex; gap: 6px; }
 .form .row button { width: 40px; }
+
+.tip { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin-left: 5px; border: 1px solid var(--ui-muted); border-radius: 50%; font-family: var(--font-mono); font-size: 9px; line-height: 1; color: var(--ui-muted); cursor: help; vertical-align: 1px; user-select: none; }
+.tip:hover { background: var(--ui-text); color: var(--ui-panel); border-color: var(--ui-text); }
+
+.form label { position: relative; }
+.form label > .tip { position: absolute; right: 0; top: 0; margin: 0; }
