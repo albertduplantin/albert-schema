@@ -354,3 +354,10 @@ a, .dialog a { color: var(--lien); }
 .chrono-head button.icon { width: 26px; }
 .tb-hit { fill: transparent; stroke: none; }
 .tb-hit:hover { fill: rgba(147,164,21,.10); }
+
+.issues li.info button { color: var(--ui-muted); }
+.issues .why { margin: 2px 0 6px 22px; font-size: 11.5px; color: var(--ui-muted); }
+
+.pill { font-size: 10px; letter-spacing: 0; }
+.pill.err { color: #ff6b7f; }
+.pill.warn { color: #ffd77a; }

@@ -7,7 +7,8 @@ import Canvas from './Canvas'
 import Feedback from './Feedback'
 import { bomRows, exportCsv, exportPng, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
 import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
-import { duplicateTerms, editTerm, effectiveTerms, ensureUnique, othersTerms, termGroups } from './terminals'
+import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
+import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
@@ -268,6 +269,18 @@ function Editor() {
   }, [simMode, clockUi.paused, clockUi.speed]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showCheck, setShowCheck] = useState(false)
   const issues = useMemo(() => (showCheck ? checkDoc(all, SYMBOL_MAP, lang) : []), [showCheck, all, lang])
+  // pastille du bouton Contrôle : nombre d'erreurs et d'avertissements, recalculé un instant après la dernière modification
+  const [issueCount, setIssueCount] = useState({ e: 0, w: 0 })
+  useEffect(() => {
+    if (!all.symbols.length) { setIssueCount({ e: 0, w: 0 }); return }
+    const id = window.setTimeout(() => {
+      try {
+        const l = checkDoc(all, SYMBOL_MAP, lang)
+        setIssueCount({ e: l.filter((i) => i.level === 'error').length, w: l.filter((i) => i.level === 'warn').length })
+      } catch { /* schéma incomplet */ }
+    }, 600)
+    return () => window.clearTimeout(id)
+  }, [all, lang])
   const startSim = () => {
     coilMemory.current = {}
     clock.current = { v: Date.now(), r: Date.now(), speed: clock.current.speed, paused: false }
@@ -705,7 +718,7 @@ function Editor() {
           <button onClick={autoLabel}>{t('autoLabel')}</button>
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
-          <button onClick={() => setShowCheck(true)}>{t('check')}</button>
+          <button onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
           <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
           <button onClick={addNote} title={t('note')}>T {t('note')}</button>
           <details className="menu">
@@ -897,6 +910,29 @@ function Editor() {
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
             <label>{t('label')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
             <label>{t('description')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
+            {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
+              const def = SYMBOL_MAP[selSym.defId]
+              const info = transformerInfo(selSym, def)
+              const topo = transformerTopology(all, SYMBOL_MAP)
+              const sec = def.sim?.k === 'transformer' ? def.sim.secondary.length : 0
+              return (
+                <>
+                  <label>{t('voltsPrimary')}
+                    <input type="number" min={0} list="volts-list-p" placeholder="230" value={selSym.voltsPrimary ?? ''}
+                      onChange={(e) => patchSym({ voltsPrimary: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
+                    <datalist id="volts-list-p">{[230, 400, 690].map((v) => <option key={v} value={v} />)}</datalist>
+                  </label>
+                  <label>{t('power')}
+                    <input type="number" min={0} list="power-list" placeholder="100" value={selSym.power ?? ''}
+                      onChange={(e) => patchSym({ power: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
+                    <datalist id="power-list">{[40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500].map((v) => <option key={v} value={v} />)}</datalist>
+                  </label>
+                  {describeInfo(info, lang).map((line, i) => <p key={i} className="muted small">⚡ {line}</p>)}
+                  {!selSym.power && <p className="muted small">💡 {t('trafoPowerHint')}</p>}
+                  {sec === 2 && <p className="muted small">{topo.earthed[selSym.id] ? '⏚ ' + t('trafoEarthed') : '◌ ' + t('trafoIsolated')}</p>}
+                </>
+              )
+            })()}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (
               <label>{SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('voltsSecondary') : t('voltsRated')}
                 <input type="number" min={0} list="volts-list" placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
@@ -914,8 +950,8 @@ function Editor() {
               const groups = termGroups(def)
               if (!groups.length || def.ports.length > 16) return null
               // repères affichés : saisie, sinon numérotation automatique (unique au sein de l'appareil)
-              const eff = effectiveTerms(all.symbols, SYMBOL_MAP)
-              const defaults = effectiveTerms(all.symbols, SYMBOL_MAP, selSym.id)[selSym.id] ?? {}
+              const eff = termsWithTopology(all, SYMBOL_MAP)
+              const defaults = termsWithTopology(all, SYMBOL_MAP, selSym.id)[selSym.id] ?? {}
               const dups = duplicateTerms(all.symbols, eff)
               const others = othersTerms(all.symbols, eff, selSym.id)
               const title = (g: (typeof groups)[number], n: number) =>
@@ -1137,12 +1173,14 @@ function Editor() {
             {issues.length === 0 ? <p>✓ {t('checkOk')}</p> : (
               <>
                 <p className="muted">{t('checkHelp')}</p>
+                <p className="muted small">{t('checkDisclaimer')}</p>
                 <ul className="issues">
                   {issues.map((i, n) => (
                     <li key={n} className={i.level}>
                       <button className="link" disabled={!i.symId} onClick={() => { if (i.symId) { setSel([i.symId]); setShowCheck(false) } }}>
-                        {i.level === 'error' ? '⛔' : '⚠'} {i.text}
+                        {i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : '💡'} {i.text}
                       </button>
+                      {i.why && <p className="why">{i.why}</p>}
                     </li>
                   ))}
                 </ul>

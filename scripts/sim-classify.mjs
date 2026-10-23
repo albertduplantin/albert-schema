@@ -73,6 +73,9 @@ export function classify({ id, nameFr, nameEn, ports }) {
   const has = (re) => re.test(path)
   const portIds = ports.map((p) => p.id)
 
+  // ── terre : repère « PE » (liaison équipotentielle ; ne crée pas de court-circuit avec le neutre)
+  if (has(/110_network_supplies\/(terre|masse|ground1)(.elmt)?$/)) return { k: 'source', pot: Object.fromEntries(ports.map((p) => [p.id, 'PE'])) }
+
   // ── sources de tension (réseau)
   if (has(/110_network_supplies/)) {
     const pot = {}

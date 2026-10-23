@@ -38,6 +38,7 @@ export const motorStarter = (base: Doc): Doc =>
       ['q', Q('200_fuses_protective_gears/11_circuit_breakers/disjonct-m_3f'), 120, 100, 'Q1'],
       ['k', Q('310_relays_contactors_contacts/02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 120, 200, 'KM1'],
       ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 120, 320, 'M1'],
+      ['pem', Q('110_network_supplies/terre'), 200, 390, ''],
       ['lc', 'sim-l', 400, 30],
       ['s1', Q('380_signaling_operating/20_push_buttons/poussoir_nf'), 400, 100, 'S1'],
       ['s2', Q('380_signaling_operating/20_push_buttons/poussoir'), 400, 200, 'S2'],
@@ -49,7 +50,7 @@ export const motorStarter = (base: Doc): Doc =>
     [
       ['l1', 'a', 'q', 't5'], ['l2', 'a', 'q', 't4'], ['l3', 'a', 'q', 't3'],
       ['q', 't1', 'k', 't0'], ['q', 't0', 'k', 't2'], ['q', 't2', 'k', 't4'],
-      ['k', 't1', 'm', 't0'], ['k', 't3', 'm', 't2'], ['k', 't5', 'm', 't1'],
+      ['k', 't1', 'm', 't0'], ['k', 't3', 'm', 't2'], ['k', 't5', 'm', 't1'], ['m', 't3', 'pem', 't0'],
       ['lc', 'a', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'ka', 't0'],
       ['s2', 't1', 'c', 't0'], ['ka', 't1', 'c', 't0'], ['c', 't1', 'n', 'a'],
       ['h', 't0', 'c', 't0'], ['h', 't1', 'n', 'a'],
@@ -150,6 +151,7 @@ export const reversingStarter = (base: Doc): Doc =>
       ['k1', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 120, 220, 'KM1'],
       ['k2', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 240, 220, 'KM2'],
       ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 120, 330, 'M1'],
+      ['pem', Q('110_network_supplies/terre'), 200, 400, ''],
       ['lc', 'sim-l', 400, 30],
       ['s1', L('20_push_buttons/poussoir_nf'), 400, 100, 'S1'],
       ['s2', L('20_push_buttons/poussoir'), 400, 200, 'S2'],
@@ -168,7 +170,7 @@ export const reversingStarter = (base: Doc): Doc =>
       ['q', 't1', 'k1', 't0'], ['q', 't0', 'k1', 't2'], ['q', 't2', 'k1', 't4'],
       ['q', 't1', 'k2', 't0'], ['q', 't0', 'k2', 't2'], ['q', 't2', 'k2', 't4'],
       ['k1', 't1', 'm', 't0'], ['k1', 't3', 'm', 't2'], ['k1', 't5', 'm', 't1'],
-      ['k2', 't1', 'm', 't0'], ['k2', 't3', 'm', 't1'], ['k2', 't5', 'm', 't2'],
+      ['k2', 't1', 'm', 't0'], ['k2', 't3', 'm', 't1'], ['k2', 't5', 'm', 't2'], ['m', 't3', 'pem', 't0'],
       ['lc', 'a', 's1', 't0'],
       ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'], ['s2', 't1', 'i2', 't0'], ['a1', 't1', 'i2', 't0'], ['i2', 't1', 'c1', 't0'], ['c1', 't1', 'n1', 'a'],
       ['s1', 't1', 's3', 't0'], ['s1', 't1', 'a2', 't0'], ['s3', 't1', 'i1', 't0'], ['a2', 't1', 'i1', 't0'], ['i1', 't1', 'c2', 't0'], ['c2', 't1', 'n2', 'a'],
@@ -178,29 +180,41 @@ export const reversingStarter = (base: Doc): Doc =>
  * Départ moteur dont la commande est alimentée en 24 V par un transformateur de commande T1 (230 V entre L1 et L2).
  * Le secondaire de T1 alimente S1 (arrêt) → S2 (marche, shuntée par KM1) → bobine KM1 24 V et voyant H1 24 V.
  */
-export const motorStarterTransformer = (base: Doc): Doc =>
-  build(base,
+export const motorStarterTransformer = (base: Doc): Doc => {
+  const d = build(base,
     [
       ['l1', 'sim-l1', 120, 30], ['l2', 'sim-l2', 140, 30], ['l3', 'sim-l3', 160, 30],
       ['q', Q('200_fuses_protective_gears/11_circuit_breakers/disjonct-m_3f'), 120, 100, 'Q1'],
       ['k', R('02_contacts_cross_referencing/02_power_contacts/com_puiss4'), 120, 200, 'KM1'],
       ['m', Q('391_consumers_actuators/10_engines/moteur_tri_2'), 120, 320, 'M1'],
-      ['t', Q('330_transformers_power_supplies/10_transformers/transformator_1f_2'), 410, 40, 'T1', undefined, 24],
-      ['s1', L('20_push_buttons/poussoir_nf'), 400, 130, 'S1'],
-      ['s2', L('20_push_buttons/poussoir'), 400, 230, 'S2'],
-      ['a1', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple'), 470, 220, 'KM1'],
-      ['c', R('01_coils/bobine3'), 390, 360, 'KM1', undefined, 24],
-      ['h', L('11_optical_signaling/lampe2'), 550, 340, 'H1', undefined, 24],
+      ['pem', Q('110_network_supplies/terre'), 200, 390, ''],
+      // transformateur de commande 400 V / 24 V, 100 VA : fusibles au primaire (2 pôles) et au secondaire (phase), secondaire relié à la terre
+      ['f1', Q('200_fuses_protective_gears/10_fuses/pojistka2p'), 280, -10, 'F1'],
+      ['t', Q('330_transformers_power_supplies/10_transformers/transformator_1f_2'), 410, 60, 'T1', undefined, 24],
+      ['f2', Q('200_fuses_protective_gears/10_fuses/pojistka1p'), 400, 105, 'F2'],
+      ['pe', Q('110_network_supplies/terre'), 450, 120, ''],
+      ['s1', L('20_push_buttons/poussoir_nf'), 400, 170, 'S1'],
+      ['s2', L('20_push_buttons/poussoir'), 400, 260, 'S2'],
+      ['a1', R('02_contacts_cross_referencing/01_auxiliary_contacts/con_simple'), 470, 250, 'KM1'],
+      ['c', R('01_coils/bobine3'), 390, 390, 'KM1', undefined, 24],
+      ['h', L('11_optical_signaling/lampe2'), 550, 370, 'H1', undefined, 24],
     ],
     [
       ['l1', 'a', 'q', 't5'], ['l2', 'a', 'q', 't4'], ['l3', 'a', 'q', 't3'],
       ['q', 't1', 'k', 't0'], ['q', 't0', 'k', 't2'], ['q', 't2', 'k', 't4'],
-      ['k', 't1', 'm', 't0'], ['k', 't3', 'm', 't2'], ['k', 't5', 'm', 't1'],
-      ['l1', 'a', 't', 't0'], ['l2', 'a', 't', 't1'],
-      ['t', 't2', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'],
+      ['k', 't1', 'm', 't0'], ['k', 't3', 'm', 't2'], ['k', 't5', 'm', 't1'], ['m', 't3', 'pem', 't0'],
+      ['l1', 'a', 'f1', 't0'], ['l2', 'a', 'f1', 't1'], ['f1', 't2', 't', 't0'], ['f1', 't3', 't', 't1'],
+      ['t', 't2', 'f2', 't0'], ['f2', 't1', 's1', 't0'], ['t', 't3', 'pe', 't0'],
+      ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'],
       ['s2', 't1', 'c', 't0'], ['a1', 't1', 'c', 't0'], ['h', 't0', 'c', 't0'],
       ['c', 't1', 't', 't3'], ['h', 't1', 't', 't3'],
     ])
+  for (const s of d.symbols) {
+    if (s.label === 'F1') s.rot = 90
+    if (s.label === 'T1') { s.voltsPrimary = 400; s.power = 100 }
+  }
+  return d
+}
 
 const AUX = '02_contacts_cross_referencing/01_auxiliary_contacts/'
 /** Colonne de commande marche/arrêt à auto-maintien (S1 NF, S2 NO, contact KM1, bobine KM1) — repère de départ pour les exemples ci-dessous. */

@@ -93,6 +93,9 @@ export interface PlacedSymbol {
   delay?: number
   /** tension nominale en volts (récepteurs) ou tension du secondaire (transformateurs) */
   volts?: number
+  /** transformateurs : tension assignée du primaire (V) et puissance (VA) */
+  voltsPrimary?: number
+  power?: number
   /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
   terms?: Record<string, string>
   /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */

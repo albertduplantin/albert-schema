@@ -1,12 +1,9 @@
 import type { Doc, Lang, SymbolDef } from './types'
 import { devKey, simulate } from './sim/engine'
 import { valveCoils } from './sim/fluid'
+import { adviseDoc, type Issue } from './advice'
 
-export interface Issue {
-  level: 'error' | 'warn'
-  text: string
-  symId?: string
-}
+export type { Issue }
 
 const S = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
 
@@ -56,5 +53,7 @@ export function checkDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang):
     }
   } catch { /* schéma incomplet : pas de verdict */ }
 
-  return out.sort((a, b) => (a.level === b.level ? 0 : a.level === 'error' ? -1 : 1))
+  out.push(...adviseDoc(doc, defs, lang))
+  const rank = { error: 0, warn: 1, info: 2 }
+  return out.sort((a, b) => rank[a.level] - rank[b.level])
 }

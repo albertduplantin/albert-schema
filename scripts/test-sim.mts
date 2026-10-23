@@ -315,5 +315,41 @@ function rig(doc: any) {
   void d2
   check('courant : S2 appuyé, des fils sont parcourus', Object.keys(r2.current).length > 0, true)
 }
+// ── transformateur : courants, protections conseillées, repères de bornes, conseils de conception
+{
+  const { transformerInfo, transformerTopology } = await import(ROOT + '/src/transformer.ts')
+  const { checkDoc } = await import(ROOT + '/src/check.ts')
+  const d = T.motorStarterTransformer(base)
+  const tr = d.symbols.find((s: any) => s.label === 'T1')
+  const info = transformerInfo(tr, SYMBOL_MAP[tr.defId])
+  check('transformateur 100 VA 400/24 V : courant primaire 0,25 A, secondaire 4,17 A', [info.in1, info.in2], [0.25, 4.17])
+  check('transformateur : protections conseillées 0,5 A (primaire) et 4 A (secondaire)', [info.prot1, info.prot2], [0.5, 4])
+  const topo = transformerTopology(d, SYMBOL_MAP)
+  const lab = topo.labels[tr.id]
+  check('transformateur : primaire repéré L1 / L2', [lab.t0, lab.t1], ['L1', 'L2'])
+  check('transformateur : secondaire relié à la terre → N + L', [topo.earthed[tr.id], lab.t3, lab.t2], [true, 'N', 'L'])
+  const errs = (doc: any) => checkDoc(doc, SYMBOL_MAP, 'fr').filter((i: any) => i.level === 'error')
+  check('conseils : l\'exemple avec transformateur protégé est sans erreur', errs(d).length, 0)
+  const noEarth: any = { ...d, symbols: d.symbols.filter((s: any) => !s.defId.includes('/terre')), wires: d.wires.filter((w: any) => { const ids = new Set(d.symbols.filter((s: any) => s.defId.includes('/terre')).map((s: any) => s.id)); return !ids.has(w.from.symId) && !ids.has(w.to.symId) }) }
+  const t2 = transformerTopology(noEarth, SYMBOL_MAP)
+  check('transformateur : secondaire isolé → L1 / L2', [t2.earthed[tr.id], t2.labels[tr.id].t2, t2.labels[tr.id].t3], [false, 'L1', 'L2'])
+  check('conseils : secondaire isolé signalé', checkDoc(noEarth, SYMBOL_MAP, 'fr').some((i: any) => /isolé de la terre/.test(i.text)), true)
+  // primaire sans fusible
+  const f1 = d.symbols.find((s: any) => s.label === 'F1')
+  const noFuse: any = { ...d, symbols: d.symbols.filter((s: any) => s.id !== f1.id), wires: [...d.wires.filter((w: any) => w.from.symId !== f1.id && w.to.symId !== f1.id), { id: 'x1', from: { symId: d.symbols.find((s: any) => s.defId === 'sim-l1').id, portId: 'a' }, to: { symId: tr.id, portId: 't0' }, label: '', color: '#000', section: '' }, { id: 'x2', from: { symId: d.symbols.find((s: any) => s.defId === 'sim-l2').id, portId: 'a' }, to: { symId: tr.id, portId: 't1' }, label: '', color: '#000', section: '' }] }
+  check('conseils : primaire de transformateur sans protection → erreur', errs(noFuse).some((i: any) => /primaire sans protection/.test(i.text)), true)
+  // moteur sans disjoncteur-moteur : ni court-circuit ni surcharge
+  const m = T.motorStarter(base)
+  const q = m.symbols.find((s: any) => s.label === 'Q1')
+  const noQ: any = { ...m, symbols: m.symbols.filter((s: any) => s.id !== q.id), wires: m.wires.filter((w: any) => w.from.symId !== q.id && w.to.symId !== q.id) }
+  // les trois phases rejoignent directement le contacteur
+  const k = m.symbols.find((s: any) => s.label === 'KM1' && s.defId.includes('com_puiss4'))
+  const src = ['sim-l1', 'sim-l2', 'sim-l3'].map((id) => m.symbols.find((s: any) => s.defId === id).id)
+  src.forEach((id: string, i: number) => noQ.wires.push({ id: 'p' + i, from: { symId: id, portId: 'a' }, to: { symId: k.id, portId: ['t0', 't2', 't4'][i] }, label: '', color: '#000', section: '' }))
+  const advice = checkDoc(noQ, SYMBOL_MAP, 'fr')
+  check('conseils : moteur sans protection contre les courts-circuits → erreur', advice.some((i: any) => i.level === 'error' && /courts-circuits/.test(i.text)), true)
+  check('conseils : moteur sans protection contre les surcharges signalé avec sa conséquence', advice.some((i: any) => /surcharges/.test(i.text) && /brûler/.test(i.why ?? '')), true)
+  check('conseils : le départ moteur protégé n\'a aucune erreur', errs(m).length, 0)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

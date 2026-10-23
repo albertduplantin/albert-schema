@@ -213,8 +213,10 @@ function solve(x: Ctx) {
     portsOfRoot.get(r)!.push(k)
   }
   // Un secondaire de transformateur relié à un potentiel du réseau (terre, neutre…) prend ce potentiel : pas de court-circuit.
-  const resolve = (set: Set<string> | undefined): { pot: string | null; conflict: boolean } => {
-    if (!set || set.size === 0) return { pot: null, conflict: false }
+  const resolve = (full: Set<string> | undefined): { pot: string | null; conflict: boolean } => {
+    if (!full || full.size === 0) return { pot: null, conflict: false }
+    // la terre (PE) ne s'oppose à aucun autre potentiel : elle ne compte que si elle est seule
+    const set = full.size > 1 && full.has('PE') ? new Set([...full].filter((v) => v !== 'PE')) : full
     const real = [...set].filter((v) => !v.startsWith('~'))
     if (real.length === 1) return { pot: real[0], conflict: false }
     if (real.length > 1) return { pot: null, conflict: true }
@@ -476,7 +478,17 @@ export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: 
   const energized = new Set(out.energized)
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
-    if (m?.k === 'transformer' && out.trafoOn.has(s.id)) energized.add(s.id)
+    if (m?.k === 'transformer' && out.trafoOn.has(s.id)) {
+      energized.add(s.id)
+      // tension appliquée au primaire, comparée à la tension primaire assignée
+      const pp = m.primary.map((p) => out.potOf(s.id, p))
+      let vp: number | undefined
+      for (let i = 0; i < pp.length; i++) for (let j = i + 1; j < pp.length; j++) vp = Math.max(vp ?? 0, voltBetween(pp[i], pp[j], doc, defs) ?? 0) || vp
+      if (vp !== undefined) {
+        volts[s.id] = vp
+        if (s.voltsPrimary && (vp < s.voltsPrimary * 0.85 || vp > s.voltsPrimary * 1.15)) badVoltage[s.id] = { applied: vp, rated: s.voltsPrimary }
+      }
+    }
     if (!m || (m.k !== 'coil' && m.k !== 'load') || !out.energized.has(s.id)) continue
     const pots = m.ports.map((p) => out.potOf(s.id, p))
     let v: number | undefined

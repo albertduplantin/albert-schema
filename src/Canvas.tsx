@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { effectiveTerms } from './terminals'
+import { termsWithTopology } from './transformer'
 import { junctionPoints, routeAll } from './routing'
 import { autoConnect } from './splice'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
@@ -154,7 +154,7 @@ export default function Canvas(p: Props) {
   useEffect(() => { fit() }, [doc.paper])
   const symById = (id: string) => doc.symbols.find((s) => s.id === id)
   // repères de bornes affichés d'office : numérotation automatique, unique au sein d'un même appareil
-  const terms = useMemo(() => effectiveTerms([...doc.symbols, ...(p.extra ?? [])], SYMBOL_MAP), [doc.symbols, p.extra])
+  const terms = useMemo(() => termsWithTopology({ ...doc, symbols: [...doc.symbols, ...(p.extra ?? [])] }, SYMBOL_MAP), [doc.symbols, doc.wires, p.extra]) // eslint-disable-line react-hooks/exhaustive-deps
   // renvois : sous chaque bobine, la liste de ses contacts (nature, bornes, zone de la feuille), comme dans CADe SIMU
   const crossRefs = useMemo(() => {
     const out: Record<string, string[]> = {}
