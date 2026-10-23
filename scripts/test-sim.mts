@@ -599,5 +599,16 @@ function rig(doc: any) {
   check('secondaire de commande : retours bobine/voyant vers T1 → bleu clair (neutre), départ T1-F2 → rouge (phase)', [kd('KM1-T1'), kd('H1-T1'), kd('T1-F2')], ['neutral', 'neutral', 'control-ac'])
 }
 
+// ── rappel de protection du transformateur : marqué résolu quand un fusible / disjoncteur a un calibre
+{
+  const { adviseDoc } = await import(ROOT + '/src/advice.ts')
+  const t = T.motorStarterTransformer(base)
+  for (const s of t.symbols) delete s.rated
+  const lines = (d: any) => adviseDoc(d, SYMBOL_MAP, 'fr').filter((x: any) => /Courant (primaire|secondaire)/.test(x.text))
+  check('rappels de protection non résolus tant que les calibres manquent', lines(t).map((x: any) => !!x.resolved), [false, false])
+  for (const s of t.symbols) if (s.label === 'F1') s.rated = { in: 0.5, curve: 'aM' }
+  for (const s of t.symbols) if (s.label === 'F2') s.rated = { in: 4 }
+  check('rappels résolus une fois F1 et F2 calibrés', lines(t).map((x: any) => !!x.resolved), [true, true])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

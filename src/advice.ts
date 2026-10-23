@@ -9,6 +9,8 @@ export interface Issue {
   /** conséquence d'un oubli ou d'une erreur */
   why?: string
   symId?: string
+  /** conseil déjà appliqué */
+  resolved?: boolean
   /** correction proposée : valeurs à appliquer aux caractéristiques d'un appareil */
   fix?: { symId: string; rated: Ratings }
 }
@@ -358,7 +360,7 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     const info = transformerInfo(s, defs[s.defId])
     for (const d of upstream(portsOf(s, m.primary))) {
       const k = kindOf(defs[d.defId])
-      if (info.prot1 && (k === 'fuse' || k === 'breaker') && !d.rated?.in) suggest(d, { in: info.prot1, curve: k === 'fuse' ? 'aM' : 'D' }, S(lang, `${nm(d)} : calibre conseillé ${fmt(info.prot1)} A, ${k === 'fuse' ? 'type aM' : 'courbe D'} (primaire de ${nm(s)}).`, `${nm(d)}: suggested rating ${fmt(info.prot1)} A, ${k === 'fuse' ? 'aM type' : 'D curve'} (primary of ${nm(s)}).`))
+      if (info.prot1 && (k === 'fuse' || k === 'breaker' || k === 'motorBreaker') && !d.rated?.in) suggest(d, { in: info.prot1, curve: k === 'fuse' ? 'aM' : 'D' }, S(lang, `${nm(d)} : calibre conseillé ${fmt(info.prot1)} A, ${k === 'fuse' ? 'type aM' : 'courbe D'} (primaire de ${nm(s)}).`, `${nm(d)}: suggested rating ${fmt(info.prot1)} A, ${k === 'fuse' ? 'aM type' : 'D curve'} (primary of ${nm(s)}).`))
     }
     const hot0 = key(s.id, m.secondary[0])
     const seen0 = new Set([hot0])
@@ -371,7 +373,7 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
         const d = e.sym ? byId.get(e.sym) : undefined
         if (d && e.sc) {
           const k = kindOf(defs[d.defId])
-          if (info.prot2 && (k === 'fuse' || k === 'breaker') && !d.rated?.in) suggest(d, { in: info.prot2, curve: k === 'fuse' ? 'gG' : 'C' }, S(lang, `${nm(d)} : calibre conseillé ${fmt(info.prot2)} A (secondaire de ${nm(s)}).`, `${nm(d)}: suggested rating ${fmt(info.prot2)} A (secondary of ${nm(s)}).`))
+          if (info.prot2 && (k === 'fuse' || k === 'breaker' || k === 'motorBreaker') && !d.rated?.in) suggest(d, { in: info.prot2, curve: k === 'fuse' ? 'gG' : 'C' }, S(lang, `${nm(d)} : calibre conseillé ${fmt(info.prot2)} A (secondaire de ${nm(s)}).`, `${nm(d)}: suggested rating ${fmt(info.prot2)} A (secondary of ${nm(s)}).`))
         } else st.push(e.to)
       }
     }
@@ -382,9 +384,9 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     const m = defs[s.defId]?.sim
     if (m?.k !== 'transformer') continue
     const info = transformerInfo(s, defs[s.defId])
-    const isProt = (d: PlacedSymbol) => { const k = kindOf(defs[d.defId]); return (k === 'fuse' || k === 'breaker') && !!d.rated?.in }
-    const primDone = upstream(portsOf(s, m.primary)).some(isProt)
-    let secDone = false
+    const isProt = (d: PlacedSymbol) => { const k = kindOf(defs[d.defId]); return (k === 'fuse' || k === 'breaker' || k === 'motorBreaker') && !!d.rated?.in }
+    const primDone = upstream(portsOf(s, m.primary)).find(isProt)
+    let secDone: PlacedSymbol | undefined
     const hotS = key(s.id, m.secondary[0])
     const seenS = new Set([hotS])
     const stS = [hotS]
@@ -394,12 +396,12 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
         if ((dist.get(e.to) ?? -1) <= (dist.get(n) ?? 0) || seenS.has(e.to)) continue
         seenS.add(e.to)
         const d = e.sym ? byId.get(e.sym) : undefined
-        if (d && e.sc) { if (isProt(d)) secDone = true } else stS.push(e.to)
+        if (d && e.sc) { if (isProt(d)) secDone ??= d } else stS.push(e.to)
       }
     }
     describeInfo(info, lang).forEach((line, i) => {
       const done = i === 0 && info.in1 !== undefined ? primDone : secDone
-      if (!done) out.push({ level: 'info', symId: s.id, text: `${nm(s)} : ${line}` })
+      out.push({ level: 'info', symId: s.id, text: done ? `${nm(s)} : ${line} — ${S(lang, 'fait', 'done')} : ${nm(done)} ${fmt(done.rated!.in!)} A${done.rated?.curve ? ` ${S(lang, 'courbe', 'curve')} ${done.rated.curve}` : ''}` : `${nm(s)} : ${line}`, resolved: !!done })
     })
   }
 
@@ -411,7 +413,7 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     for (const d of upstream(portsOf(s, m.primary))) {
       const k = kindOf(defs[d.defId])
       const r = d.rated
-      if (!r || (k !== 'fuse' && k !== 'breaker')) continue
+      if (!r || (k !== 'fuse' && k !== 'breaker' && k !== 'motorBreaker')) continue
       if (info.in1 && r.in && r.in < info.in1) out.push({ level: 'error', symId: d.id, text: S(lang, `${nm(d)} : calibre ${fmt(r.in)} A inférieur au courant primaire de ${nm(s)} (${fmt(info.in1)} A).`, `${nm(d)}: rating ${fmt(r.in)} A below the primary current of ${nm(s)} (${fmt(info.in1)} A).`), why: S(lang, 'Elle déclenche en marche normale, et à chaque mise sous tension (courant d’enclenchement de 10 à 15 fois In).', 'It trips in normal operation, and at every power-up (inrush of 10 to 15 times In).') })
       if (info.prot1 && r.in && r.in > info.prot1 * 4) out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : calibre ${fmt(r.in)} A très supérieur au courant primaire de ${nm(s)} (${fmt(info.in1 ?? 0)} A, conseillé ${fmt(info.prot1)} A).`, `${nm(d)}: rating ${fmt(r.in)} A far above the primary current of ${nm(s)} (${fmt(info.in1 ?? 0)} A, suggested ${fmt(info.prot1)} A).`), why: S(lang, 'Une surcharge ou un court-circuit du transformateur ne fera pas déclencher cette protection : échauffement.', 'An overload or short circuit of the transformer will not trip this protection: overheating.') })
       if (r.curve && /^B$/i.test(r.curve.trim())) out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : courbe B devant le transformateur ${nm(s)} : le courant d’enclenchement risque de la faire déclencher (préférez D ou un fusible aM).`, `${nm(d)}: B curve in front of transformer ${nm(s)}: inrush may trip it (prefer D or an aM fuse).`) })

@@ -1423,9 +1423,9 @@ function Editor() {
                 <p className="muted small">{t('checkDisclaimer')}</p>
                 <ul className="issues">
                   {issues.map((i, n) => (
-                    <li key={n} className={i.level}>
+                    <li key={n} className={i.level + (i.resolved ? ' resolved' : '')}>
                       <button className="link" disabled={!i.symId} onClick={() => { if (i.symId) { setSel([i.symId]); setShowCheck(false) } }}>
-                        {i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : '💡'} {i.text}
+                        {i.resolved ? '✅' : i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : '💡'} {i.text}
                       </button>
                       {i.fix && <button className="mini" onClick={() => applyFix(i.fix!)}>{t('applyFix')}</button>}
                       {i.why && <p className="why">{i.why}</p>}
