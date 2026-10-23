@@ -119,6 +119,8 @@ export interface PlacedSymbol {
   power?: number
   /** caractéristiques assignées (calibre, courbe, réglages, puissance…) */
   rated?: Ratings
+  /** décalage du nom du composant (affiché quand l'option « noms » est cochée) */
+  nameOff?: { x: number; y: number }
   /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
   terms?: Record<string, string>
   /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */
@@ -183,4 +185,6 @@ export interface Doc {
   /** projet à plusieurs feuilles : le contenu de la feuille active est dans symbols/wires/notes */
   pages?: Page[]
   page?: number
+  /** afficher le nom (type) de chaque composant sous son symbole */
+  showNames?: boolean
 }

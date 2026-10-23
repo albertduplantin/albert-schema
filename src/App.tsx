@@ -865,6 +865,7 @@ function Editor() {
           <button onClick={autoLabel}>{t('autoLabel')}</button>
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
+          <label className="chk" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
           <button onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
           <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
           <button onClick={addNote} title={t('note')}>T {t('note')}</button>

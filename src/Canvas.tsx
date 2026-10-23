@@ -97,7 +97,7 @@ type Interaction =
   | { kind: 'none' }
   | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number; btn: number; target: string | null }
   | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
-  | { kind: 'label'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
+  | { kind: 'label'; id: string; part: 'labelOff' | 'nameOff'; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'note'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'band'; x0: number; y0: number; add: boolean }
   | { kind: 'handle'; wireId: string; idx: number; moved: boolean; mid: boolean }
@@ -264,7 +264,7 @@ export default function Canvas(p: Props) {
       return
     }
     if (e.button !== 0) return
-    if (p.sim && !e.shiftKey && !wiringRef.current && !p.placing && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-note]')) {
+    if (p.sim && !e.shiftKey && !wiringRef.current && !p.placing && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-nm],[data-note]')) {
       // simulation : un clic manœuvre l'organe visé (bouton, interrupteur, défaut). Tout le reste, et Maj + clic, édite le schéma.
       const el = (e.target as Element).closest('[data-sym]')
       const s = el ? doc.symbols.find((x) => x.id === el.getAttribute('data-sym')) : undefined
@@ -310,7 +310,17 @@ export default function Canvas(p: Props) {
       const sy = doc.symbols.find((x) => x.id === id)
       if (sy) {
         p.setSel([id])
-        inter.current = { kind: 'label', id, sx: pt.x, sy: pt.y, ox: sy.labelOff?.x ?? 0, oy: sy.labelOff?.y ?? 0, moved: false }
+        inter.current = { kind: 'label', id, part: 'labelOff', sx: pt.x, sy: pt.y, ox: sy.labelOff?.x ?? 0, oy: sy.labelOff?.y ?? 0, moved: false }
+        return
+      }
+    }
+    const nmEl = (e.target as Element).closest('[data-nm]')
+    if (nmEl) {
+      const id = nmEl.getAttribute('data-nm')!
+      const sy = doc.symbols.find((x) => x.id === id)
+      if (sy) {
+        p.setSel([id])
+        inter.current = { kind: 'label', id, part: 'nameOff', sx: pt.x, sy: pt.y, ox: sy.nameOff?.x ?? 0, oy: sy.nameOff?.y ?? 0, moved: false }
         return
       }
     }
@@ -386,7 +396,7 @@ export default function Canvas(p: Props) {
         it.moved = true
         p.checkpoint()
       }
-      if (it.moved) p.update((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === it.id ? { ...s, labelOff: off.x || off.y ? off : undefined } : s)) }))
+      if (it.moved) p.update((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === it.id ? { ...s, [it.part]: off.x || off.y ? off : undefined } : s)) }))
     } else if (it.kind === 'handle') {
       const wr = doc.wires.find((w) => w.id === it.wireId)
       const a = wr && symById(wr.from.symId)
@@ -508,7 +518,7 @@ export default function Canvas(p: Props) {
       onDoubleClick={(e) => {
         if ((e.target as Element).closest('[data-titleblock]')) { p.onEditTitle?.(); return }
         const symEl = (e.target as Element).closest('[data-sym]')
-        if (symEl && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl]')) {
+        if (symEl && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-nm]')) {
           const sy = doc.symbols.find((x) => x.id === symEl.getAttribute('data-sym'))
           // en simulation, un double-clic sur un organe de commande le manœuvre : on n'ouvre alors pas la fenêtre
           if (sy && !(p.sim && isOperableDef(SYMBOL_MAP[sy.defId]))) { p.onEditSymbol?.(sy.id, e.clientX, e.clientY); return }
@@ -614,6 +624,9 @@ export default function Canvas(p: Props) {
                   const off = { up: [4, -3], down: [4, 9], left: [-4, -3], right: [4, -3] }[pos.dir]
                   return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{text}</text>
                 })}
+                {doc.showNames && def.cat !== 'sim' && (
+                  <text transform={`translate(${s.nameOff?.x ?? 0} ${s.nameOff?.y ?? 0})`} x={(b.x1 + b.x2) / 2} y={b.y2 + 11} fontSize={7} textAnchor="middle" fill="#555" stroke="none">{def.name[p.lang]}</text>
+                )}
                 {(s.label || s.desc || crossRefs[s.id]?.length) && (
                   <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>
                     {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
@@ -689,6 +702,13 @@ export default function Canvas(p: Props) {
                 })()}
               </g>
             )
+          })}
+          {doc.showNames && doc.symbols.map((s) => {
+            const def = SYMBOL_MAP[s.defId]
+            if (def.cat === 'sim') return null
+            const b = symBBox(s)
+            const w = def.name[p.lang].length * 3.7 + 6
+            return <rect key={'nm' + s.id} data-nm={s.id} className="lbl-hit" x={(b.x1 + b.x2) / 2 - w / 2 + (s.nameOff?.x ?? 0)} y={b.y2 + 2 + (s.nameOff?.y ?? 0)} width={w} height={12} />
           })}
           {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')
