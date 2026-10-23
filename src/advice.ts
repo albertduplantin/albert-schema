@@ -26,6 +26,9 @@ interface Edge { to: string; sc: boolean; ol: boolean }
  */
 export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang): Issue[] {
   const out: Issue[] = []
+  // état au repos (aucun organe manœuvré) : potentiels présents sur chaque borne, tensions appliquées
+  let rest: ReturnType<typeof simulate> | null = null
+  try { rest = simulate(doc, defs, {}, { pressed: new Set(), toggled: new Set() }, 0) } catch { /* schéma incomplet */ }
   const nm = (s: PlacedSymbol) => s.label || defs[s.defId]?.name[lang] || '?'
   const adj = new Map<string, Edge[]>()
   const link = (a: string, b: string, sc = false, ol = false) => {
@@ -68,6 +71,28 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     return null
   }
   const portsOf = (s: PlacedSymbol, ports: string[]) => ports.map((p) => key(s.id, p)).filter((k) => adj.has(k))
+
+  // ── appareils « phase + neutre » (1P+N, 3P+N, porte-fusible P+N) montés sur des conducteurs de phase : le pôle neutre n'est pas protégé
+  const PHASES = new Set(['L', 'L1', 'L2', 'L3'])
+  for (const s of doc.symbols) {
+    const def = defs[s.defId]
+    const m = def?.sim
+    if (m?.k !== 'switch' || !rest || !/10_fuses|11_circuit_breakers|12_magneto|20_disconnecting/.test(def.id)) continue
+    if (!/1 pole protege|\+ ?neutre|P\+N|\+ ?N\b/i.test(def.name.fr + ' ' + def.name.en)) continue
+    const pots = m.poles.map(([a, b]) => rest!.potentialOf[key(s.id, a)] ?? rest!.potentialOf[key(s.id, b)] ?? null)
+    const phases = [...new Set(pots.filter((p): p is string => !!p && PHASES.has(p)))]
+    const phasePoles = pots.filter((p) => !!p && PHASES.has(p)).length
+    const allowed = Math.max(1, m.poles.length - 1)
+    if (phasePoles > allowed) out.push({
+      level: 'error', symId: s.id,
+      text: S(lang,
+        `${nm(s)} est un appareil « phase + neutre » mais il est monté sur ${phasePoles} conducteurs de phase (${phases.join(' et ')}) : il n'est pas adapté. Choisissez un appareil bipolaire (tous les pôles protégés), ou reliez une des deux phases à la terre pour en faire un neutre.`,
+        `${nm(s)} is a “phase + neutral” device but it sits on ${phasePoles} phase conductors (${phases.join(' and ')}): it is not suitable. Choose a double-pole device (all poles protected), or tie one of the two phases to earth to make it a neutral.`),
+      why: S(lang,
+        'Le pôle « neutre » n’a pas de déclencheur : l’une des phases n’est ni protégée contre les surcharges et courts-circuits, ni coupée correctement. Un défaut sur ce conducteur reste sans protection : échauffement, risque d’incendie, ou conducteur resté sous tension (400 V) après ouverture.',
+        'The “neutral” pole has no trip unit: one of the phases is neither protected against overloads and short circuits nor properly disconnected. A fault on that conductor goes unprotected: overheating, fire risk, or a conductor left live (400 V) after opening.'),
+    })
+  }
 
   // ── moteurs : protection contre les courts-circuits et les surcharges, terre, inversion
   const controlGaps = new Map<string, PlacedSymbol[]>() // origine → récepteurs de commande non protégés
@@ -164,13 +189,42 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     })
   }
 
+  // ── tension du primaire d'un transformateur : indiquée, et adaptée au réseau (deux phases = 400 V, phase + neutre = 230 V)
+  if (rest) {
+    for (const s of doc.symbols) {
+      if (defs[s.defId]?.sim?.k !== 'transformer') continue
+      const applied = rest.volts[s.id]
+      if (!applied || rest.badVoltage[s.id]) continue
+      if (!s.voltsPrimary) out.push({
+        level: 'warn', symId: s.id,
+        text: S(lang, `Transformateur ${nm(s)} : tension primaire non renseignée (${applied} V appliqués, ${applied > 300 ? 'entre deux phases' : 'entre phase et neutre'}).`, `Transformer ${nm(s)}: primary voltage not set (${applied} V applied, ${applied > 300 ? 'between two phases' : 'phase to neutral'}).`),
+        why: S(lang, 'Sans la tension assignée, le logiciel ne peut pas vérifier que le transformateur convient au réseau.', 'Without the rated voltage the software cannot check that the transformer suits the supply.'),
+      })
+    }
+  }
+
   // ── tensions incompatibles au repos (primaire de transformateur, bobines, voyants)
-  try {
-    const r = simulate(doc, defs, {}, { pressed: new Set(), toggled: new Set() }, 0)
+  if (rest) {
+    const r = rest
     for (const [id, v] of Object.entries(r.badVoltage)) {
       const s = doc.symbols.find((x) => x.id === id)
       if (!s) continue
       const isT = defs[s.defId]?.sim?.k === 'transformer'
+      if (isT) {
+        const twoPhases = v.applied > 300
+        const ratio = v.applied / v.rated
+        const sec = s.volts ? Math.round(s.volts * ratio) : undefined
+        out.push({
+          level: 'error', symId: id,
+          text: twoPhases
+            ? S(lang, `Transformateur ${nm(s)} : primaire ${v.rated} V branché sur deux phases (${v.applied} V). Choisissez un transformateur à primaire ${v.applied} V (ou à primaires multiples 230/400 V câblé en 400 V), ou branchez-le entre phase et neutre.`, `Transformer ${nm(s)}: ${v.rated} V primary connected across two phases (${v.applied} V). Choose a ${v.applied} V primary transformer (or a dual-primary 230/400 V wired for 400 V), or connect it phase to neutral.`)
+            : S(lang, `Transformateur ${nm(s)} : primaire ${v.rated} V branché sur ${v.applied} V. Choisissez un transformateur dont le primaire correspond à la tension du réseau.`, `Transformer ${nm(s)}: ${v.rated} V primary connected to ${v.applied} V. Choose a transformer whose primary matches the supply voltage.`),
+          why: v.applied > v.rated
+            ? S(lang, `Surtension de ${Math.round((ratio - 1) * 100)} % : le circuit magnétique sature, le transformateur chauffe et peut être détruit en quelques minutes${sec ? ` ; le secondaire délivre ${sec} V au lieu de ${s.volts} V, ce qui grille les bobines et les voyants` : ''}.`, `${Math.round((ratio - 1) * 100)} % overvoltage: the core saturates, the transformer overheats and can be destroyed within minutes${sec ? `; the secondary delivers ${sec} V instead of ${s.volts} V, burning out coils and lamps` : ''}.`)
+            : S(lang, `Sous-tension de ${Math.round((1 - ratio) * 100)} %${sec ? ` : le secondaire ne délivre que ${sec} V au lieu de ${s.volts} V` : ''}, les bobines ne collent pas franchement : contacts qui vibrent, chauffent et se soudent.`, `${Math.round((1 - ratio) * 100)} % undervoltage${sec ? `: the secondary only delivers ${sec} V instead of ${s.volts} V` : ''}, coils do not pull in cleanly: chattering, overheating, welding contacts.`),
+        })
+        continue
+      }
       out.push({
         level: 'error', symId: id,
         text: S(lang, `${nm(s)} : ${v.applied} V appliqués, ${v.rated} V assignés${isT ? ' (primaire)' : ''}.`, `${nm(s)}: ${v.applied} V applied, ${v.rated} V rated${isT ? ' (primary)' : ''}.`),
@@ -179,7 +233,7 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
           : S(lang, 'Sous-tension : la bobine ne colle pas franchement (contacts qui vibrent et chauffent), le récepteur ne fonctionne pas.', 'Undervoltage: the coil does not pull in cleanly (chattering, overheating contacts), the load does not work.'),
       })
     }
-  } catch { /* schéma incomplet */ }
+  }
 
   return out
 }

@@ -351,5 +351,42 @@ function rig(doc: any) {
   check('conseils : moteur sans protection contre les surcharges signalé avec sa conséquence', advice.some((i: any) => /surcharges/.test(i.text) && /brûler/.test(i.why ?? '')), true)
   check('conseils : le départ moteur protégé n\'a aucune erreur', errs(m).length, 0)
 }
+// ── conseils : appareil « phase + neutre » sur deux phases, transformateur non adapté à la tension du réseau
+{
+  const { checkDoc } = await import(ROOT + '/src/check.ts')
+  const id = (re: RegExp) => lib.symbols.find((s: any) => re.test(s.id)).id
+  const sym = (key: string, defId: string, label = ''): any => ({ id: key, defId, x: 0, y: 0, rot: 0, label, desc: '' })
+  const W = (n: string, a: string, ap: string, b: string, bp: string): any => ({ id: n, from: { symId: a, portId: ap }, to: { symId: b, portId: bp }, label: '', color: '#000', section: '' })
+  const brkDef = lib.symbols.find((s: any) => /disjonct-m_1fn$/.test(s.id))
+  const [p0, p1] = brkDef.sim.poles as [string, string][]
+  const up = (pole: [string, string]) => (brkDef.ports.find((p: any) => p.id === pole[0]).y < brkDef.ports.find((p: any) => p.id === pole[1]).y ? pole : [pole[1], pole[0]])
+  const [a0, b0] = up(p0), [a1, b1] = up(p1)
+  const lampDef = id(/11_optical_signaling\/lampe2$/)
+  const brkDoc = (src0: string, src1: string): any => ({
+    version: 1, paper: 'A3', title: {},
+    symbols: [sym('s0', src0), sym('s1', src1), sym('q', brkDef.id, 'Q1'), sym('h', lampDef, 'H1')],
+    wires: [W('w0', 's0', 'a', 'q', a0), W('w1', 's1', 'a', 'q', a1), W('w2', 'q', b0, 'h', 't0'), W('w3', 'q', b1, 'h', 't1')],
+  })
+  const msgs = (d: any) => checkDoc(d, SYMBOL_MAP, 'fr').filter((i: any) => i.level === 'error').map((i: any) => i.text)
+  check('disjoncteur phase + neutre sur deux phases → erreur explicite', msgs(brkDoc('sim-l1', 'sim-l2')).some((t: string) => /phase \+ neutre.*2 conducteurs de phase.*bipolaire.*terre/.test(t)), true)
+  check('disjoncteur phase + neutre sur phase + neutre → aucune erreur', msgs(brkDoc('sim-l1', 'sim-n')).some((t: string) => /phase \+ neutre/.test(t)), false)
+
+  // transformateur 230 V sur deux phases / sur phase + neutre
+  const tDef = lib.symbols.find((s: any) => s.id.endsWith('/10_transformers/transformator_1f_2'))
+  const trDoc = (a: string, b: string, voltsPrimary?: number): any => {
+    const t = sym('t', tDef.id, 'T1')
+    t.volts = 24
+    if (voltsPrimary) t.voltsPrimary = voltsPrimary
+    return { version: 1, paper: 'A3', title: {}, symbols: [sym('sa', a), sym('sb', b), t], wires: [W('x0', 'sa', 'a', 't', 't0'), W('x1', 'sb', 'a', 't', 't1')] }
+  }
+  const all = (d: any) => checkDoc(d, SYMBOL_MAP, 'fr')
+  const bad = all(trDoc('sim-l1', 'sim-l2', 230)).find((i: any) => i.level === 'error' && /branché/.test(i.text))
+  check('transformateur 230 V sur deux phases → erreur « choisissez un primaire 400 V »', /230 V branché sur deux phases \(400 V\).*400 V/.test(bad?.text ?? ''), true)
+  check('… avec la conséquence (surtension, tension secondaire)', /Surtension de 74 %.*42 V au lieu de 24 V/.test(bad?.why ?? ''), true)
+  check('transformateur 400 V sur deux phases → pas d\'erreur de tension', all(trDoc('sim-l1', 'sim-l2', 400)).some((i: any) => i.level === 'error' && /primaire/.test(i.text) && /branché/.test(i.text)), false)
+  check('transformateur 230 V sur phase + neutre → pas d\'erreur de tension', all(trDoc('sim-l', 'sim-n', 230)).some((i: any) => i.level === 'error' && /branché/.test(i.text)), false)
+  check('transformateur 400 V sur phase + neutre (230 V) → erreur de sous-tension', all(trDoc('sim-l', 'sim-n', 400)).some((i: any) => i.level === 'error' && /400 V branché sur 230 V/.test(i.text)), true)
+  check('transformateur sans tension primaire → avertissement', all(trDoc('sim-l1', 'sim-l2')).some((i: any) => i.level === 'warn' && /tension primaire non renseignée \(400 V/.test(i.text)), true)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
