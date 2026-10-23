@@ -72,10 +72,29 @@ function loadRecent(): string[] {
   }
 }
 
+/** Borne de bornier (X1.1, X1.2…) : le repère est celui du bornier suivi du numéro de la borne. */
+const isTerminal = (defId: string) => !!SYMBOL_MAP[defId]?.id.includes('130_terminals_terminal_strips')
+const stripOf = (label: string) => (/^(.*?)\.(\d+)$/.exec(label)?.[1] ?? label).replace(/\.$/, '')
+/** Bornier en cours : celui de la dernière borne posée ou renommée à la main (X1, puis X2 si l'on saisit X2.1…). */
+let activeStrip = ''
+export const setActiveStrip = (label: string) => { if (label.trim()) activeStrip = stripOf(label.trim()) }
+function nextTerminalLabel(doc: Doc): string {
+  const terms = doc.symbols.filter((s) => isTerminal(s.defId) && s.label)
+  let strip = activeStrip
+  if (!strip || !terms.some((s) => stripOf(s.label) === strip)) strip = terms.length ? stripOf(terms[terms.length - 1].label) : activeStrip || 'X1'
+  let max = 0
+  for (const s of terms) {
+    const m = /^(.*?)\.(\d+)$/.exec(s.label)
+    if (m && m[1] === strip) max = Math.max(max, Number(m[2]))
+  }
+  return `${strip}.${max + 1}`
+}
+
 const nextLabel = (doc: Doc, defId: string) => {
   const def = SYMBOL_MAP[defId]
   const prefix = def.prefix
   if (!prefix) return ''
+  if (isTerminal(defId)) return nextTerminalLabel(doc)
   // un contact commandé par bobine reprend le repère de la dernière bobine posée (même relais)
   if (def.sim?.k === 'switch' && def.sim.ctl === 'coil') {
     for (let i = doc.symbols.length - 1; i >= 0; i--) {
@@ -615,6 +634,13 @@ function Editor() {
       const order = [...d.symbols].sort((a, b) => a.x - b.x || a.y - b.y)
       const labels = new Map<string, string>()
       for (const s of order) {
+        if (isTerminal(s.defId)) {
+          // une borne garde son bornier (X1, X2…) et se renumérote à l'intérieur : X1.1, X1.2…
+          const strip = s.label ? stripOf(s.label) : 'X1'
+          counters['#' + strip] = (counters['#' + strip] ?? 0) + 1
+          labels.set(s.id, `${strip}.${counters['#' + strip]}`)
+          continue
+        }
         const p = SYMBOL_MAP[s.defId].prefix
         counters[p] = (counters[p] ?? 0) + 1
         labels.set(s.id, p + counters[p])
@@ -755,7 +781,7 @@ function Editor() {
     const cur = textEditValue(te)
     if (v === cur) return
     if (te.kind === 'note') commit((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === te.id ? { ...n, text: v } : n)) }))
-    else if (te.kind === 'label') commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === te.id ? { ...s, label: v } : s)) }))
+    else if (te.kind === 'label') { if (isTerminal(doc.symbols.find((s) => s.id === te.id)?.defId ?? '')) setActiveStrip(v); commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === te.id ? { ...s, label: v } : s)) })) }
     else commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === te.id ? { ...s, nameText: v && v !== SYMBOL_MAP[s.defId].name[lang] ? v : undefined } : s)) }))
   }
   const [propsId, setPropsId] = useState<string | null>(null)
@@ -818,7 +844,7 @@ function Editor() {
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
-            <label data-tip={t('helpLabel')}>{t('label')}{tip('helpLabel')}<input value={selSym.label} onChange={(e) => patchSym({ label: e.target.value })} /></label>
+            <label data-tip={t('helpLabel')}>{t('label')}{tip('helpLabel')}<input value={selSym.label} onChange={(e) => { if (isTerminal(selSym.defId)) setActiveStrip(e.target.value); patchSym({ label: e.target.value }) }} />{isTerminal(selSym.defId) && <span className="advice">💡 {t('stripHint')}</span>}</label>
             <label data-tip={t('helpDesc')}>{t('description')}{tip('helpDesc')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
             {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
               const def = SYMBOL_MAP[selSym.defId]
