@@ -349,3 +349,55 @@ export function routeAll(wires: Wire[], symbols: PlacedSymbol[]): Record<string,
   separateRoutes(routes, info)
   return routes
 }
+
+/**
+ * Points de jonction : là où des fils qui partent de la même borne se séparent, on dessine un point (comme sur un schéma classique).
+ * Les fils sont comparés deux à deux depuis la borne commune ; ils se séparent au dernier sommet commun, ou plus loin si l'un
+ * des deux tourne sur un tronçon que l'autre poursuit tout droit.
+ */
+export function junctionPoints(routes: Record<string, P[]>, wires: Wire[]): P[] {
+  const byPort = new Map<string, P[][]>()
+  const add = (key: string, pts: P[]) => {
+    if (!byPort.has(key)) byPort.set(key, [])
+    byPort.get(key)!.push(pts)
+  }
+  for (const w of wires) {
+    const r = routes[w.id]
+    if (!r || r.length < 2) continue
+    add(portKey(w.from), r)
+    add(portKey(w.to), [...r].reverse())
+  }
+  const out: P[] = []
+  const seen = new Set<string>()
+  const push = (p: P) => {
+    const k = p.x + ',' + p.y
+    if (!seen.has(k)) {
+      seen.add(k)
+      out.push(p)
+    }
+  }
+  const dir = (a: P, b: P) => ({ x: Math.sign(b.x - a.x), y: Math.sign(b.y - a.y) })
+  for (const group of byPort.values()) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i]
+        const b = group[j]
+        let k = 0
+        while (k + 1 < a.length && k + 1 < b.length && a[k + 1].x === b[k + 1].x && a[k + 1].y === b[k + 1].y) k++
+        const v = a[k]
+        const na = a[k + 1]
+        const nb = b[k + 1]
+        if (!na || !nb) continue
+        const da = dir(v, na)
+        const db = dir(v, nb)
+        if (da.x === db.x && da.y === db.y) {
+          // même direction : le point de séparation est l'extrémité du plus court des deux tronçons
+          const la = Math.abs(na.x - v.x) + Math.abs(na.y - v.y)
+          const lb = Math.abs(nb.x - v.x) + Math.abs(nb.y - v.y)
+          push(la <= lb ? na : nb)
+        } else push(v)
+      }
+    }
+  }
+  return out
+}

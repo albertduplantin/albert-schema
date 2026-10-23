@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { effectiveTerms } from './terminals'
-import { routeAll } from './routing'
+import { junctionPoints, routeAll } from './routing'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
@@ -189,6 +189,8 @@ export default function Canvas(p: Props) {
   }, [doc.symbols, doc.paper, terms, p.extra, p.pageOf])
   // tracé de tous les conducteurs, séparés en couloirs quand ils se superposeraient
   const routes = useMemo(() => routeAll(doc.wires, doc.symbols), [doc.wires, doc.symbols])
+  // points de jonction : fils d'une même borne qui se séparent
+  const junctions = useMemo(() => junctionPoints(routes, doc.wires), [routes, doc.wires])
 
   const toSheet = (e: { clientX: number; clientY: number }) => {
     const r = svgRef.current!.getBoundingClientRect()
@@ -528,6 +530,7 @@ export default function Canvas(p: Props) {
               </g>
             )
           })}
+          {junctions.map((j) => <circle key={j.x + ',' + j.y} cx={j.x} cy={j.y} r={2.8} fill="currentColor" stroke="none" />)}
           {(doc.notes ?? []).map((n) => (
             <g key={n.id}>
               {n.text.split('\n').map((line, i) => (

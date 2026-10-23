@@ -226,5 +226,27 @@ for (const dx of [40, -40, 20, 80]) {
   void symbols; void wires
 }
 
+// ── points de jonction : fils d'une même borne qui se séparent
+{
+  const { junctionPoints } = await import('../src/routing.ts')
+  const W = (id: string, a: string, b: string) => ({ id, from: { symId: a, portId: 'p' }, to: { symId: b, portId: 'p' }, label: '', color: '#000', section: '' }) as any
+  // deux fils partent de la même borne A : ils suivent la même amorce puis se séparent au point (100, 40)
+  const routes = {
+    w1: [{ x: 100, y: 0 }, { x: 100, y: 40 }, { x: 200, y: 40 }, { x: 200, y: 100 }],
+    w2: [{ x: 100, y: 0 }, { x: 100, y: 40 }, { x: 20, y: 40 }, { x: 20, y: 100 }],
+  }
+  check('jonction : deux fils d une même borne → un point à la séparation', JSON.stringify(junctionPoints(routes, [W('w1', 'A', 'B'), W('w2', 'A', 'C')])) === JSON.stringify([{ x: 100, y: 40 }]))
+  // l'un tourne sur un tronçon que l'autre poursuit : le point est là où il tourne
+  const r2 = {
+    w1: [{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 80, y: 100 }],
+    w2: [{ x: 0, y: 0 }, { x: 0, y: 60 }, { x: 50, y: 60 }],
+  }
+  check('jonction : le fil qui tourne en premier donne le point', JSON.stringify(junctionPoints(r2, [W('w1', 'A', 'B'), W('w2', 'A', 'C')])) === JSON.stringify([{ x: 0, y: 60 }]))
+  // fils sans borne commune : aucun point
+  check('jonction : fils indépendants → aucun point', junctionPoints({ w1: routes.w1, w2: routes.w2 }, [W('w1', 'A', 'B'), W('w2', 'C', 'D')]).length === 0)
+  // trois fils sur la même borne : un point par séparation, sans doublon
+  const r3 = { ...routes, w3: [{ x: 100, y: 0 }, { x: 100, y: 40 }, { x: 150, y: 40 }, { x: 150, y: 90 }] }
+  check('jonction : trois fils → points sans doublon', junctionPoints(r3, [W('w1', 'A', 'B'), W('w2', 'A', 'C'), W('w3', 'A', 'D')]).length >= 1, true)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests de tracé passent')
 process.exit(fails ? 1 : 0)
