@@ -133,5 +133,30 @@ const shown = (s: any, eff: Record<string, Record<string, string>>) => termGroup
   check('relais thermique : NF 95/96, NO 97/98', [Object.values(eff[nf.id]).sort().join('/'), Object.values(eff[no.id]).sort().join('/')], ['95/96', '97/98'])
 }
 
+
+// ── boutons-poussoirs : 1-2 (NF) ou 3-4 (NO), sans contrainte d'unicité
+{
+  const NF = id('20_push_buttons/poussoir_nf')
+  const NO = id('20_push_buttons/poussoir')
+  const s1 = sym(NF, 'S1')
+  const s2 = sym(NO, 'S2')
+  const s3 = sym(NF, 'S1') // même repère que S1 : permis
+  const s4 = sym(NO, 'S2')
+  const all = [s1, s2, s3, s4]
+  const eff = effectiveTerms(all, defs)
+  check('poussoir NF : 1/2', shown(s1, eff), ['1/2'])
+  check('poussoir NO : 3/4', shown(s2, eff), ['3/4'])
+  check('deux poussoirs de même repère : mêmes numéros 1/2', [shown(s1, eff)[0], shown(s3, eff)[0]], ['1/2', '1/2'])
+  check('deux poussoirs de même repère : aucun doublon signalé', duplicateTerms(all, eff).size, 0)
+  check('numéros des poussoirs non réservés pour les autres symboles de l\'appareil', othersTerms(all, eff, s1.id).size, 0)
+  // un poussoir ne perturbe pas la numérotation du contacteur de même repère
+  const kc = sym(COIL, 'S1')
+  const aux = sym(AUX_NO, 'S1')
+  const eff2 = effectiveTerms([s1, kc, aux], defs)
+  check('poussoir de même repère qu\'un contact : le contact reste en 13/14', shown(aux, eff2), ['13/14'])
+  // la saisie reste possible
+  const custom = sym(NO, 'S5', { t0: '53', t1: '54' })
+  check('poussoir avec numéros saisis : saisie prioritaire', shown(custom, effectiveTerms([custom], defs)), ['53/54'])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests de numérotation passent')
 process.exit(fails ? 1 : 0)

@@ -9,6 +9,9 @@ import type { PlacedSymbol, SymbolDef } from './types'
  *  - contacts de puissance : 1-2, 3-4, 5-6, puis 7-8… ;
  *  - contacts auxiliaires : un « rang » par contact ; NO x3-x4, NF x1-x2, inverseur x1-x2-x4 (13-14, 21-22, 33-34…) ;
  *  - bobines : A1-A2, puis B1-B2…
+ * Exception : les boutons-poussoirs (catégorie « boutons-poussoirs ») ne participent pas à cette unicité. Un poussoir à un seul
+ * contact porte toujours 1-2 (contact NF) ou 3-4 (contact NO), quel que soit son repère ; plusieurs poussoirs peuvent donc
+ * porter les mêmes numéros, sans être signalés comme doublons.
  * L'utilisateur peut imposer ses propres numéros (`PlacedSymbol.terms`) : ils sont réservés, et les autres bornes de
  * l'appareil s'adaptent. Modifier la première borne d'un pôle fait suivre les autres (13 → 53 donne 54).
  */
@@ -23,6 +26,9 @@ export interface TermGroup {
 const POWER = /(02_power_contacts|11_circuit_breakers|12_magneto|20_disconnecting)/
 /** Contacts de relais thermique (nom du fichier d'origine) */
 const THERMAL = /(contact_relais|termique|thermique)/
+/** Boutons-poussoirs : exemptés de l'unicité des numéros au sein d'un appareil */
+const PUSH = /20_push_buttons/
+const isPush = (s: { defId: string }) => PUSH.test(s.defId)
 
 /**
  * Repères normalisés imposés à certains symboles (ils remplacent ceux du dessin d'origine) :
@@ -34,6 +40,10 @@ function standardLabels(def: SymbolDef): Record<string, string> {
   if (m?.k === 'load' && (m.role === 'lamp' || m.role === 'buzzer') && m.ports.length === 2) {
     const [a, b] = ordered(def, m.ports)
     return { [a]: 'X1', [b]: 'X2' }
+  }
+  if (m?.k === 'switch' && m.poles.length === 1 && !m.changeover?.length && PUSH.test(def.id)) {
+    const [a, b] = ordered(def, m.poles[0])
+    return m.nc ? { [a]: '1', [b]: '2' } : { [a]: '3', [b]: '4' }
   }
   if (m?.k === 'switch' && m.poles.length === 1 && !m.changeover?.length && THERMAL.test(def.id.split('/').pop() ?? '')) {
     const [a, b] = ordered(def, m.poles[0])
@@ -100,7 +110,7 @@ export function effectiveTerms(symbols: PlacedSymbol[], defs: Record<string, Sym
         const v = (s.id === ignoreTerms ? undefined : s.terms?.[p.id]) ?? fixed[p.id] ?? p.label
         if (v) {
           own[p.id] = v
-          used.add(v)
+          if (!isPush(s)) used.add(v)
         }
       }
       out[s.id] = own
@@ -135,7 +145,7 @@ export function effectiveTerms(symbols: PlacedSymbol[], defs: Record<string, Sym
           }
           g.ports.forEach((p, i) => {
             mine[p] = String(labels[i])
-            used.add(String(labels[i]))
+            if (!isPush(s)) used.add(String(labels[i]))
           })
         }
       } else if (m.k === 'coil') {
@@ -215,6 +225,7 @@ export function duplicateTerms(symbols: PlacedSymbol[], eff: Record<string, Reco
   const dup = new Set<string>()
   const seen = new Map<string, Map<string, string>>() // appareil → numéro → « symbole:borne »
   for (const s of symbols) {
+    if (isPush(s)) continue // poussoirs : numéros libres (1-2 ou 3-4)
     const k = deviceKey(s)
     if (!seen.has(k)) seen.set(k, new Map())
     const m = seen.get(k)!
@@ -238,7 +249,7 @@ export function othersTerms(symbols: PlacedSymbol[], eff: Record<string, Record<
   if (!me) return out
   const key = deviceKey(me)
   for (const s of symbols) {
-    if (s.id === symId || deviceKey(s) !== key) continue
+    if (s.id === symId || deviceKey(s) !== key || isPush(s)) continue
     for (const v of Object.values(eff[s.id] ?? {})) out.add(v)
   }
   return out
