@@ -7,7 +7,7 @@ import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
 import { bomRows, exportCsv, exportPng, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
-import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
+import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
 import { fieldLabel, fieldsFor, kindOf, motorCurrent } from './ratings'
@@ -92,7 +92,7 @@ const nextLabel = (doc: Doc, defId: string) => {
 }
 
 const TEMPLATE_FN: Record<string, (b: Doc) => Doc> = {
-  tplMotor: motorStarter, tplLamps: startLamps, tplTimer: timerOnDelay, tplTrafo: motorStarterTransformer, tplCascade: delayedCascade,
+  tplMotor: motorStarter, tplLamps: startLamps, tplTimer: timerOnDelay, tplTrafo: motorStarterTransformer, tplCascade: delayedCascade, tplRelay24: relay24V,
   tplReversing: reversingStarter, tplPneu: pneumaticCylinder, tplPneuElec: pneumaticElectric, tplPneuAuto: pneumaticAuto,
 }
 const GALLERY = BUILTIN_META.map((m) => ({ ...m, fn: TEMPLATE_FN[m.key] }))

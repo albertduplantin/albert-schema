@@ -284,3 +284,48 @@ export const delayedCascade = (base: Doc): Doc => {
       ['l3', 'a', 'k3', 't0'], ['k3', 't1', 'c2', 't0'], ['c2', 't1', 'n3', 'a'],
     ])
 }
+
+/**
+ * Relais auxiliaire en 24 V alternatif avec bornier X1 : S1 (arrêt NF) → S2 (marche NO, shuntée par le contact KA1) → bobine KA1 ;
+ * un contact NF de KA1 alimente le voyant H1 (arrêt), un contact NO le voyant H2 (marche).
+ */
+export const relay24V = (base: Doc): Doc => {
+  const TB = Q('130_terminals_terminal_strips/borne_continuite')
+  const d = build(base,
+    [
+      ['l1', 'sim-l1', 120, 30], ['l2', 'sim-l2', 140, 30],
+      ['f1', Q('200_fuses_protective_gears/10_fuses/pojistka2p'), 280, -10, 'F1'],
+      ['t', Q('330_transformers_power_supplies/10_transformers/transformator_1f_2'), 410, 60, 'T1', undefined, 24],
+      ['f2', Q('200_fuses_protective_gears/10_fuses/pojistka1p'), 400, 105, 'F2'],
+      ['pe', Q('110_network_supplies/terre'), 450, 120, ''],
+      // colonne de commande : arrêt, marche + auto-maintien, bobine
+      ['s1', L('20_push_buttons/poussoir_nf'), 400, 170, 'S1'],
+      ['x3', TB, 470, 230, 'X1.3'],
+      ['s2', L('20_push_buttons/poussoir'), 400, 260, 'S2'],
+      ['ka', R(AUX + 'con_simple'), 470, 270, 'KA1'],
+      ['x2', TB, 400, 340, 'X1.2'],
+      ['c', R('01_coils/bobine3'), 390, 390, 'KA1', undefined, 24],
+      // voyant H1 par un contact NF de KA1, voyant H2 par un contact NO
+      ['kn', R(AUX + 'con_simple_nf'), 570, 200, 'KA1'],
+      ['x4', TB, 560, 260, 'X1.4'], ['h1', L('11_optical_signaling/lampe2'), 550, 300, 'H1', undefined, 24], ['x5', TB, 560, 360, 'X1.5'],
+      ['ko', R(AUX + 'con_simple'), 650, 200, 'KA1'],
+      ['x6', TB, 650, 260, 'X1.6'], ['h2', L('11_optical_signaling/lampe2'), 640, 300, 'H2', undefined, 24], ['x7', TB, 650, 360, 'X1.7'],
+    ],
+    [
+      ['l1', 'a', 'f1', 't0'], ['l2', 'a', 'f1', 't1'], ['f1', 't2', 't', 't0'], ['f1', 't3', 't', 't1'],
+      ['t', 't2', 'f2', 't0'], ['t', 't3', 'pe', 't0'],
+      ['f2', 't1', 's1', 't0'],
+      ['s1', 't1', 's2', 't0'], ['s1', 't1', 'x3', 't0'], ['x3', 't1', 'ka', 't0'],
+      ['s2', 't1', 'x2', 't0'], ['ka', 't1', 'x2', 't0'], ['x2', 't1', 'c', 't0'], ['c', 't1', 't', 't3'],
+      ['f2', 't1', 'kn', 't0'], ['kn', 't1', 'x4', 't0'], ['x4', 't1', 'h1', 't0'], ['h1', 't1', 'x5', 't0'], ['x5', 't1', 't', 't3'],
+      ['f2', 't1', 'ko', 't0'], ['ko', 't1', 'x6', 't0'], ['x6', 't1', 'h2', 't0'], ['h2', 't1', 'x7', 't0'], ['x7', 't1', 't', 't3'],
+    ])
+  for (const s of d.symbols) {
+    if (s.label === 'F1') { s.rot = 90; s.rated = { in: 1, curve: 'aM', icu: 10 } }
+    if (s.label === 'T1') { s.voltsPrimary = 400; s.power = 100 }
+    if (s.label === 'F2') s.rated = { in: 4, curve: 'gG', icu: 10 }
+    if (s.label === 'KA1' && s.defId.includes('bobine')) s.rated = { watts: 8 }
+    if (s.label === 'H1' || s.label === 'H2') s.rated = { watts: 3 }
+  }
+  return d
+}

@@ -610,5 +610,18 @@ function rig(doc: any) {
   for (const s of t.symbols) if (s.label === 'F2') s.rated = { in: 4 }
   check('rappels résolus une fois F1 et F2 calibrés', lines(t).map((x: any) => !!x.resolved), [true, true])
 }
+// ── relais 24 V alternatif avec bornier
+{
+  const { adviseDoc } = await import(ROOT + '/src/advice.ts')
+  const d = T.relay24V(base), g = rig(d)
+  let r = g.run()
+  check('relais 24 V : au repos H1 (contact NF) allumé, H2 éteint, bobine éteinte', [g.on(r, 'H1'), g.on(r, 'H2'), g.on(r, 'KA1', 'bobine')], [true, false, false])
+  r = g.run([g.idOf('S2')])
+  r = g.run()
+  check('relais 24 V : marche, auto-maintien, H1 éteint et H2 allumé, tensions correctes', [g.on(r, 'KA1', 'bobine'), g.on(r, 'H1'), g.on(r, 'H2'), Object.keys(r.badVoltage).length], [true, false, true, 0])
+  r = g.run([g.idOf('S1')]); r = g.run()
+  check('relais 24 V : arrêt', [g.on(r, 'KA1', 'bobine'), g.on(r, 'H1'), g.on(r, 'H2')], [false, true, false])
+  console.log(adviseDoc(d, SYMBOL_MAP, 'fr').filter((x: any) => x.level !== 'info').map((x: any) => x.level + ' ' + x.text))
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
