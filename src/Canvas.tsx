@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { termsWithTopology } from './transformer'
 import { junctionPoints, routeAll } from './routing'
 import { autoConnect } from './splice'
+import { fontCss } from './fonts'
 import InstrumentView from './InstrumentView'
 import { jawPoint, pickAt, probesOf, readCurrent, readVoltage, stepRange, type PickContext } from './instruments'
 import type { Doc, Instrument, Lang, PlacedSymbol, PortRef } from './types'
@@ -88,6 +89,8 @@ interface Props {
   onEditTitle?: () => void
   /** double-clic sur un symbole : ouvre ses propriétés */
   onEditSymbol?: (id: string, x: number, y: number) => void
+  /** double-clic sur un texte (annotation, nom de composant, repère) : édition sur place */
+  onEditText?: (kind: 'note' | 'name' | 'label', id: string, x: number, y: number) => void
   onSimFault?: (id: string) => void
   labels: { zoomIn: string; zoomOut: string; fit: string; grid: string }
 }
@@ -559,6 +562,9 @@ export default function Canvas(p: Props) {
       onContextMenu={(e) => e.preventDefault()}
       onDoubleClick={(e) => {
         if ((e.target as Element).closest('[data-titleblock]')) { p.onEditTitle?.(); return }
+        const tgt = e.target as Element
+        const txt = tgt.closest('[data-note]') ? (['note', tgt.closest('[data-note]')!.getAttribute('data-note')!] as const) : tgt.closest('[data-nm]') ? (['name', tgt.closest('[data-nm]')!.getAttribute('data-nm')!] as const) : tgt.closest('[data-lbl]') ? (['label', tgt.closest('[data-lbl]')!.getAttribute('data-lbl')!] as const) : null
+        if (txt) { p.onEditText?.(txt[0], txt[1], e.clientX, e.clientY); return }
         const symEl = (e.target as Element).closest('[data-sym]')
         if (symEl && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-nm]')) {
           const sy = doc.symbols.find((x) => x.id === symEl.getAttribute('data-sym'))
@@ -605,7 +611,7 @@ export default function Canvas(p: Props) {
           {(doc.notes ?? []).map((n) => (
             <g key={n.id}>
               {n.text.split('\n').map((line, i) => (
-                <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fill="currentColor" stroke="none">{line}</text>
+                <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fontFamily={fontCss(n.font)} fontWeight={n.bold ? 700 : 400} fontStyle={n.italic ? 'italic' : 'normal'} fill="currentColor" stroke="none">{line}</text>
               ))}
             </g>
           ))}
@@ -667,7 +673,7 @@ export default function Canvas(p: Props) {
                   return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{text}</text>
                 })}
                 {doc.showNames && def.cat !== 'sim' && (
-                  <text transform={`translate(${s.nameOff?.x ?? 0} ${s.nameOff?.y ?? 0})`} x={(b.x1 + b.x2) / 2} y={b.y2 + 11} fontSize={7} textAnchor="middle" fill="#555" stroke="none">{def.name[p.lang]}</text>
+                  <text transform={`translate(${s.nameOff?.x ?? 0} ${s.nameOff?.y ?? 0})`} x={(b.x1 + b.x2) / 2} y={b.y2 + 4 + (doc.nameStyle?.size ?? 7)} fontSize={doc.nameStyle?.size ?? 7} fontFamily={fontCss(doc.nameStyle?.font)} fontWeight={doc.nameStyle?.bold ? 700 : 400} fontStyle={doc.nameStyle?.italic ? 'italic' : 'normal'} textAnchor="middle" fill="#555" stroke="none">{s.nameText || def.name[p.lang]}</text>
                 )}
                 {(s.label || s.desc || crossRefs[s.id]?.length) && (
                   <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>
@@ -749,8 +755,9 @@ export default function Canvas(p: Props) {
             const def = SYMBOL_MAP[s.defId]
             if (def.cat === 'sim') return null
             const b = symBBox(s)
-            const w = def.name[p.lang].length * 3.7 + 6
-            return <rect key={'nm' + s.id} data-nm={s.id} className="lbl-hit" x={(b.x1 + b.x2) / 2 - w / 2 + (s.nameOff?.x ?? 0)} y={b.y2 + 2 + (s.nameOff?.y ?? 0)} width={w} height={12} />
+            const fs = doc.nameStyle?.size ?? 7
+            const w = (s.nameText || def.name[p.lang]).length * fs * (doc.nameStyle?.bold ? 0.62 : 0.55) + 6
+            return <rect key={'nm' + s.id} data-nm={s.id} className="lbl-hit" x={(b.x1 + b.x2) / 2 - w / 2 + (s.nameOff?.x ?? 0)} y={b.y2 + 2 + (s.nameOff?.y ?? 0)} width={w} height={fs + 6} />
           })}
           {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')

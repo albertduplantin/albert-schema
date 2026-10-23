@@ -376,3 +376,12 @@ a, .dialog a { color: var(--lien); }
 .issues li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .issues li .why { flex-basis: 100%; }
 button.mini { padding: 2px 8px; font-size: 10px; }
+
+.inlineedit { position: fixed; z-index: 60; min-width: 200px; max-width: 260px; font: inherit; font-size: 13px; padding: 5px 8px; border: 2px solid var(--lien); background: #fff; color: #151916; box-shadow: 0 6px 22px #0005; }
+textarea.inlineedit { resize: both; }
+.namestyle { min-width: 220px; gap: 8px; padding: 10px; }
+.namestyle label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #c9d2c8; }
+.namestyle .row { display: flex; gap: 6px; }
+.namestyle .row button { width: 36px; }
+.form .row { display: flex; gap: 6px; }
+.form .row button { width: 40px; }

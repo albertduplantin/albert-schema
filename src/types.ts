@@ -123,6 +123,8 @@ export interface PlacedSymbol {
   rated?: Ratings
   /** décalage du nom du composant (affiché quand l'option « noms » est cochée) */
   nameOff?: { x: number; y: number }
+  /** nom affiché à la place du nom du type de composant */
+  nameText?: string
   /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
   terms?: Record<string, string>
   /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */
@@ -181,6 +183,17 @@ export interface Note {
   y: number
   text: string
   size: number
+  font?: string
+  bold?: boolean
+  italic?: boolean
+}
+
+/** Style des noms de composants affichés sous les symboles (option « Noms des composants »). */
+export interface NameStyle {
+  font?: string
+  size?: number
+  bold?: boolean
+  italic?: boolean
 }
 
 /** Une feuille d'un projet à plusieurs pages. */
@@ -205,4 +218,5 @@ export interface Doc {
   page?: number
   /** afficher le nom (type) de chaque composant sous son symbole */
   showNames?: boolean
+  nameStyle?: NameStyle
 }

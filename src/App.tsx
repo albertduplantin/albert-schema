@@ -11,6 +11,7 @@ import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, p
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
 import { fieldLabel, fieldsFor, kindOf, motorCurrent } from './ratings'
+import { FONTS } from './fonts'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
@@ -665,6 +666,23 @@ function Editor() {
   const TB_FIELDS: (keyof Doc['title'])[] = ['title', 'project', 'docNumber', 'company', 'author', 'approver', 'date', 'revision', 'sheet']
   const [showTitleBlock, setShowTitleBlock] = useState(false)
   // fenêtre « Propriétés » flottante d'un symbole (clic droit, double-clic ou Entrée) : repère, tensions, caractéristiques, réglages, bornes
+  // édition d'un texte sur place (double-clic sur une annotation, un nom de composant ou un repère)
+  const [textEdit, setTextEdit] = useState<{ kind: 'note' | 'name' | 'label'; id: string; x: number; y: number } | null>(null)
+  const textDone = useRef(false) // évite une double validation (Entrée puis perte de focus)
+  const textEditValue = (te: { kind: 'note' | 'name' | 'label'; id: string }) => {
+    if (te.kind === 'note') return (doc.notes ?? []).find((n) => n.id === te.id)?.text ?? ''
+    const s = doc.symbols.find((x) => x.id === te.id)
+    if (!s) return ''
+    return te.kind === 'label' ? s.label : s.nameText || SYMBOL_MAP[s.defId].name[lang]
+  }
+  const commitText = (te: { kind: 'note' | 'name' | 'label'; id: string }, value: string) => {
+    const v = te.kind === 'note' ? value : value.trim()
+    const cur = textEditValue(te)
+    if (v === cur) return
+    if (te.kind === 'note') commit((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === te.id ? { ...n, text: v } : n)) }))
+    else if (te.kind === 'label') commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === te.id ? { ...s, label: v } : s)) }))
+    else commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === te.id ? { ...s, nameText: v && v !== SYMBOL_MAP[s.defId].name[lang] ? v : undefined } : s)) }))
+  }
   const [propsId, setPropsId] = useState<string | null>(null)
   const [propsPos, setPropsPos] = useState({ x: 380, y: 90 })
   const openProps = (id: string, x?: number, y?: number) => {
@@ -892,6 +910,26 @@ function Editor() {
             </div>
           </details>
           <label className="chk" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
+          {doc.showNames && (
+            <details className="menu">
+              <summary title={t('nameStyle')}>Aa ▾</summary>
+              <div className="menu-list namestyle" onClick={(e) => e.stopPropagation()}>
+                <label>{t('font')}
+                  <select value={doc.nameStyle?.font ?? 'arial'} onChange={(e) => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, font: e.target.value } }))}>
+                    {FONTS.map((f) => <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>)}
+                  </select>
+                </label>
+                <label>{t('noteSize')}
+                  <input type="number" min={4} max={24} step={0.5} value={doc.nameStyle?.size ?? 7} onChange={(e) => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, size: Math.max(4, Math.min(24, Number(e.target.value) || 7)) } }))} />
+                </label>
+                <div className="row">
+                  <button className={doc.nameStyle?.bold ? 'on' : ''} onClick={() => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, bold: !d.nameStyle?.bold } }))}><b>B</b></button>
+                  <button className={doc.nameStyle?.italic ? 'on' : ''} onClick={() => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, italic: !d.nameStyle?.italic } }))}><i>I</i></button>
+                </div>
+                <p className="muted small">{t('fontExportHint')}</p>
+              </div>
+            </details>
+          )}
           <button onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
           <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
           <button onClick={addNote} title={t('note')}>T {t('note')}</button>
@@ -988,7 +1026,7 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
           {pageTabs.map((pg, i) => (
             <button key={i} role="tab" aria-selected={i === (doc.page ?? 0)} className={i === (doc.page ?? 0) ? 'on' : ''}
@@ -1090,6 +1128,15 @@ function Editor() {
                 {[8, 10, 12, 16, 20, 28].map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
+            <label>{t('font')}
+              <select value={selNote.font ?? 'arial'} onChange={(e) => patchNote({ font: e.target.value })}>
+                {FONTS.map((f) => <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>)}
+              </select>
+            </label>
+            <div className="row">
+              <button className={selNote.bold ? 'on' : ''} onClick={() => patchNote({ bold: !selNote.bold })}><b>B</b></button>
+              <button className={selNote.italic ? 'on' : ''} onClick={() => patchNote({ italic: !selNote.italic })}><i>I</i></button>
+            </div>
           </div>
         ) : selWire ? (
           <div className="form" onFocus={checkpoint}>
@@ -1126,6 +1173,22 @@ function Editor() {
         </div>
         </>)}
       </aside>
+
+      {textEdit && (() => {
+        const done = (value: string | null) => { if (textDone.current) return; textDone.current = true; if (value !== null) commitText(textEdit, value); setTextEdit(null) }
+        const multi = textEdit.kind === 'note'
+        const common = {
+          className: 'inlineedit', autoFocus: true, defaultValue: textEditValue(textEdit), 'aria-label': t('editText'),
+          style: { left: Math.max(4, Math.min(textEdit.x - 40, window.innerWidth - 260)), top: Math.max(4, Math.min(textEdit.y - 14, window.innerHeight - 90)) },
+          onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => e.target.select(),
+          onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => done(e.target.value),
+          onKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null) }
+            else if (e.key === 'Enter' && !(multi && e.shiftKey)) { e.preventDefault(); done((e.target as HTMLInputElement).value) }
+          },
+        }
+        return multi ? <textarea {...common} rows={3} /> : <input type="text" {...common} />
+      })()}
 
       {propsId && selSym && selSym.id === propsId && (
         <div className="propspop" role="dialog" aria-label={t('propsTitle')} style={{ left: propsPos.x, top: propsPos.y }}>
