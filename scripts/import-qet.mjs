@@ -219,10 +219,10 @@ for (const r of roots) {
     if (/report/.test(def.link_type || '')) { skipped++; continue }
     const { shapes, terminals, box, texts, textShapes, segs, rounds } = convert(xml)
     if (!terminals.length || !shapes.length) { skipped++; continue }
-    const ox = Math.floor(box.x1 / 10) * 10
-    const oy = Math.floor(box.y1 / 10) * 10
-    const w = Math.max(10, Math.ceil((box.x2 - ox) / 10) * 10)
-    const h = Math.max(10, Math.ceil((box.y2 - oy) / 10) * 10)
+    let ox = Math.floor(box.x1 / 10) * 10
+    let oy = Math.floor(box.y1 / 10) * 10
+    let w = Math.max(10, Math.ceil((box.x2 - ox) / 10) * 10)
+    let h = Math.max(10, Math.ceil((box.y2 - oy) / 10) * 10)
     // un texte du dessin identique au nom d'une borne est retiré : le repère s'affiche depuis la borne et reste modifiable
     const termNames = new Set(terminals.map((t) => t.name).filter(Boolean))
     for (const ts of textShapes) if (termNames.has(ts.text)) shapes[ts.i] = ''
@@ -262,13 +262,70 @@ for (const r of roots) {
         ports.forEach((p, i) => {
           const q = snapped[i]
           if (q.x === p.x && q.y === p.y) return
-          const pts = [[p.x, p.y]]
+          const inw = { up: [0, 2], down: [0, -2], left: [2, 0], right: [-2, 0] }[p.dir] ?? [0, 0] // léger recouvrement du fil du dessin
+          const pts = [[p.x + inw[0], p.y + inw[1]], [p.x, p.y]]
           if (q.x !== p.x && q.y !== p.y) pts.push([q.x, p.y])
           pts.push([q.x, q.y])
           shapes.push('<path d="M' + pts.map(([a, b]) => n1(a + ox) + ' ' + n1(b + oy)).join(' L') + '"/>')
           p.x = q.x
           p.y = q.y
         })
+      }
+    }
+    // pas standard des bornes : dans une même rangée (haut, bas, gauche ou droite), des bornes à moins de 20 d'écart sont écartées à 20,
+    // comme les pôles d'un disjoncteur ou d'un contacteur, pour que les fils de deux appareils voisins s'alignent. Chaque borne
+    // est prolongée de 10 vers l'extérieur par un petit coude. Électrique seulement (le pneumatique garde ses dessins normalisés).
+    if (r.domain === 'electrical') {
+      const OUT = { up: [0, -10], down: [0, 10], left: [-10, 0], right: [10, 0] }
+      const moved = ports.map((p) => ({ ...p }))
+      const taken = new Set(ports.map((p) => p.x + ',' + p.y))
+      let any = false
+      for (const dir of ['up', 'down', 'left', 'right']) {
+        const horiz = dir === 'up' || dir === 'down'
+        const rows = new Map()
+        moved.forEach((p, i) => {
+          if (p.dir !== dir) return
+          const k = horiz ? p.y : p.x
+          if (!rows.has(k)) rows.set(k, [])
+          rows.get(k).push(i)
+        })
+        for (const idx of rows.values()) {
+          if (idx.length < 2) continue
+          const pos = (i) => (horiz ? ports[i].x : ports[i].y)
+          const sorted = [...idx].sort((a, b) => pos(a) - pos(b))
+          const gaps = sorted.slice(1).map((v, j) => pos(v) - pos(sorted[j]))
+          if (gaps.every((g) => g >= 20) || gaps.some((g) => g < 10)) continue
+          const c = Math.round((pos(sorted[0]) + pos(sorted[sorted.length - 1])) / 2 / 10) * 10
+          sorted.forEach((i, j) => {
+            const v = c + (j - (sorted.length - 1) / 2) * 20
+            moved[i] = horiz ? { ...ports[i], x: v, y: ports[i].y + OUT[dir][1] } : { ...ports[i], x: ports[i].x + OUT[dir][0], y: v }
+          })
+          any = true
+        }
+      }
+      if (any && new Set(moved.map((p) => p.x + ',' + p.y)).size === moved.length) {
+        ports.forEach((p, i) => {
+          const q = moved[i]
+          if (q.x === p.x && q.y === p.y) return
+          const o = OUT[p.dir]
+          const pts = [[p.x - o[0] / 5, p.y - o[1] / 5], [p.x, p.y], [p.x + o[0], p.y + o[1]], [q.x, q.y]]
+          shapes.push('<path d="M' + pts.map(([a, b]) => n1(a + ox) + ' ' + n1(b + oy)).join(' L') + '"/>')
+        })
+        // le symbole peut avoir grandi vers le haut ou la gauche : on décale l'origine et on agrandit le cadre
+        const sx = Math.max(0, -Math.min(...moved.map((p) => p.x)))
+        const sy = Math.max(0, -Math.min(...moved.map((p) => p.y)))
+        ox -= sx
+        oy -= sy
+        moved.forEach((p, i) => {
+          ports[i].x = p.x + sx
+          ports[i].y = p.y + sy
+        })
+        if (sim?.spin) {
+          sim.spin.cx += sx
+          sim.spin.cy += sy
+        }
+        w = Math.max(w + sx, Math.ceil(Math.max(...ports.map((p) => p.x)) / 10) * 10)
+        h = Math.max(h + sy, Math.ceil(Math.max(...ports.map((p) => p.y)) / 10) * 10)
       }
     }
     const svg = shapes.join('')
