@@ -1402,13 +1402,13 @@ function Editor() {
         const done = (value: string | null) => { if (textDone.current) return; textDone.current = true; if (value !== null) commitText(textEdit, value); setTextEdit(null) }
         const multi = textEdit.kind === 'note'
         const common = {
-          className: 'inlineedit', autoFocus: true, defaultValue: textEditValue(textEdit), 'aria-label': t('editText'),
+          className: 'inlineedit', autoFocus: true, defaultValue: textEditValue(textEdit), 'aria-label': t(multi ? 'editNote' : 'editText'), title: t(multi ? 'editNote' : 'editText'),
           style: { left: Math.max(4, Math.min(textEdit.x - 40, window.innerWidth - 260)), top: Math.max(4, Math.min(textEdit.y - 14, window.innerHeight - 90)) },
           onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => e.target.select(),
           onBlur: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => done(e.target.value),
           onKeyDown: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
             if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null) }
-            else if (e.key === 'Enter' && !(multi && e.shiftKey)) { e.preventDefault(); done((e.target as HTMLInputElement).value) }
+            else if (e.key === 'Enter' && (!multi || e.ctrlKey || e.metaKey)) { e.preventDefault(); done((e.target as HTMLInputElement).value) }
           },
         }
         return multi ? <textarea {...common} rows={3} /> : <input type="text" {...common} />
