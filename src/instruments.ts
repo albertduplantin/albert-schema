@@ -60,6 +60,8 @@ export interface Pick {
   /** borne touchée (`symbole:borne`) ou conducteur touché */
   port?: string
   wire?: string
+  /** tous les conducteurs superposés à cet endroit (fils d'une même borne dessinés sur le même tracé) */
+  wires?: string[]
   /** potentiel présent à cet endroit (null : rien) */
   node?: string
 }
@@ -76,18 +78,18 @@ export function pickAt(at: P, ctx: PickContext, wireTol = 5): Pick {
     }
   }
   if (best) return { port: best.k, node: best.k }
-  let bw: { d: number; id: string } | undefined
+  const hits: { d: number; id: string }[] = []
   for (const w of ctx.wires) {
     const r = ctx.routes[w.id]
     if (!r) continue
-    for (let i = 0; i + 1 < r.length; i++) {
-      const d = distToSegment(at, r[i], r[i + 1])
-      if (d <= wireTol && (!bw || d < bw.d)) bw = { d, id: w.id }
-    }
+    let dm = Infinity
+    for (let i = 0; i + 1 < r.length; i++) dm = Math.min(dm, distToSegment(at, r[i], r[i + 1]))
+    if (dm <= wireTol) hits.push({ d: dm, id: w.id })
   }
-  if (bw) {
-    const w = ctx.wires.find((x) => x.id === bw!.id)!
-    return { wire: bw.id, node: key(w.from.symId, w.from.portId) }
+  if (hits.length) {
+    hits.sort((a, b) => a.d - b.d)
+    const w = ctx.wires.find((x) => x.id === hits[0].id)!
+    return { wire: hits[0].id, wires: hits.filter((h) => h.d <= hits[0].d + 1.5).map((h) => h.id), node: key(w.from.symId, w.from.portId) }
   }
   return {}
 }
@@ -112,7 +114,9 @@ export function readVoltage(instr: Instrument, ctx: PickContext, sim: SimResult,
 export function readCurrent(instr: Instrument, ctx: PickContext, sim: SimResult): { amps: number; clamped: boolean } {
   const pk = pickAt(jawPoint(instr), ctx, 9)
   if (!pk.wire) return { amps: 0, clamped: false }
-  return { amps: sim.amps[pk.wire] ?? 0, clamped: true }
+  // plusieurs conducteurs peuvent être dessinés au même endroit (fils qui partent de la même borne) : on lit celui qui est parcouru
+  const amps = Math.max(...(pk.wires ?? [pk.wire]).map((id) => sim.amps[id] ?? 0))
+  return { amps, clamped: true }
 }
 
 /** Affichage numérique : le nombre de décimales dépend du calibre (3 chiffres significatifs au moins). */

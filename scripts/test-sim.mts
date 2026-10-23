@@ -494,6 +494,12 @@ function rig(doc: any) {
   const c2 = clamp(mid(wireOf('F2', 'S1')))
   check('pince : 0,46 A au secondaire du transformateur', Math.round(c2.amps * 100) / 100, 0.46)
   check('pince : rien à serrer → 0 A', clamp({ x: 5, y: 5 }), { amps: 0, clamped: false })
+  // fils superposés (S2, contact d'auto-maintien et voyant partent tous de la borne A1 de la bobine) : la pince lit celui qui est parcouru
+  const coilWires = d.wires.filter((w: any) => w.to.symId === d.symbols.find((x: any) => x.label === 'KM1' && x.defId.includes('bobine')).id && w.to.portId === 't0')
+  const viaS2 = coilWires.find((w: any) => sym(w.from.symId).label === 'S2')
+  const pr = routes[viaS2.id], last = pr[pr.length - 1], prev = pr[pr.length - 2]
+  const near = { x: last.x + (prev.x - last.x) * 0.15, y: last.y + (prev.y - last.y) * 0.15 }
+  check('pince sur des fils superposés : lit le fil parcouru (0,46 A), pas S2 ouvert', Math.round(clamp(near).amps * 100) / 100, 0.46)
   check('pickAt : une borne a priorité sur le conducteur', Object.keys(pickAt(mid(wireOf('Q1', 'KM1')), ctx)).includes('wire'), true)
   const i0 = defaultInstrument('voltmeter', 'needle', 0, 0)
   check('calibres : 600 V → 1000 V → plus haut impossible', [stepRange(i0, 1), stepRange({ ...i0, range: 1000 }, 1)], [1000, 1000])
