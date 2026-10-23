@@ -123,10 +123,9 @@ input, select { font: inherit; padding: 5px 7px; border: 1px solid var(--ui-line
 .tpls button { padding: 9px 12px; font-size: 13px; }
 
 .hit-box { fill: transparent; stroke: none; cursor: move; }
-.simulating .hit-box { cursor: default; }
+.simulating .hit-box:not(.op) { cursor: move; }
 .simulating .hit-box.op { cursor: pointer; }
 .simulating .hit-box.op:hover { fill: #0b6bcb22; stroke: #0b6bcb; stroke-width: 1; }
-.simulating .port { display: none; }
 .short { fill: #d6249f44; stroke: #d6249f; stroke-width: 1.5; pointer-events: none; animation: pulse 0.8s ease-in-out infinite alternate; }
 @keyframes pulse { to { opacity: 0.25; } }
 .sel-box { fill: #0b6bcb18; stroke: #0b6bcb; stroke-width: 1.5; stroke-dasharray: 5 3; cursor: move; }
@@ -192,8 +191,6 @@ kbd { font: inherit; font-size: 11px; background: var(--ui-bg); border: 1px soli
 
 .simbtn { font-weight: 600; }
 .simbtn.on { background: #d33; border-color: #d33; }
-.simmode .editonly { opacity: 0.35; pointer-events: none; }
-.simmode .palette { opacity: 0.45; pointer-events: none; }
 .alert { background: #d6249f1a; border: 1px solid #d6249f; color: var(--ui-text); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-weight: 600; }
 .alert.warn { background: #e67e0020; border-color: #e67e00; font-weight: 400; }
 .simrowitem { font-size: 12px; padding: 2px 0; color: #1f8f3a; }

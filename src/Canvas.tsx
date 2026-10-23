@@ -260,20 +260,23 @@ export default function Canvas(p: Props) {
       return
     }
     if (e.button !== 0) return
-    if (p.sim) {
-      // simulation : on manœuvre les organes de commande, on ne modifie pas le schéma
+    if (p.sim && !e.shiftKey && !wiringRef.current && !p.placing && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-note]')) {
+      // simulation : un clic manœuvre l'organe visé (bouton, interrupteur, défaut). Tout le reste, et Maj + clic, édite le schéma.
       const el = (e.target as Element).closest('[data-sym]')
       const s = el ? doc.symbols.find((x) => x.id === el.getAttribute('data-sym')) : undefined
       const kind = s ? isOperableDef(SYMBOL_MAP[s.defId]) : null
+      const m = s ? SYMBOL_MAP[s.defId].sim : undefined
+      let handled = true
       if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
-      else if (s && (() => { const m = SYMBOL_MAP[s.defId].sim; return m?.k === 'switch' && m.ctl === 'fixed' })()) p.onSimFault?.(s.id)
-      else if (s && (() => { const m = SYMBOL_MAP[s.defId].sim; return m?.k === 'load' && m.role === 'motor' })()) p.onSimFault?.('ovl:' + s.id)
+      else if (s && m?.k === 'switch' && m.ctl === 'fixed') p.onSimFault?.(s.id)
+      else if (s && m?.k === 'load' && m.role === 'motor') p.onSimFault?.('ovl:' + s.id)
       else if (!s) {
         const we = (e.target as Element).closest('[data-wire]')
         if (we) p.onSimFault?.(we.getAttribute('data-wire')!)
-      }
-      return
+        else handled = false
+      } else handled = false
+      if (handled) return
     }
     if (wiringRef.current) return // tracé en cours : le coude ou la borne d'arrivée est pris au relâchement
     if (p.placing) {
@@ -418,7 +421,7 @@ export default function Canvas(p: Props) {
       p.onContext(e.clientX, e.clientY, it.target)
     }
     const w = wiringRef.current
-    if (w && e.button === 0 && !p.sim) {
+    if (w && e.button === 0) {
       const target = portUnder(e.target)
       if (target && portKey(target) === portKey(w.from)) {
         // clic sur la borne de départ : le tracé reste en cours, on clique ensuite les coudes puis la borne d'arrivée
@@ -453,7 +456,7 @@ export default function Canvas(p: Props) {
         .map((s) => s.id)
       p.setSel(it.add ? Array.from(new Set([...sel, ...hit])) : hit)
       setBand(null)
-    } else if (it.kind === 'drag' && it.moved && !p.sim) {
+    } else if (it.kind === 'drag' && it.moved) {
       // symboles déplacés sans fil : s'ils tombent sur des fils ou contre d'autres bornes, ils se raccordent
       const free = Object.keys(it.orig).filter((id) => !doc.wires.some((w) => w.from.symId === id || w.to.symId === id))
       if (free.length) p.update((d) => autoConnect(d, free))
@@ -500,7 +503,7 @@ export default function Canvas(p: Props) {
       onContextMenu={(e) => e.preventDefault()}
       onDoubleClick={(e) => {
         const el = (e.target as Element).closest('[data-handle]')
-        if (!el || p.sim) return
+        if (!el) return
         const [wireId, idx, kind] = el.getAttribute('data-handle')!.split('|')
         if (kind !== 'via') return
         p.commit((d) => ({ ...d, wires: d.wires.map((w) => (w.id === wireId ? { ...w, via: (w.via ?? []).filter((_, i) => i !== Number(idx)) } : w)) }))
@@ -616,7 +619,7 @@ export default function Canvas(p: Props) {
 
         {/* Couche interface : hors export */}
         <g className="ui">
-          {showGrid && !p.sim && (
+          {showGrid && (
             <>
               <defs><pattern id="grid-dots" width={GRID} height={GRID} patternUnits="userSpaceOnUse"><circle cx={0} cy={0} r={0.7} fill="#7a8696" fillOpacity={0.55} /></pattern></defs>
               <rect x={MARGIN} y={MARGIN} width={PAPER_SIZE[doc.paper].w - 2 * MARGIN} height={PAPER_SIZE[doc.paper].h - 2 * MARGIN} fill="url(#grid-dots)" pointerEvents="none" />
@@ -629,7 +632,7 @@ export default function Canvas(p: Props) {
             if (!pa || !pb) return null
             const routed = routes[wr.id] ?? routeVia(pa, pb, wr.via ?? [])
             const pts = pointsAttr(routed)
-            const handles = !p.sim && sel.length === 1 && sel[0] === wr.id
+            const handles = sel.length === 1 && sel[0] === wr.id
             return (
               <g key={wr.id} data-wire={wr.id} className="wire-hit">
                 {sel.includes(wr.id) && <polyline points={pts} className="sel-wire" />}
@@ -653,7 +656,7 @@ export default function Canvas(p: Props) {
           {doc.symbols.map((s) => {
             const def = SYMBOL_MAP[s.defId]
             const b = symBBox(s)
-            const on = !p.sim && sel.includes(s.id)
+            const on = sel.includes(s.id)
             const op = p.sim && isOperableDef(def)
             return (
               <g key={s.id} data-sym={s.id} className="sym-hit">
@@ -667,7 +670,7 @@ export default function Canvas(p: Props) {
                       onMouseEnter={() => setHoverPort(key)} onMouseLeave={() => setHoverPort(null)} />
                   )
                 })}
-                {!p.sim && (s.label || s.desc) && (() => {
+                {(s.label || s.desc) && (() => {
                   const w = Math.max((s.label?.length ?? 0) * 6.5, (s.desc?.length ?? 0) * 4) + 6
                   const h = (s.label ? 12 : 0) + (s.desc ? 9 : 0) + 2
                   return <rect data-lbl={s.id} className="lbl-hit" x={b.x2 + 3 + (s.labelOff?.x ?? 0)} y={(b.y1 + b.y2) / 2 - 10 + (s.labelOff?.y ?? 0)} width={w} height={h} />
@@ -675,7 +678,7 @@ export default function Canvas(p: Props) {
               </g>
             )
           })}
-          {!p.sim && (doc.notes ?? []).map((n) => {
+          {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')
             const w = Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
             return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={lines.length * n.size * 1.2 + 4} />

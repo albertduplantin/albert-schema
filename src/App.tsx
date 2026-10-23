@@ -508,7 +508,6 @@ function Editor() {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      if (simMode) { if (e.key === 'Escape') setSimMode(false); return }
       if (wiringOn && (e.key === 'Backspace' || e.key === 'Delete')) return // pendant un tracé, Retour arrière retire seulement le dernier coude
       const ctrl = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
@@ -841,7 +840,7 @@ function Editor() {
       </main>
 
       <aside className="props">
-        {sim ? (
+        {sim && !sel.length ? (
           <>
             <h3>{t('simTitle')}</h3>
             {sim.shorts.length > 0 && (
@@ -876,6 +875,9 @@ function Editor() {
             </div>
           </>
         ) : (<>
+        {sim && (
+          <div className="alert info" role="status">▶ {t('simEditing')}{sim.shorts.length > 0 ? ' · ⚠ ' + t('simShort') : ''}{sim.thermalTrip ? ' · 🔥' : ''}</div>
+        )}
         <h3>{t('properties')}</h3>
         {selSym ? (
           <div className="form" onFocus={checkpoint}>
