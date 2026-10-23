@@ -1,7 +1,7 @@
 import type { Doc, Lang, PlacedSymbol, Ratings, SymbolDef, Wire } from './types'
 import { simulate } from './sim/engine'
 import { DEFAULT_WATTS, motorCurrent } from './sim/estimate'
-import { RATINGS, transformerInfo } from './transformer'
+import { RATINGS, transformerInfo, transformerTopology } from './transformer'
 import { CABLE_MAX_PROTECTION, kindOf } from './ratings'
 import { COIL_INRUSH_FACTOR, TRAFO_VA, contactorFor, rangeFor, typicalMotorCurrent } from './catalog'
 
@@ -246,6 +246,8 @@ export function wireKind(w: Wire, doc: Doc, defs: Record<string, SymbolDef>): Wi
   const pots = new Set<string>()
   let derived = false
   let power = false
+  let secNeutral = false
+  const topo = doc.symbols.some((x) => defs[x.defId]?.sim?.k === 'transformer') ? transformerTopology(doc, defs) : undefined
   while (stack.length) {
     const n = stack.pop()!
     const [id, port] = n.split(':')
@@ -254,11 +256,12 @@ export function wireKind(w: Wire, doc: Doc, defs: Record<string, SymbolDef>): Wi
     const m = def?.sim
     if (m?.k === 'source') { const pot = m.pot[port]; if (pot && pot !== 'PE') pots.add(pot) }
     if (m?.k === 'transformer' && m.secondary.includes(port)) derived = true
+    if (m?.k === 'transformer' && m.secondary.includes(port) && topo?.labels[id]?.[port] === 'N') secNeutral = true
     if (m?.k === 'load' && m.role === 'motor') power = true
     if (s && def && /02_power_contacts/.test(def.id)) power = true
     for (const e of g.adj.get(n) ?? []) if (!seen.has(e.to)) { seen.add(e.to); stack.push(e.to) }
   }
-  if (pots.has('N')) return 'neutral'
+  if (pots.has('N') || secNeutral) return 'neutral'
   if (pots.has('+') || pots.has('-')) return 'control-dc'
   if (derived && ![...pots].some((p) => p.startsWith('L'))) return 'control-ac'
   if (pots.size === 0) return derived ? 'control-ac' : undefined

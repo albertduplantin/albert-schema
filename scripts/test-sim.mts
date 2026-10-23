@@ -585,5 +585,19 @@ function rig(doc: any) {
   const mot = wireAdvice(w2('KM1', 'M1'), mm, SYMBOL_MAP, 'fr')
   check('section : phase du moteur de 4 kW (8,4 A, calibre 10 A) → 1,5 mm² au moins', mot.section?.value, '1,5')
 }
+// ── couleur conseillée des conducteurs du secondaire de commande : phase rouge, neutre (côté terre) bleu clair
+{
+  const { wireKind } = await import(ROOT + '/src/settings.ts')
+  const { transformerTopology } = await import(ROOT + '/src/transformer.ts')
+  const t = T.motorStarterTransformer(base)
+  const tr = t.symbols.find((s: any) => s.label === 'T1')
+  const topo = transformerTopology(t, SYMBOL_MAP)
+  const lab = topo.labels[tr.id] ?? {}
+  const lbl = (id: string) => t.symbols.find((x: any) => x.id === id)?.label
+  const kinds = t.wires.map((w: any) => [lbl(w.from.symId) + '-' + lbl(w.to.symId), wireKind(w, t, SYMBOL_MAP)])
+  const kd = (n: string) => kinds.find((k: any) => k[0] === n)?.[1]
+  check('secondaire de commande : retours bobine/voyant vers T1 → bleu clair (neutre), départ T1-F2 → rouge (phase)', [kd('KM1-T1'), kd('H1-T1'), kd('T1-F2')], ['neutral', 'neutral', 'control-ac'])
+}
+
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
