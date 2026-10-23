@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addVersion, loadVersions, removeVersion, type Version } from './versions'
+import { defaultVolts, sourcePots } from './sim/potentials'
 import { isTerminal, stripOf, terminalRows } from './strips'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
 import type { Doc, Instrument, Note, Shape, StrokeStyle, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
@@ -976,6 +977,28 @@ function Editor() {
                   {mc?.estimated && <p className="muted small">⚡ {t('motorEstimated')} {String(mc.value).replace('.', lang === 'fr' ? ',' : '.')} A</p>}
                   {kind === 'consumer' && <p className="muted small">{t('wattsHint')}</p>}
                 </fieldset>
+              )
+            })()}
+            {(() => { const d = SYMBOL_MAP[selSym.defId]; return d.sim?.k === 'source' && defaultVolts(Object.values(sourcePots(selSym, d))) !== undefined })() && (() => {
+              const d = SYMBOL_MAP[selSym.defId]
+              const pots = Object.values(sourcePots(selSym, d))
+              const dv = defaultVolts(pots)!
+              const list = pots.includes('+') ? [12, 24, 48, 110] : pots.some((p) => /^L[123]$/.test(p)) ? [230, 400, 690] : [12, 24, 48, 110, 230]
+              return (
+                <>
+                  {d.id === 'sim-src1' && (
+                    <label data-tip={t('helpSourceNature')}>{t('sourceNature')}{tip('helpSourceNature')}
+                      <select value={selSym.dc ? 'dc' : 'ac'} onChange={(e) => patchSym({ dc: e.target.value === 'dc' || undefined, volts: undefined })}>
+                        <option value="ac">{t('natureAc')}</option>
+                        <option value="dc">{t('natureDc')}</option>
+                      </select>
+                    </label>
+                  )}
+                  <label data-tip={t('helpSourceVolts')}>{t(pots.some((p) => /^L[123]$/.test(p)) ? 'sourceVoltsTri' : 'sourceVolts')}{tip('helpSourceVolts')}
+                    <input type="number" min={0} list="src-volts" placeholder={String(dv)} value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
+                    <datalist id="src-volts">{list.map((v) => <option key={v} value={v} />)}</datalist>
+                  </label>
+                </>
               )
             })()}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (

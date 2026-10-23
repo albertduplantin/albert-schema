@@ -10,9 +10,7 @@ export const SOURCES_NAME = { fr: 'Sources et alimentations', en: 'Sources and p
 
 const G = (fr: string, en: string) => ({ fr, en })
 const GROUPS: { group: { fr: string; en: string }; ids: string[] }[] = [
-  { group: G('Repères de simulation', 'Simulation sources'), ids: ['sim-24vac', 'sim-l1', 'sim-l2', 'sim-l3', 'sim-l', 'sim-n', 'sim-l24', 'sim-n24', 'sim-24v', 'sim-0v'] },
-  { group: G('Réseaux triphasés', 'Three-phase supplies'), ids: ['110_network_supplies/src_3p', '110_network_supplies/src_3pn', '110_network_supplies/src_3p_pe_n', '110_network_supplies/src_3ppe', '110_network_supplies/src_3p_pen', '110_network_supplies/src_tnc_tns'] },
-  { group: G('Réseaux monophasés', 'Single-phase supplies'), ids: ['110_network_supplies/src_1pn', '110_network_supplies/src_1p_pe_n'] },
+  { group: G('Sources de simulation (tension réglable)', 'Simulation sources (adjustable voltage)'), ids: ['sim-src1', 'sim-src3', 'sim-l', 'sim-n', 'sim-24v', 'sim-0v'] },
   { group: G('Terres et masses', 'Earth and frame'), ids: ['110_network_supplies/terre', '110_network_supplies/masse'] },
   { group: G('Alimentations continues', 'DC power supplies'), ids: ['30_power_supplies/ac2_dc', '30_power_supplies/power_supply_acdc_3_pole', '40_uninterruptible_power_supply/ups'] },
   { group: G('Générateurs', 'Generators'), ids: ['10_generators/gene_tri', '10_generators/generatrice_dc', '10_generators/dynamotachymtrique', '10_generators/windmill', '10_generators/photovoltaic_solar_module', '10_generators/pvcell', '20_power_units/engine_generator', '20_power_units/micro_turbine_generator'] },
@@ -22,6 +20,22 @@ const GROUPS: { group: { fr: string; en: string }; ids: string[] }[] = [
 
 /** Doublons retirés de la palette (même fonction qu'un symbole conservé) : motif de chaque retrait en regard. */
 export const HIDDEN_DUPLICATES: Record<string, string> = {
+  // sources réseau en barres : remplacées par les blocs réglables « Source monophasée » et « Source triphasée »
+  '110_network_supplies/src_3p': 'remplacée par le bloc Source triphasée réglable',
+  '110_network_supplies/src_3pn': 'remplacée par le bloc Source triphasée réglable',
+  '110_network_supplies/src_3p_pe_n': 'remplacée par le bloc Source triphasée réglable',
+  '110_network_supplies/src_3ppe': 'remplacée par le bloc Source triphasée réglable',
+  '110_network_supplies/src_3p_pen': 'remplacée par le bloc Source triphasée réglable',
+  '110_network_supplies/src_tnc_tns': 'remplacée par le bloc Source triphasée réglable',
+  '110_network_supplies/src_1pn': 'remplacée par le bloc Source monophasée réglable',
+  '110_network_supplies/src_1p_pe_n': 'remplacée par le bloc Source monophasée réglable',
+  // repères isolés remplacés par les blocs (les anciens schémas et exemples les utilisent toujours)
+  'sim-l1': 'remplacé par le bloc Source triphasée',
+  'sim-l2': 'remplacé par le bloc Source triphasée',
+  'sim-l3': 'remplacé par le bloc Source triphasée',
+  'sim-l24': 'remplacé par une source L réglée à 24 V',
+  'sim-n24': 'remplacé par une source N réglée à 24 V',
+  'sim-24vac': 'remplacé par le bloc Source monophasée réglée à 24 V',
   '110_network_supplies/3f_n_pe_pravy': 'doublon de « Source tripolaire + PE + N », nom erroné',
   '110_network_supplies/3_pen_pravy': 'doublon de « Source tripolaire + PEN »',
   '110_network_supplies/src_1p_pen': 'même fonction que « Source unipolaire + neutre » (TN-C interdit en installation neuve)',

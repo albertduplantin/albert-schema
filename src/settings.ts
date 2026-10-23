@@ -1,5 +1,6 @@
 import type { Doc, Lang, PlacedSymbol, Ratings, SymbolDef, Wire } from './types'
 import { simulate } from './sim/engine'
+import { basePot, sourcePots } from './sim/potentials'
 import { DEFAULT_WATTS, motorCurrent } from './sim/estimate'
 import { RATINGS, transformerInfo, transformerTopology } from './transformer'
 import { CABLE_MAX_PROTECTION, kindOf } from './ratings'
@@ -15,7 +16,7 @@ export type Advice = Partial<Record<keyof Ratings | 'volts' | 'power' | 'voltsPr
 
 const S = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
 const key = (symId: string, portId: string) => `${symId}:${portId}`
-const HOT = new Set(['L', 'L1', 'L2', 'L3', '+', 'L24'])
+const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
 const fmt = (lang: Lang, x: number) => String(x).replace('.', lang === 'fr' ? ',' : '.')
 const upTo = (x: number) => RATINGS.find((r) => r >= x) ?? RATINGS[RATINGS.length - 1]
 
@@ -38,7 +39,7 @@ function buildGraph(doc: Doc, defs: Record<string, SymbolDef>): Graph {
   for (const w of doc.wires) link(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId), { wire: w.id, prot: false })
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
-    if (m?.k === 'source') for (const [p, pot] of Object.entries(m.pot)) { if (HOT.has(pot)) origins.push(key(s.id, p)) }
+    if (m?.k === 'source') for (const [p, pot] of Object.entries(sourcePots(s, defs[s.defId]))) { if (HOT.has(basePot(pot))) origins.push(key(s.id, p)) }
     else if (m?.k === 'transformer' && m.secondary[0]) origins.push(key(s.id, m.secondary[0]))
     else if (m?.k === 'switch') {
       const id = defs[s.defId].id
@@ -254,14 +255,14 @@ export function wireKind(w: Wire, doc: Doc, defs: Record<string, SymbolDef>): Wi
     const s = g.byId.get(id)
     const def = s && defs[s.defId]
     const m = def?.sim
-    if (m?.k === 'source') { const pot = m.pot[port]; if (pot && pot !== 'PE') pots.add(pot) }
+    if (m?.k === 'source' && s && def) { const pot = sourcePots(s, def)[port]; if (pot && pot !== 'PE') pots.add(basePot(pot)) }
     if (m?.k === 'transformer' && m.secondary.includes(port)) derived = true
     if (m?.k === 'transformer' && m.secondary.includes(port) && topo?.labels[id]?.[port] === 'N') secNeutral = true
     if (m?.k === 'load' && m.role === 'motor') power = true
     if (s && def && /02_power_contacts/.test(def.id)) power = true
     for (const e of g.adj.get(n) ?? []) if (!seen.has(e.to)) { seen.add(e.to); stack.push(e.to) }
   }
-  if (pots.has('N') || pots.has('N24') || secNeutral) return 'neutral'
+  if (pots.has('N') || secNeutral) return 'neutral'
   if (pots.has('+') || pots.has('-')) return 'control-dc'
   if (derived && ![...pots].some((p) => p.startsWith('L'))) return 'control-ac'
   if (pots.size === 0) return derived ? 'control-ac' : undefined

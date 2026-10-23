@@ -72,7 +72,7 @@ export function transformerTopology(doc: Doc, defs: Record<string, SymbolDef>): 
     const mine: Record<string, string> = {}
     // primaire : nom du potentiel présent (L, N, L1, L2, L3)
     for (const p of m.primary) {
-      const v = pot[key(s.id, p)]
+      const v = pot[key(s.id, p)]?.split('@')[0]
       if (v && /^(L[123]?|N)$/.test(v)) mine[p] = v
     }
     // secondaire à deux bornes : la borne reliée à la terre (ou au neutre) devient le neutre

@@ -111,6 +111,8 @@ export interface PlacedSymbol {
   /** groupe : cliquer un membre sélectionne tout le groupe ; `locked` : le symbole ne se déplace plus à la souris */
   group?: string
   locked?: boolean
+  /** bloc source monophasé réglé en continu (bornes + et −) */
+  dc?: boolean
   defId: string
   x: number
   y: number

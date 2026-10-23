@@ -1,3 +1,4 @@
+import { basePot, potVolts, sourcePots, withSourceVoltages } from './potentials'
 import type { Doc, PlacedSymbol, SimModel, SymbolDef, TimerKind } from '../types'
 import { cylPos, solveFluid, STROKE_S } from './fluid'
 import { DEFAULT_WATTS, motorCurrent } from './estimate'
@@ -283,7 +284,7 @@ export function reachedSources(doc: Doc, defs: Record<string, SymbolDef>, start:
   const srcPot = new Map<Key, string>()
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
-    if (m?.k === 'source') for (const [p, pot] of Object.entries(m.pot)) srcPot.set(key(s.id, p), pot)
+    if (m?.k === 'source') for (const [p, pot] of Object.entries(sourcePots(s, defs[s.defId]))) srcPot.set(key(s.id, p), pot)
     else if (m?.k === 'switch' && m.ctl === 'fixed') for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b)) // bornes, barrettes de terre
   }
   const seen = new Set<Key>([start])
@@ -293,8 +294,8 @@ export function reachedSources(doc: Doc, defs: Record<string, SymbolDef>, start:
   while (stack.length) {
     const n = stack.pop()!
     const pot = srcPot.get(n)
-    if (pot === 'PE') pe = true
-    if (pot === 'N') neutral = true
+    if (pot && basePot(pot) === 'PE') pe = true
+    if (pot && basePot(pot) === 'N') neutral = true
     for (const o of adj.get(n) ?? []) if (!seen.has(o)) { seen.add(o); stack.push(o) }
   }
   return { pe, neutral }
@@ -326,8 +327,11 @@ function solveAll(x: Ctx) {
 }
 
 const PHASES = new Set(['L', 'L1', 'L2', 'L3'])
+const PHASES3 = new Set(['L1', 'L2', 'L3'])
 
-/** Tension entre deux potentiels, si elle est déterminable (réseau 230/400 V, source continue 24 V, secondaires de transformateurs). */
+/** Tension phase-neutre d'une source triphasée réglée sur `v` volts entre phases. */
+const phaseToNeutral = (v: number | undefined) => (v === undefined ? 230 : Math.round((v / Math.sqrt(3)) * 10) / 10)
+
 /**
  * Tension (V) entre deux points du schéma d'après leurs potentiels, comme la lirait un voltmètre : 0 entre deux points au même
  * potentiel ou si l'un est en l'air ; indéfinie (undefined) si le logiciel ne sait pas l'évaluer.
@@ -336,9 +340,11 @@ export function voltageBetween(a: string | null, b: string | null, doc: Doc, def
   if (!a || !b || a === b) return 0
   const pe = a === 'PE' ? b : b === 'PE' ? a : null
   if (pe) {
-    if (pe === 'N' || pe === 'N24') return 0
-    if (pe === 'L24') return 24 // neutre 24 V relié à la terre (régime TN)
-    if (PHASES.has(pe)) return 230
+    const base = basePot(pe)
+    const v = potVolts(pe)
+    if (base === 'N') return 0
+    if (PHASES3.has(base)) return phaseToNeutral(v)
+    if (PHASES.has(base)) return v ?? 230
     if (pe.startsWith('~')) return pe.endsWith(':0') ? (doc.symbols.find((x) => x.id === pe.slice(1).split(':')[0])?.volts ?? 24) : 0
   }
   return voltBetween(a, b, doc, defs)
@@ -360,16 +366,21 @@ function voltBetween(a: string | null, b: string | null, doc: Doc, defs: Record<
     return volts
   }
   if (aD || bD) return undefined
-  if (PHASES.has(a) && PHASES.has(b)) return 400
-  if ((PHASES.has(a) && b === 'N') || (PHASES.has(b) && a === 'N')) return 230
-  if ((a === '+' && b === '-') || (a === '-' && b === '+')) return 24
-  if ((a === 'L24' && b === 'N24') || (a === 'N24' && b === 'L24')) return 24 // source 24 V alternatif phase + neutre
+  // deux sources de tensions différentes : la tension entre leurs bornes n'est pas déterminable
+  const va = potVolts(a), vb = potVolts(b)
+  if (va !== vb) return undefined
+  const A = basePot(a), B = basePot(b)
+  if (PHASES.has(A) && PHASES.has(B)) return va ?? 400
+  if (PHASES3.has(A) && B === 'N') return phaseToNeutral(va)
+  if (PHASES3.has(B) && A === 'N') return phaseToNeutral(va)
+  if ((PHASES.has(A) && B === 'N') || (PHASES.has(B) && A === 'N')) return va ?? 230
+  if ((A === '+' && B === '-') || (A === '-' && B === '+')) return va ?? 24
   return undefined
 }
 
-const HOT = new Set(['L', 'L1', 'L2', 'L3', '+', 'L24'])
+const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
 /** Potentiel « chaud » : phase, +, ou première borne d'un secondaire de transformateur. */
-const isHot = (pot: string) => HOT.has(pot) || pot.endsWith(':0')
+const isHot = (pot: string) => HOT.has(basePot(pot)) || pot.endsWith(':0')
 
 /**
  * Conducteurs réellement parcourus par un courant et sens de circulation.
@@ -522,7 +533,9 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
   return { dir: res, amps }
 }
 
-export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now = Date.now()): SimResult {
+export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now = Date.now()): SimResult {
+  // sources réglées à une tension ou à une nature inhabituelle : potentiels suffixés (L@24)
+  const { doc: docIn, defs } = withSourceVoltages(docRaw, defsRaw)
   const cut = inp.cut
   const doc: Doc = cut?.size ? { ...docIn, wires: docIn.wires.filter((w) => !cut.has(w.id) && !cut.has(w.from.symId) && !cut.has(w.to.symId)) } : docIn
   const timers = new Map<string, { kind: TimerKind; delay: number }>()

@@ -12,6 +12,7 @@ import {
   GRID, MARGIN, PAPER_SIZE, TB_H, TB_W, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
 } from './geometry'
 import Sheet from './Sheet'
+import { isSourceBlock, sourceCaption, sourcePots } from './sim/potentials'
 import { devKey, isOperableDef, type SimResult } from './sim/engine'
 import type { SimModel } from './types'
 
@@ -45,13 +46,14 @@ function Rotor({ cx, cy, r }: { cx: number; cy: number; r: number }) {
 }
 
 const POT_COLOR: Record<string, string> = {
-  L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', L24: '#d62728', N24: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
+  L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
   // fluide : pression (P), échappement (R), fuite (X)
   P: '#1e88e5', R: '#90a4ae', X: '#e53935',
 }
 const SECONDARY_COLORS = ['#8e24aa', '#00897b', '#6d4c41', '#ef6c00', '#3949ab', '#7cb342']
 /** Couleur d'un fil selon son potentiel : réseau, source continue, ou n-ième borne du secondaire d'un transformateur. */
-function potColor(pot: string): string {
+function potColor(potRaw: string): string {
+  const pot = potRaw.split('@')[0]
   if (POT_COLOR[pot]) return POT_COLOR[pot]
   if (pot.startsWith('~')) return SECONDARY_COLORS[Number(pot.split(':')[1]) % SECONDARY_COLORS.length] ?? '#8e24aa'
   return '#d62728'
@@ -806,6 +808,16 @@ export default function Canvas(p: Props) {
                 )}
                 <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={bladeVars(s.id, model, p.sim)}>
                   <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />
+                  {model?.k === 'source' && isSourceBlock(def.id) && (
+                    <g stroke="none" fill="currentColor" pointerEvents="none">
+                      <text x={def.w / 2} y={11} fontSize={8} textAnchor="middle" fontWeight={700}>{sourceCaption(s, def)}</text>
+                      {Object.entries(sourcePots(s, def)).map(([pid, pot]) => {
+                        const port = def.ports.find((q) => q.id === pid)
+                        return port ? <text key={pid} x={port.x} y={21} fontSize={5.5} textAnchor="middle">{pot === '-' ? '−' : pot}</text> : null
+                      })}
+                    </g>
+                  )}
+                  {model?.k === 'source' && !isSourceBlock(def.id) && s.volts ? <text x={def.w / 2} y={def.h + 8} fontSize={6.5} textAnchor="middle" stroke="none" fill="currentColor" pointerEvents="none">{s.volts} V</text> : null}
                   {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} />}
                 </g>
                 {def.ports.map((pt) => {

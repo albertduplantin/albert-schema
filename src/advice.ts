@@ -1,5 +1,6 @@
 import type { Doc, Lang, PlacedSymbol, Ratings, SymbolDef } from './types'
 import { devKey, simulate } from './sim/engine'
+import { basePot, sourcePots } from './sim/potentials'
 import { RATINGS, describeInfo, transformerInfo, transformerTopology } from './transformer'
 import { kindOf, maxProtection, motorCurrent, parseSection } from './ratings'
 
@@ -17,7 +18,7 @@ export interface Issue {
 
 const S = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
 const key = (symId: string, portId: string) => `${symId}:${portId}`
-const HOT = new Set(['L', 'L1', 'L2', 'L3', '+', 'L24'])
+const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
 
 interface Edge { to: string; sc: boolean; ol: boolean; sym?: string; wire?: string }
 
@@ -49,7 +50,7 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     if (!m) continue
     const id = defs[s.defId].id
     if (m.k === 'source') {
-      for (const [p, pot] of Object.entries(m.pot)) if (HOT.has(pot)) origins.set(key(s.id, p), s)
+      for (const [p, pot] of Object.entries(sourcePots(s, defs[s.defId]))) if (HOT.has(basePot(pot))) origins.set(key(s.id, p), s)
     } else if (m.k === 'transformer') {
       if (m.secondary[0]) origins.set(key(s.id, m.secondary[0]), s)
     } else if (m.k === 'switch') {
@@ -86,8 +87,8 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     if (m?.k !== 'switch' || !rest || !/10_fuses|11_circuit_breakers|12_magneto|20_disconnecting|50_residual_current_circuit_breaker/.test(def.id)) continue
     if (!/1 pole protege|\+ ?neutre|P\+N|\+ ?N\b/i.test(def.name.fr + ' ' + def.name.en)) continue
     const pots = m.poles.map(([a, b]) => rest!.potentialOf[key(s.id, a)] ?? rest!.potentialOf[key(s.id, b)] ?? null)
-    const phases = [...new Set(pots.filter((p): p is string => !!p && PHASES.has(p)))]
-    const phasePoles = pots.filter((p) => !!p && PHASES.has(p)).length
+    const phases = [...new Set(pots.filter((p): p is string => !!p && PHASES.has(basePot(p))))]
+    const phasePoles = pots.filter((p) => !!p && PHASES.has(basePot(p))).length
     const allowed = Math.max(1, m.poles.length - 1)
     if (phasePoles > allowed) out.push({
       level: 'error', symId: s.id,
