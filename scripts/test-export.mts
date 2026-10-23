@@ -33,5 +33,38 @@ const r = terminalRows(T.relay24V(base), 'fr')
 check('bornier : 6 bornes X1.2 … X1.7, triées', r.map((x: any) => x.terminal).join(',') === 'X1.2,X1.3,X1.4,X1.5,X1.6,X1.7', r.map((x: any) => x.terminal).join(','))
 check('bornier : X1.4 reçoit un fil depuis KA1 et repart vers H1', r.find((x: any) => x.terminal === 'X1.4')?.inWires.some((w: string) => /KA1/.test(w)) && r.find((x: any) => x.terminal === 'X1.4')?.outWires.some((w: string) => /H1/.test(w)), JSON.stringify(r.find((x: any) => x.terminal === 'X1.4')))
 check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toMonochrome('<path stroke="#c80000" fill="#fff"/><path stroke="currentColor" fill="#0050c8"/>') === '<path stroke="#000000" fill="#fff"/><path stroke="currentColor" fill="#000000"/>', toMonochrome('<path stroke="#c80000" fill="#fff"/>'))
+
+// ── exercices : un schéma correct valide l'exercice, un schéma sans verrouillage non
+{
+  const { EXERCISES, runExercise } = await import(ROOT + '/src/exercises.ts')
+  const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  const PB = Q('380_signaling_operating/20_push_buttons/poussoir'), PBN = Q('380_signaling_operating/20_push_buttons/poussoir_nf')
+  const K = Q('310_relays_contactors_contacts/02_contacts_cross_referencing/01_auxiliary_contacts/con_simple')
+  const C = Q('310_relays_contactors_contacts/01_coils/bobine3')
+  const ex = (id: string) => EXERCISES.find((e: any) => e.id === id)
+  const lamps = runExercise(ex('lamps'), T.startLamps(base), SYMBOL_MAP, 'fr')
+  check('exercice « voyants » : validé par le modèle intégré', lamps.ok, JSON.stringify(lamps.steps.filter((x: any) => !x.ok)))
+  const two = T.build(base, [
+    ['l', 'sim-l', 400, 30], ['s1', PBN, 400, 90, 'S1'], ['s4', PBN, 400, 170, 'S4'], ['s2', PB, 400, 260, 'S2'], ['s3', PB, 480, 260, 'S3'], ['ka', K, 560, 260, 'KM1'],
+    ['c', C, 440, 380, 'KM1'], ['n', 'sim-n', 460, 460],
+  ], [
+    ['l', 'a', 's1', 't0'], ['s1', 't1', 's4', 't0'], ['s4', 't1', 's2', 't0'], ['s4', 't1', 's3', 't0'], ['s4', 't1', 'ka', 't0'],
+    ['s2', 't1', 'c', 't0'], ['s3', 't1', 'c', 't0'], ['ka', 't1', 'c', 't0'], ['c', 't1', 'n', 'a'],
+  ])
+  const r2 = runExercise(ex('two-posts'), two, SYMBOL_MAP, 'fr')
+  check('exercice « deux postes » : validé par un schéma correct', r2.ok, JSON.stringify(r2.steps.filter((x: any) => !x.ok)))
+  const seq = T.build(base, [
+    ['l', 'sim-l', 400, 30], ['s1', PBN, 400, 90, 'S1'],
+    ['s2', PB, 400, 190, 'S2'], ['a1', K, 480, 190, 'KM1'], ['c1', C, 420, 300, 'KM1'], ['n1', 'sim-n', 440, 380],
+    ['en', K, 600, 150, 'KM1'], ['s3', PB, 600, 240, 'S3'], ['a2', K, 680, 240, 'KM2'], ['c2', C, 620, 340, 'KM2'], ['n2', 'sim-n', 640, 420],
+  ], [
+    ['l', 'a', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'], ['s2', 't1', 'c1', 't0'], ['a1', 't1', 'c1', 't0'], ['c1', 't1', 'n1', 'a'],
+    ['s1', 't1', 'en', 't0'], ['en', 't1', 's3', 't0'], ['en', 't1', 'a2', 't0'], ['s3', 't1', 'c2', 't0'], ['a2', 't1', 'c2', 't0'], ['c2', 't1', 'n2', 'a'],
+  ])
+  const r3 = runExercise(ex('sequence'), seq, SYMBOL_MAP, 'fr')
+  check('exercice « séquentiel » : validé par un schéma correct', r3.ok, JSON.stringify(r3.steps.filter((x: any) => !x.ok)))
+  const bad = runExercise(ex('sequence'), T.delayedCascade(base), SYMBOL_MAP, 'fr')
+  check('exercice « séquentiel » : refusé pour un montage sans verrouillage', !bad.ok)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

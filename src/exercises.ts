@@ -84,6 +84,51 @@ export const EXERCISES: Exercise[] = [
       { press: ['S2'], expect: { KM1: false, KM2: true }, say: S('S2 pendant KM2 : KM1 reste verrouillée', 'S2 while KM2 is on: KM1 stays locked out') },
     ],
   },
+  {
+    id: 'lamps', level: 1,
+    title: S('Voyants de marche et d’arrêt', 'Run and stop lamps'),
+    statement: S(
+      'Sur le circuit marche / arrêt, ajoutez deux voyants : H1 s’allume quand KM1 est enclenchée (contact NO de KM1), H2 quand elle est coupée (contact NF de KM1).',
+      'On the start / stop circuit, add two lamps: H1 lights while KM1 is energised (NO contact of KM1), H2 while it is off (NC contact of KM1).'),
+    labels: ['S1', 'S2', 'KM1', 'H1', 'H2'],
+    steps: [
+      { expect: { KM1: false, H1: false, H2: true }, say: S('Au repos : H2 allumé, H1 éteint', 'At rest: H2 on, H1 off') },
+      { press: ['S2'], expect: { KM1: true, H1: true, H2: false }, say: S('Marche : H1 allumé, H2 éteint', 'Run: H1 on, H2 off') },
+      { expect: { KM1: true, H1: true, H2: false }, say: S('Après relâchement : toujours en marche', 'After release: still running') },
+      { press: ['S1'], expect: { KM1: false, H1: false, H2: true }, say: S('Arrêt : H2 se rallume', 'Stop: H2 lights again') },
+    ],
+  },
+  {
+    id: 'two-posts', level: 2,
+    title: S('Commande de deux postes', 'Two-station control'),
+    statement: S(
+      'Un même contacteur KM1 se commande depuis deux postes : deux boutons de marche S2 et S3 en parallèle, deux boutons d’arrêt S1 et S4 en série, et un contact d’auto-maintien KM1.',
+      'One contactor KM1 is controlled from two stations: two start buttons S2 and S3 in parallel, two stop buttons S1 and S4 in series, and a latching KM1 contact.'),
+    labels: ['S1', 'S2', 'S3', 'S4', 'KM1'],
+    steps: [
+      { expect: { KM1: false }, say: S('Au repos, KM1 est coupée', 'At rest, KM1 is off') },
+      { press: ['S2'], expect: { KM1: true }, say: S('Marche depuis le poste 1 (S2)', 'Start from station 1 (S2)') },
+      { expect: { KM1: true }, say: S('Auto-maintien après relâchement', 'Latched after release') },
+      { press: ['S4'], expect: { KM1: false }, say: S('Arrêt depuis le poste 2 (S4)', 'Stop from station 2 (S4)') },
+      { press: ['S3'], expect: { KM1: true }, say: S('Marche depuis le poste 2 (S3)', 'Start from station 2 (S3)') },
+      { press: ['S1'], expect: { KM1: false }, say: S('Arrêt depuis le poste 1 (S1)', 'Stop from station 1 (S1)') },
+    ],
+  },
+  {
+    id: 'sequence', level: 3,
+    title: S('Démarrage séquentiel', 'Sequential start'),
+    statement: S(
+      'KM2 ne peut démarrer (S3) que si KM1 est déjà enclenché (S2) : un contact de KM1 en série avec la commande de KM2. Chaque contacteur a son auto-maintien ; S1 arrête les deux.',
+      'KM2 can start (S3) only if KM1 is already on (S2): a KM1 contact in series with KM2’s control. Each contactor is latched; S1 stops both.'),
+    labels: ['S1', 'S2', 'S3', 'KM1', 'KM2'],
+    steps: [
+      { press: ['S3'], expect: { KM1: false, KM2: false }, say: S('S3 seul : KM2 refuse de démarrer', 'S3 alone: KM2 refuses to start') },
+      { press: ['S2'], expect: { KM1: true, KM2: false }, say: S('S2 : KM1 démarre', 'S2: KM1 starts') },
+      { press: ['S3'], expect: { KM1: true, KM2: true }, say: S('S3 ensuite : KM2 démarre', 'S3 then: KM2 starts') },
+      { expect: { KM1: true, KM2: true }, say: S('Les deux restent enclenchés', 'Both stay on') },
+      { press: ['S1'], expect: { KM1: false, KM2: false }, say: S('S1 : arrêt des deux', 'S1: both stop') },
+    ],
+  },
 ]
 
 export interface StepResult { text: string; ok: boolean; detail?: string }

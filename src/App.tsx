@@ -194,6 +194,9 @@ function Editor() {
   }
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
+  // exercice en cours : un pense-bête flottant avec l'énoncé et un bouton de vérification
+  const [activeEx, setActiveEx] = useState<string | null>(() => { try { return localStorage.getItem('albertschema.exercise') } catch { return null } })
+  const chooseEx = (id: string | null) => { setActiveEx(id); try { if (id) localStorage.setItem('albertschema.exercise', id); else localStorage.removeItem('albertschema.exercise') } catch { /* ignoré */ } }
   // visite guidée : proposée une seule fois, sur une feuille vierge, et relançable depuis l'aide (?)
   const [tourStep, setTourStep] = useState<number | null>(() => {
     try { return localStorage.getItem('albertschema.tour') === '1' || loadDoc().symbols.length ? null : 0 } catch { return null }
@@ -1618,7 +1621,8 @@ function Editor() {
                     <span className="lvl">{'★'.repeat(ex.level)}{'☆'.repeat(3 - ex.level)} {t(('level' + ex.level) as Key)}</span>
                     <p>{ex.statement[lang]}</p>
                     <p className="muted">{t('exerciseLabels')} : {ex.labels.join(', ')}</p>
-                    <button onClick={() => setExResult((m) => ({ ...m, [ex.id]: runExercise(ex, doc, SYMBOL_MAP, lang) }))}>{t('exerciseCheck')}</button>
+                    <button onClick={() => setExResult((m) => ({ ...m, [ex.id]: runExercise(ex, doc, SYMBOL_MAP, lang) }))}>{t('exerciseCheck')}</button>{' '}
+                    <button onClick={() => { chooseEx(ex.id); setShowGallery(false) }}>{t('exerciseStart')}</button>
                     {r && (
                       <div className={'exres ' + (r.ok ? 'ok' : 'ko')}>
                         <strong>{r.ok ? '✓ ' + t('exerciseOk') : '✗ ' + t('exerciseKo')}</strong>
@@ -1686,6 +1690,27 @@ function Editor() {
           </div>
         </div>
       )}
+
+      {activeEx && (() => {
+        const ex = EXERCISES.find((x) => x.id === activeEx)
+        if (!ex) return null
+        const r = exResult[ex.id]
+        return (
+          <aside className="exercisecard" aria-label={t('galleryExercises')}>
+            <div className="exhead"><strong>{ex.title[lang]}</strong><button className="icon" onClick={() => chooseEx(null)} aria-label={t('close')} title={t('close')}>✕</button></div>
+            <p>{ex.statement[lang]}</p>
+            <p className="muted small">{t('exerciseLabels')} : {ex.labels.join(', ')}</p>
+            <button onClick={() => setExResult((m) => ({ ...m, [ex.id]: runExercise(ex, doc, SYMBOL_MAP, lang) }))}>{t('exerciseCheck')}</button>
+            {r && (
+              <div className={'exres ' + (r.ok ? 'ok' : 'ko')}>
+                <strong>{r.ok ? '✓ ' + t('exerciseOk') : '✗ ' + t('exerciseKo')}</strong>
+                {r.missing.length > 0 && <div>{t('exerciseMissing')} : {r.missing.join(', ')}</div>}
+                <ul>{r.steps.map((st, i) => <li key={i}>{st.ok ? '✓' : '✗'} {st.text}{st.detail ? ` — ${st.detail}` : ''}</li>)}</ul>
+              </div>
+            )}
+          </aside>
+        )
+      })()}
 
       {tourStep !== null && (
         <div className="modal" onClick={endTour}>

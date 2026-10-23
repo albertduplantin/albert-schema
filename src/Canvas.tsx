@@ -338,7 +338,8 @@ export default function Canvas(p: Props) {
       const kind = s ? isOperableDef(SYMBOL_MAP[s.defId]) : null
       const m = s ? SYMBOL_MAP[s.defId].sim : undefined
       let handled = true
-      if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
+      if (s && e.altKey && (m?.k === 'switch' || m?.k === 'load' || m?.k === 'coil')) p.onSimFault?.((m.k === 'switch' ? 'stuck:' : 'short:') + s.id)
+      else if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
       else if (s && m?.k === 'switch' && m.ctl === 'fixed') p.onSimFault?.(s.id)
       else if (s && m?.k === 'load' && m.role === 'motor') p.onSimFault?.('ovl:' + s.id)
@@ -775,6 +776,8 @@ export default function Canvas(p: Props) {
                   )
                 })()}
                 {p.faults?.has('ovl:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚠ {p.lang === 'fr' ? 'SURCHARGE' : 'OVERLOAD'}</text>}
+                {p.faults?.has('stuck:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚠ {p.lang === 'fr' ? 'COLLÉ' : 'STUCK'}</text>}
+                {p.faults?.has('short:' + s.id) && <text x={b.x1} y={b.y2 + 12} fontSize={8} fill="#e53935" stroke="none" fontWeight={700}>⚡ {p.lang === 'fr' ? 'COURT-CIRCUIT' : 'SHORT'}</text>}
                 {p.faults?.has(s.id) && <text x={b.x2 + 2} y={b.y1 + 10} fontSize={14} fill="#e53935" stroke="none" fontWeight={700}>✕</text>}
                 {closedState !== undefined && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />

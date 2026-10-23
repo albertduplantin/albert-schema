@@ -2,10 +2,10 @@ import type { Doc, PlacedSymbol, Wire } from './types'
 import { SYMBOL_MAP } from './symbols'
 import { uid } from './geometry'
 
-type Spec = [key: string, defId: string, x: number, y: number, label?: string, delay?: number, volts?: number]
-type Link = [from: string, fromPort: string, to: string, toPort: string]
+export type Spec = [key: string, defId: string, x: number, y: number, label?: string, delay?: number, volts?: number]
+export type Link = [from: string, fromPort: string, to: string, toPort: string]
 
-function build(base: Doc, specs: Spec[], links: Link[]): Doc {
+export function build(base: Doc, specs: Spec[], links: Link[]): Doc {
   const ids: Record<string, string> = {}
   const counters: Record<string, number> = {}
   const symbols: PlacedSymbol[] = specs.map(([key, defId, x, y, label, delay, volts]) => {

@@ -24,7 +24,7 @@ export interface SimInputs {
   pressed: ReadonlySet<string>
   /** organes basculés (interrupteurs, disjoncteurs, arrêts d'urgence…) */
   toggled: ReadonlySet<string>
-  /** défauts injectés : fils coupés et appareils ouverts (fusible fondu, relais thermique déclenché) */
+  /** défauts injectés : fils coupés, appareils ouverts (fusible fondu, relais thermique déclenché), `stuck:<id>` contact collé, `short:<id>` récepteur ou bobine en court-circuit */
   cut?: ReadonlySet<string>
 }
 
@@ -184,6 +184,12 @@ function solve(x: Ctx) {
     if (m?.k !== 'switch') continue
     const act = actuated(s, m, x)
     closed[s.id] = act
+    if (m.ctl !== 'fixed' && x.inp.cut?.has('stuck:' + s.id)) {
+      // contact collé (soudé) : il conduit quel que soit l'ordre de la commande
+      for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
+      for (const [com, nc, no] of m.changeover ?? []) link(key(s.id, com), key(s.id, no))
+      continue
+    }
     if (m.ctl === 'fixed') {
       for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
       continue
@@ -192,6 +198,15 @@ function solve(x: Ctx) {
     if (isClosed) for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
     // inverseurs : commun relié au contact travail (actionné) ou repos (au repos)
     for (const [com, nc, no] of m.changeover ?? []) link(key(s.id, com), key(s.id, act ? no : nc))
+  }
+
+  // court-circuit aux bornes d'un récepteur ou d'une bobine (défaut injecté)
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if ((m?.k === 'load' || m?.k === 'coil') && x.inp.cut?.has('short:' + s.id)) {
+      const ports = m.ports
+      for (let i = 1; i < ports.length; i++) link(key(s.id, ports[0]), key(s.id, ports[i]))
+    }
   }
 
   const pots = new Map<string, Set<string>>()

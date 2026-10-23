@@ -198,7 +198,7 @@ function rig(doc: any) {
 {
   const { EXERCISES, runExercise } = await import(ROOT + '/src/exercises.ts')
   const ref: Record<string, any> = { 'start-stop': T.motorStarter, lamp: T.startLamps, delay: T.delayedCascade, interlock: T.reversingStarter }
-  for (const ex of EXERCISES) {
+  for (const ex of EXERCISES.filter((e: any) => ref[e.id])) {
     const r = runExercise(ex, ref[ex.id](base), SYMBOL_MAP, 'fr')
     check(`exercice « ${ex.id} » : le schéma de référence réussit`, [r.ok, r.missing.length], [true, 0])
     check(`exercice « ${ex.id} » : un schéma vide échoue`, runExercise(ex, base, SYMBOL_MAP, 'fr').ok, false)
@@ -622,6 +622,21 @@ function rig(doc: any) {
   r = g.run([g.idOf('S1')]); r = g.run()
   check('relais 24 V : arrêt', [g.on(r, 'KA1', 'bobine'), g.on(r, 'H1'), g.on(r, 'H2')], [false, true, false])
   console.log(adviseDoc(d, SYMBOL_MAP, 'fr').filter((x: any) => x.level !== 'info').map((x: any) => x.level + ' ' + x.text))
+}
+// ── défauts injectés : contact collé, bobine en court-circuit
+{
+  const d = T.motorStarter(base), g = rig(d)
+  const kmContact = d.symbols.find((s: any) => s.label === 'KM1' && s.defId.includes('con_simple'))
+  let r = g.run()
+  check('défaut : au repos, bobine KM1 coupée', g.on(r, 'KM1', 'bobine'), false)
+  const mem = rig(d)
+  const run = (cut: string[]) => simulate(d, SYMBOL_MAP, {}, { pressed: new Set(), toggled: new Set(), cut: new Set(cut) }, 2_000_000)
+  const rs = run(['stuck:' + kmContact.id])
+  check('défaut : contact d’auto-maintien collé → la bobine est alimentée sans appui', rs.energized.has(g.idOf('KM1', 'bobine')), true)
+  const coil = g.idOf('KM1', 'bobine')
+  const sc = simulate(d, SYMBOL_MAP, {}, { pressed: new Set([g.idOf('S2')]), toggled: new Set(), cut: new Set(['short:' + coil]) }, 2_000_000)
+  check('défaut : bobine en court-circuit → court-circuit signalé, bobine non alimentée', [sc.shorts.length > 0, sc.energized.has(coil)], [true, false])
+  void mem
 }
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
