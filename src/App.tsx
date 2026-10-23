@@ -12,6 +12,7 @@ import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from 
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
 import { fieldLabel, fieldsFor, kindOf, motorCurrent } from './ratings'
 import { FONTS } from './fonts'
+import { settingsAdvice, wireSectionAdvice, type Suggestion } from './settings'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
@@ -752,6 +753,23 @@ function Editor() {
     if (contentRef.current) fn(contentRef.current)
   }
 
+  // conseils de réglage de l'appareil sélectionné (d'après le circuit dessiné et les gammes des constructeurs)
+  const adv = useMemo(() => (selSym ? settingsAdvice(selSym, all, SYMBOL_MAP, lang) : {}), [selSym, all, lang]) as Record<string, Suggestion | undefined>
+  const advLine = (k: string, current: unknown) => {
+    const a = adv[k]
+    if (!a || String(current ?? '') === String(a.value)) return null
+    const apply = () => {
+      if (k === 'volts' || k === 'power' || k === 'voltsPrimary') patchSym({ [k]: a.value } as Partial<PlacedSymbol>)
+      else patchSym({ rated: { ...(selSym?.rated ?? {}), [k]: a.value, ...(a.also ?? {}) } })
+    }
+    return (
+      <span className="advice">
+        💡 {a.text}
+        <button type="button" className="mini" onClick={(e) => { e.preventDefault(); apply() }}>{t('applyAdvice')} {typeof a.value === 'number' || String(a.value).length < 8 ? String(a.value).replace('.', lang === 'fr' ? ',' : '.') : ''}</button>
+      </span>
+    )
+  }
+  const wireAdvice = useMemo(() => (selWire ? wireSectionAdvice(selWire, all, SYMBOL_MAP, lang) : undefined), [selWire, all, lang])
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
@@ -768,11 +786,13 @@ function Editor() {
                     <input type="number" min={0} list="volts-list-p" placeholder="230" value={selSym.voltsPrimary ?? ''}
                       onChange={(e) => patchSym({ voltsPrimary: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                     <datalist id="volts-list-p">{[230, 400, 690].map((v) => <option key={v} value={v} />)}</datalist>
+                    {advLine('voltsPrimary', selSym.voltsPrimary)}
                   </label>
                   <label data-tip={t('helpPower')}>{t('power')}{tip('helpPower')}
                     <input type="number" min={0} list="power-list" placeholder="100" value={selSym.power ?? ''}
                       onChange={(e) => patchSym({ power: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                     <datalist id="power-list">{[40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500].map((v) => <option key={v} value={v} />)}</datalist>
+                    {advLine('power', selSym.power)}
                   </label>
                   {describeInfo(info, lang).map((line, i) => <p key={i} className="muted small">⚡ {line}</p>)}
                   {!selSym.power && <p className="muted small">💡 {t('trafoPowerHint')}</p>}
@@ -795,12 +815,21 @@ function Editor() {
               return (
                 <fieldset className="ratings" data-tip={t('helpRatings')}>
                   <legend>{t('ratings')} {tip('helpRatings')}</legend>
+                  {(() => {
+                    const keys = fieldsFor(def).map((f) => f.key).filter((k) => adv[k] && String(selSym.rated?.[k] ?? '') !== String(adv[k]!.value))
+                    return keys.length > 1 ? (
+                      <button type="button" className="mini applyall" onClick={() => patchSym({ rated: { ...(selSym.rated ?? {}), ...Object.fromEntries(keys.flatMap((k) => [[k, adv[k]!.value], ...Object.entries(adv[k]!.also ?? {})])) } as Ratings })}>
+                        💡 {t('applyAll')} ({keys.length})
+                      </button>
+                    ) : null
+                  })()}
                   {fieldsFor(def).map((f) => (
                     <label key={f.key} data-tip={f.help[lang]}>{fieldLabel(f, lang)}<span className="tip" data-tip={f.help[lang]} aria-label={f.help[lang]}>?</span>
                       <input type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} list={f.list ? `rl-${kind}-${f.key}` : undefined}
                         placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
                         value={String(selSym.rated?.[f.key] ?? '')} onChange={(e) => setR(f.key, e.target.value, f.text)} />
                       {f.list && <datalist id={`rl-${kind}-${f.key}`}>{f.list.map((v) => <option key={String(v)} value={v} />)}</datalist>}
+                      {advLine(f.key, selSym.rated?.[f.key])}
                     </label>
                   ))}
                   {mc?.estimated && <p className="muted small">⚡ {t('motorEstimated')} {String(mc.value).replace('.', lang === 'fr' ? ',' : '.')} A</p>}
@@ -813,6 +842,7 @@ function Editor() {
                 <input type="number" min={0} list="volts-list" placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
                   value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                 <datalist id="volts-list">{[12, 24, 48, 110, 230, 400].map((v) => <option key={v} value={v} />)}</datalist>
+                {advLine('volts', selSym.volts)}
               </label>
             )}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return (m?.k === 'coil' && !!m.timer) || (m?.k === 'switch' && !!m.delay) })() && (
@@ -1171,7 +1201,11 @@ function Editor() {
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{t('wire')}</div>
             <label data-tip={t('helpWireLabel')}>{t('label')}{tip('helpWireLabel')}<input value={selWire.label} onChange={(e) => patchWire({ label: e.target.value })} /></label>
-            <label data-tip={t('helpWireSection')}>{t('section')} (mm²){tip('helpWireSection')}<input value={selWire.section} onChange={(e) => patchWire({ section: e.target.value })} /></label>
+            <label data-tip={t('helpWireSection')}>{t('section')} (mm²){tip('helpWireSection')}<input value={selWire.section} onChange={(e) => patchWire({ section: e.target.value })} />
+              {wireAdvice && String(wireAdvice.value) !== selWire.section && (
+                <span className="advice">💡 {wireAdvice.text}<button type="button" className="mini" onClick={(e) => { e.preventDefault(); patchWire({ section: String(wireAdvice.value) }) }}>{t('applyAdvice')} {String(wireAdvice.value)}</button></span>
+              )}
+            </label>
             {selWire.via?.length ? (
               <button onClick={() => commit((d) => ({ ...d, wires: d.wires.map((w) => (w.id === selWire.id ? { ...w, via: undefined } : w)) }))}>{t('autoRoute')}</button>
             ) : (

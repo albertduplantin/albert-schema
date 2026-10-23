@@ -534,5 +534,39 @@ function rig(doc: any) {
   const gv = lib.symbols.find((s: any) => s.name.fr === 'Disjoncteur Magnéto-thermique GV 2P')
   check('disjoncteur GV 2P : calibre, courbe, plage, réglage, pouvoir de coupure', fieldsFor(SYMBOL_MAP[gv.id]).map((f: any) => f.key).join(), 'in,curve,min,max,set,icu')
 }
+// ── conseils de réglage d'après le circuit et les gammes de constructeurs
+{
+  const { settingsAdvice, wireSectionAdvice } = await import(ROOT + '/src/settings.ts')
+  const { typicalMotorCurrent, rangeFor, contactorFor } = await import(ROOT + '/src/catalog.ts')
+  check('catalogue : moteur 4 kW ≈ 8,4 A, 7,5 kW = 15 A, 6 kW interpolé', [typicalMotorCurrent(4), typicalMotorCurrent(7.5), typicalMotorCurrent(6)], [8.4, 15, 12.2])
+  check('catalogue : plage de réglage pour 8,4 A = 6–10 A ; pour 14 A : 13–18 A ; pour 0,3 A : 0,25–0,4 A', [rangeFor(8.4), rangeFor(14), rangeFor(0.3)], [[6, 10], [13, 18], [0.25, 0.4]])
+  check('catalogue : contacteur pour 8,4 A = 9 A (4 kW) ; pour 15 A = 18 A (7,5 kW)', [contactorFor(8.4), contactorFor(15)], [[9, 4], [18, 7.5]])
+  const d = T.motorStarter(base)
+  for (const s of d.symbols) delete s.rated
+  const by = (label: string, part = '') => d.symbols.find((s: any) => s.label === label && s.defId.includes(part))
+  by('M1').rated = { kw: 4 }
+  const adv = (s: any) => settingsAdvice(s, d, SYMBOL_MAP, 'fr') as any
+  check('moteur 4 kW : courant type conseillé 8,4 A, cos φ 0,85, Id/In 7', [adv(by('M1')).ie?.value, adv(by('M1')).cos?.value, adv(by('M1')).ratio?.value], [8.4, 0.85, 7])
+  check('contacteur : AC-3 9 A pour le moteur de 4 kW', adv(by('KM1', 'com_puiss4')).in?.value, 9)
+  check('disjoncteur de départ moteur : calibre 8 A, courbe D, pouvoir de coupure 10 kA', [adv(by('Q1')).in?.value, adv(by('Q1')).curve?.value, adv(by('Q1')).icu?.value], [8, 'D', 10])
+  by('M1').rated = { kw: 4, ie: 8.4 }
+  check('avec le courant de plaque 8,4 A : calibre normalisé 10 A', adv(by('Q1')).in?.value, 10)
+  // circuit de commande : lampe et bobine sur le transformateur de commande
+  const t = T.motorStarterTransformer(base)
+  for (const s of t.symbols) delete s.rated
+  const tby = (label: string, part = '') => t.symbols.find((s: any) => s.label === label && s.defId.includes(part))
+  const ta = (s: any) => settingsAdvice(s, t, SYMBOL_MAP, 'fr') as any
+  delete tby('T1').voltsPrimary; delete tby('T1').power
+  check('transformateur de commande : puissance conseillée d\'après les récepteurs (8 VA + 3 W, appel ×10 → 100 VA)', ta(tby('T1')).power?.value, 100)
+  check('transformateur : primaire 400 V conseillé (entre deux phases) ; secondaire déjà à 24 V', [ta(tby('T1')).voltsPrimary?.value, ta(tby('T1')).volts], [400, undefined])
+  tby('T1').power = 100; tby('T1').voltsPrimary = 400
+  check('fusible du primaire : 0,5 A, aM', [ta(tby('F1')).in?.value, ta(tby('F1')).curve?.value], [0.5, 'aM'])
+  check('fusible du secondaire : calibre pour la commande (0,5 A au minimum, type gG)', [typeof ta(tby('F2')).in?.value, ta(tby('F2')).curve?.value], ['number', 'gG'])
+  check('bobine : puissance type 8 VA ; voyant : 3 W', [ta(tby('KM1', 'bobine')).watts?.value, ta(tby('H1')).watts?.value], [8, 3])
+  // section de câble d'après la protection amont
+  tby('F2').rated = { in: 4 }
+  const wr = t.wires.find((w: any) => t.symbols.find((s: any) => s.id === w.from.symId)?.label === 'F2')
+  check('conducteur protégé par 4 A : 0,75 mm² au minimum', wireSectionAdvice(wr, t, SYMBOL_MAP, 'fr')?.value, '0,75')
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
