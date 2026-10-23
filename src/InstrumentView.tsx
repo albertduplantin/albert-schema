@@ -184,7 +184,8 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
           <rect x={-3.6} y={-14} width={7.2} height={5} rx={1.5} fill="#ddd" stroke="#555" strokeWidth={0.5} />
           <rect x={-4} y={-44} width={8} height={31} rx={3.5} fill={i === 0 ? '#1d1d1d' : '#d12a22'} stroke="#222" strokeWidth={0.8} />
           <circle cx={0} cy={0} r={touching[i] ? 4 : 2.4} fill={touching[i] ? '#2f9e44' : '#999'} stroke="#fff" strokeWidth={0.8} />
-          <circle data-probe={`${instr.id}|${i}`} cx={0} cy={-12} r={11} fill="transparent" stroke="none" style={{ cursor: 'grab' }} pointerEvents="all" />
+          {/* zone de saisie large : toute la poignée, la pointe et leurs abords */}
+          <rect data-probe={`${instr.id}|${i}`} x={-12} y={-56} width={24} height={68} rx={8} fill="transparent" stroke="none" style={{ cursor: 'grab' }} pointerEvents="all" />
         </g>
       ))}
     </g>

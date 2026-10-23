@@ -105,7 +105,7 @@ type Interaction =
   | { kind: 'label'; id: string; part: 'labelOff' | 'nameOff'; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'note'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'instr'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
-  | { kind: 'probe'; id: string; i: 0 | 1; moved: boolean }
+  | { kind: 'probe'; id: string; i: 0 | 1; dx: number; dy: number; moved: boolean }
   | { kind: 'band'; x0: number; y0: number; add: boolean }
   | { kind: 'handle'; wireId: string; idx: number; moved: boolean; mid: boolean }
 
@@ -289,7 +289,10 @@ export default function Canvas(p: Props) {
       if (pr) {
         const [id, k] = pr.getAttribute('data-probe')!.split('|')
         p.checkpoint()
-        inter.current = { kind: 'probe', id, i: Number(k) as 0 | 1, moved: false }
+        // on garde l'écart entre le point saisi et la pointe : la pointe ne saute pas sous le curseur
+        const ins = (doc.instruments ?? []).find((x) => x.id === id)
+        const tip = ins ? probesOf(ins)[Number(k)] : pt
+        inter.current = { kind: 'probe', id, i: Number(k) as 0 | 1, dx: tip.x - pt.x, dy: tip.y - pt.y, moved: false }
         return
       }
       if (ib) {
@@ -425,7 +428,7 @@ export default function Canvas(p: Props) {
       }
       if (it.moved) p.update((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === it.id ? { ...n, x: nx, y: ny } : n)) }))
     } else if (it.kind === 'probe') {
-      const q = { x: Math.round(pt.x * 2) / 2, y: Math.round(pt.y * 2) / 2 }
+      const q = { x: Math.round((pt.x + it.dx) * 2) / 2, y: Math.round((pt.y + it.dy) * 2) / 2 }
       p.update((d) => ({ ...d, instruments: (d.instruments ?? []).map((i) => (i.id === it.id ? { ...i, probes: (probesOf(i).map((o, k) => (k === it.i ? q : o)) as unknown) as Instrument['probes'] } : i)) }))
     } else if (it.kind === 'instr') {
       const nx = Math.round(it.ox + pt.x - it.sx)
