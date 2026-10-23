@@ -298,88 +298,120 @@ const isHot = (pot: string) => HOT.has(pot) || pot.endsWith(':0')
 
 /**
  * Conducteurs réellement parcourus par un courant et sens de circulation.
- * On garde le graphe (fils + contacts fermés), on retire de proche en proche les branches mortes (impasses
- * qui ne mènent ni à une source ni à un récepteur alimenté), puis on oriente chaque fil : depuis la source
- * vers le récepteur sur les potentiels « chauds » (L, +), du récepteur vers la source sur les retours (N, 0 V).
+ *
+ * Le circuit (fils et contacts fermés) est traité comme un réseau de résistances égales. Chaque récepteur alimenté absorbe une
+ * unité de courant sur sa borne « chaude » (L, +, début d'un secondaire) et la restitue sur sa borne de retour (N, 0 V) ; les
+ * sources fournissent ce qu'il faut. On résout les lois de Kirchhoff (gradient conjugué sur le laplacien du graphe) : le courant se
+ * répartit entre branches parallèles, les impasses n'en reçoivent pas, et le sens est celui du courant conventionnel
+ * (source chaude → récepteur → retour).
  */
 function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<typeof solve>): Record<string, 1 | -1> {
-  const adj = new Map<string, Set<string>>()
-  const addEdge = (a: string, b: string) => {
-    if (a === b) return
-    if (!adj.has(a)) adj.set(a, new Set())
-    if (!adj.has(b)) adj.set(b, new Set())
-    adj.get(a)!.add(b)
-    adj.get(b)!.add(a)
-  }
-  for (const w of doc.wires) addEdge(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
-  for (const [a, b] of out.swEdges) addEdge(a, b)
-
-  const pinned = new Set<string>()
-  const sources: string[] = []
-  for (const s of doc.symbols) {
-    const m = defs[s.defId]?.sim
-    if (m?.k === 'source') {
-      for (const p of Object.keys(m.pot)) {
-        pinned.add(key(s.id, p))
-        sources.push(key(s.id, p))
-      }
-    } else if ((m?.k === 'coil' || m?.k === 'load') && out.energized.has(s.id)) {
-      for (const p of m.ports) pinned.add(key(s.id, p))
-    } else if (m?.k === 'transformer' && out.trafoOn.has(s.id)) {
-      // primaire = récepteur ; secondaire = source du circuit aval
-      for (const p of m.primary) pinned.add(key(s.id, p))
-      for (const p of m.secondary) {
-        pinned.add(key(s.id, p))
-        sources.push(key(s.id, p))
-      }
-    }
-  }
-
-  // élagage des impasses
-  const queue = [...adj.keys()].filter((n) => !pinned.has(n) && adj.get(n)!.size <= 1)
-  while (queue.length) {
-    const n = queue.pop()!
-    const nb = adj.get(n)
-    if (!nb) continue
-    adj.delete(n)
-    for (const o of nb) {
-      const set = adj.get(o)
-      if (!set) continue
-      set.delete(n)
-      if (!pinned.has(o) && set.size <= 1) queue.push(o)
-    }
-  }
-
-  // distance depuis les sources
-  const dist = new Map<string, number>()
-  const bfs: string[] = []
-  for (const s of sources) {
-    if (adj.has(s)) {
-      dist.set(s, 0)
-      bfs.push(s)
-    }
-  }
-  for (let i = 0; i < bfs.length; i++) {
-    for (const o of adj.get(bfs[i]) ?? []) {
-      if (!dist.has(o)) {
-        dist.set(o, dist.get(bfs[i])! + 1)
-        bfs.push(o)
-      }
-    }
-  }
-
-  const res: Record<string, 1 | -1> = {}
+  interface Edge { u: string; v: string; wire?: string }
+  const edges: Edge[] = []
   for (const w of doc.wires) {
     const u = key(w.from.symId, w.from.portId)
     const v = key(w.to.symId, w.to.portId)
-    if (!adj.get(u)?.has(v)) continue
-    const pot = out.potOf(w.from.symId, w.from.portId)
-    if (!pot || !dist.has(u) || !dist.has(v)) continue
-    const du = dist.get(u)!
-    const dv = dist.get(v)!
-    const awayFromSource = isHot(pot)
-    res[w.id] = du === dv ? 1 : (awayFromSource ? du < dv : du > dv) ? 1 : -1
+    if (u !== v) edges.push({ u, v, wire: w.id })
   }
+  for (const [u, v] of out.swEdges) if (u !== v) edges.push({ u, v })
+
+  const inject = new Map<string, number>() // courant extrait du réseau (négatif) ou restitué (positif) par les récepteurs
+  const sourceNodes = new Set<string>()
+  const add = (k: string, x: number) => inject.set(k, (inject.get(k) ?? 0) + x)
+  const load = (symId: string, ports: string[]) => {
+    const hot: string[] = []
+    const cold: string[] = []
+    for (const p of ports) {
+      const pot = out.potOf(symId, p)
+      if (!pot) continue
+      ;(isHot(pot) ? hot : cold).push(key(symId, p))
+    }
+    hot.forEach((k) => add(k, -1 / hot.length))
+    cold.forEach((k) => add(k, 1 / cold.length))
+  }
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k === 'source') for (const p of Object.keys(m.pot)) sourceNodes.add(key(s.id, p))
+    else if ((m?.k === 'coil' || m?.k === 'load') && out.energized.has(s.id)) load(s.id, m.ports)
+    else if (m?.k === 'transformer' && out.trafoOn.has(s.id)) {
+      load(s.id, m.primary)
+      for (const p of m.secondary) sourceNodes.add(key(s.id, p)) // le secondaire alimente le circuit aval
+    }
+  }
+
+  // composantes connexes du graphe
+  const nodes = new Map<string, number>()
+  const idx = (k: string) => {
+    if (!nodes.has(k)) nodes.set(k, nodes.size)
+    return nodes.get(k)!
+  }
+  edges.forEach((e) => { idx(e.u); idx(e.v) })
+  const n = nodes.size
+  const names = [...nodes.keys()]
+  const adj: number[][] = Array.from({ length: n }, () => [])
+  edges.forEach((e, i) => { adj[nodes.get(e.u)!].push(i); adj[nodes.get(e.v)!].push(i) })
+  const comp = new Array<number>(n).fill(-1)
+  let nc = 0
+  for (let i = 0; i < n; i++) {
+    if (comp[i] >= 0) continue
+    const stack = [i]
+    comp[i] = nc
+    while (stack.length) {
+      const x = stack.pop()!
+      for (const ei of adj[x]) {
+        const e = edges[ei]
+        const y = nodes.get(e.u) === x ? nodes.get(e.v)! : nodes.get(e.u)!
+        if (comp[y] < 0) { comp[y] = nc; stack.push(y) }
+      }
+    }
+    nc++
+  }
+
+  // second membre : récepteurs + sources (réparties à égalité dans chaque composante pour que le total s'annule)
+  const b = new Array<number>(n).fill(0)
+  const total = new Array<number>(nc).fill(0)
+  const srcs: number[][] = Array.from({ length: nc }, () => [])
+  inject.forEach((x, k) => { const i = nodes.get(k); if (i !== undefined) { b[i] += x; total[comp[i]] += x } })
+  sourceNodes.forEach((k) => { const i = nodes.get(k); if (i !== undefined) srcs[comp[i]].push(i) })
+  for (let c = 0; c < nc; c++) {
+    if (!srcs[c].length || Math.abs(total[c]) < 1e-9) { total[c] = 0; continue }
+    srcs[c].forEach((i) => (b[i] -= total[c] / srcs[c].length))
+  }
+
+  // résolution L·φ = b par gradient conjugué (L : laplacien, conductances unitaires)
+  const phi = new Array<number>(n).fill(0)
+  const mul = (x: number[]) => {
+    const y = new Array<number>(n).fill(0)
+    for (const e of edges) {
+      const u = nodes.get(e.u)!
+      const v = nodes.get(e.v)!
+      const d = x[u] - x[v]
+      y[u] += d
+      y[v] -= d
+    }
+    return y
+  }
+  const r = [...b]
+  const pdir = [...r]
+  let rs = r.reduce((a, x) => a + x * x, 0)
+  for (let it = 0; it < 400 && rs > 1e-18; it++) {
+    const Ap = mul(pdir)
+    const pAp = pdir.reduce((a, x, i) => a + x * Ap[i], 0)
+    if (Math.abs(pAp) < 1e-30) break
+    const alpha = rs / pAp
+    for (let i = 0; i < n; i++) { phi[i] += alpha * pdir[i]; r[i] -= alpha * Ap[i] }
+    const rs2 = r.reduce((a, x) => a + x * x, 0)
+    for (let i = 0; i < n; i++) pdir[i] = r[i] + (rs2 / rs) * pdir[i]
+    rs = rs2
+  }
+
+  const res: Record<string, 1 | -1> = {}
+  for (const e of edges) {
+    if (!e.wire) continue
+    const f = phi[nodes.get(e.u)!] - phi[nodes.get(e.v)!]
+    if (Math.abs(f) > 1e-3) res[e.wire] = f > 0 ? 1 : -1
+  }
+  void names
   return res
 }
 

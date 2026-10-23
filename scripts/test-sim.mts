@@ -288,5 +288,32 @@ function rig(doc: any) {
   r = g.run([], [], 100); for (let i = 0; i < 40; i++) r = g.run([], [], 100)
   check('va-et-vient auto : S2 relâché → le vérin reste rentré', r.cylPos[A], 0)
 }
+// ── courant : sens et répartition (réseau de résistances)
+{
+  const d = T.motorStarter(base), g = rig(d)
+  const S2 = g.idOf('S2')
+  const wire = (fromLabel: string, toLabel: string, fromDef = '', toDef = '') => d.wires.find((w: any) => {
+    const a = d.symbols.find((s: any) => s.id === w.from.symId), b = d.symbols.find((s: any) => s.id === w.to.symId)
+    return (a.label === fromLabel || a.defId === fromDef) && (b.label === toLabel || b.defId === toDef)
+  })
+  let r = g.run([S2], [], 100)
+  r = g.run([], [], 100) // S2 relâché, auto-maintien
+  const dir = (w: any) => r.current[w.id]
+  check('courant : fil L → S1 dans le sens de la source', dir(wire('', 'S1', 'sim-l')), 1)
+  check('courant : fil S1 → contact KM1 (auto-maintien) parcouru', dir(wire('S1', 'KM1')) !== undefined, true)
+  check('courant : fil bobine → neutre, de la bobine vers N', dir(wire('KM1', '', '', 'sim-n')), 1)
+  check('courant : fil lampe → neutre, sens retour', dir(d.wires.find((w: any) => w.from.symId === g.idOf('H1') && w.to.symId !== undefined && d.symbols.find((s: any) => s.id === w.to.symId).defId === 'sim-n')), 1)
+  // au repos : plus aucun courant
+  r = g.run([], [], 100)
+  const S1 = g.idOf('S1')
+  r = g.run([S1], [], 100); r = g.run([], [], 100)
+  check('courant : arrêt, aucun fil parcouru', Object.keys(r.current).length, 0)
+  // S2 maintenu seul (avant verrouillage) : le courant passe par S2 et pas par la dérivation d'auto-maintien ouverte
+  const g2 = rig(T.motorStarter(base))
+  const r2 = g2.run([g2.idOf('S2')], [], 0)
+  const d2 = T.motorStarter(base)
+  void d2
+  check('courant : S2 appuyé, des fils sont parcourus', Object.keys(r2.current).length > 0, true)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
