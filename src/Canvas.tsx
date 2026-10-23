@@ -5,7 +5,7 @@ import { autoConnect } from './splice'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
-  GRID, MARGIN, PAPER_SIZE, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
+  GRID, MARGIN, PAPER_SIZE, TB_H, TB_W, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
 } from './geometry'
 import Sheet from './Sheet'
 import { devKey, isOperableDef, type SimResult } from './sim/engine'
@@ -82,6 +82,8 @@ interface Props {
   extra?: PlacedSymbol[]
   pageOf?: Record<string, number>
   sheetLabel?: string
+  /** double-clic sur le cartouche */
+  onEditTitle?: () => void
   onSimFault?: (id: string) => void
   labels: { zoomIn: string; zoomOut: string; fit: string; grid: string }
 }
@@ -502,6 +504,7 @@ export default function Canvas(p: Props) {
       onMouseLeave={() => { inter.current = { kind: 'none' }; setBand(null); if (held.current) { p.onSimPress(held.current, false); held.current = null } }}
       onContextMenu={(e) => e.preventDefault()}
       onDoubleClick={(e) => {
+        if ((e.target as Element).closest('[data-titleblock]')) { p.onEditTitle?.(); return }
         const el = (e.target as Element).closest('[data-handle]')
         if (!el) return
         const [wireId, idx, kind] = el.getAttribute('data-handle')!.split('|')
@@ -619,6 +622,7 @@ export default function Canvas(p: Props) {
 
         {/* Couche interface : hors export */}
         <g className="ui">
+          <rect data-titleblock="1" className="tb-hit" x={PAPER_SIZE[doc.paper].w - MARGIN - TB_W} y={PAPER_SIZE[doc.paper].h - MARGIN - TB_H} width={TB_W} height={TB_H} />
           {showGrid && (
             <>
               <defs><pattern id="grid-dots" width={GRID} height={GRID} patternUnits="userSpaceOnUse"><circle cx={0} cy={0} r={0.7} fill="#7a8696" fillOpacity={0.55} /></pattern></defs>

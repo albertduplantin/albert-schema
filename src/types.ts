@@ -122,6 +122,10 @@ export interface TitleBlock {
   date: string
   revision: string
   sheet: string
+  /** champs complémentaires (ISO 7200) : approbateur, numéro de document, affaire / installation */
+  approver?: string
+  docNumber?: string
+  project?: string
 }
 
 export type Paper = 'A4' | 'A3' | 'A2' | 'A1'

@@ -11,6 +11,9 @@ export const PAPER_SIZE: Record<Paper, { w: number; h: number }> = {
   A1: { w: 2240, h: 1584 },
 }
 export const MARGIN = 14
+/** Cartouche (en bas à droite de la feuille) */
+export const TB_W = 480
+export const TB_H = 114
 
 export const snap = (v: number) => Math.round(v / GRID) * GRID
 

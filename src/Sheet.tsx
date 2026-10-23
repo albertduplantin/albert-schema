@@ -1,5 +1,5 @@
 import type { Lang, Paper, TitleBlock } from './types'
-import { MARGIN, PAPER_SIZE } from './geometry'
+import { MARGIN, PAPER_SIZE, TB_H, TB_W } from './geometry'
 import { tr } from './i18n'
 
 interface Props {
@@ -7,9 +7,6 @@ interface Props {
   title: TitleBlock
   lang: Lang
 }
-
-const TB_W = 480
-const TB_H = 76
 
 /** Cadre, repères de zones et cartouche. */
 export default function Sheet({ paper, title, lang }: Props) {
@@ -45,11 +42,14 @@ export default function Sheet({ paper, title, lang }: Props) {
       ))}
       <rect x={tx} y={ty} width={TB_W} height={TB_H} strokeWidth={2} fill="#fff" />
       {cell(tx, ty, TB_W, 38, tr(lang, 'title'), title.title, true)}
-      {cell(tx, ty + 38, 150, 38, tr(lang, 'company'), title.company)}
-      {cell(tx + 150, ty + 38, 120, 38, tr(lang, 'author'), title.author)}
-      {cell(tx + 270, ty + 38, 90, 38, tr(lang, 'date'), title.date)}
-      {cell(tx + 360, ty + 38, 55, 38, tr(lang, 'revision'), title.revision)}
-      {cell(tx + 415, ty + 38, 65, 38, tr(lang, 'sheetNo'), title.sheet)}
+      {cell(tx, ty + 38, 160, 38, tr(lang, 'company'), title.company)}
+      {cell(tx + 160, ty + 38, 160, 38, tr(lang, 'project'), title.project ?? '')}
+      {cell(tx + 320, ty + 38, 160, 38, tr(lang, 'docNumber'), title.docNumber ?? '')}
+      {cell(tx, ty + 76, 120, 38, tr(lang, 'author'), title.author)}
+      {cell(tx + 120, ty + 76, 120, 38, tr(lang, 'approver'), title.approver ?? '')}
+      {cell(tx + 240, ty + 76, 90, 38, tr(lang, 'date'), title.date)}
+      {cell(tx + 330, ty + 76, 55, 38, tr(lang, 'revision'), title.revision)}
+      {cell(tx + 385, ty + 76, 95, 38, tr(lang, 'sheetNo'), title.sheet)}
     </g>
   )
 }

@@ -21,10 +21,20 @@ import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './us
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
 
 const STORE = 'albertschema.doc'
+/** Entreprise et auteur saisis la dernière fois : repris pour chaque nouveau schéma. */
+function titleDefaults(): { author: string; company: string } {
+  try {
+    const d = JSON.parse(localStorage.getItem('albertschema.titleDefaults') || '{}')
+    return { author: String(d.author ?? ''), company: String(d.company ?? '') }
+  } catch {
+    return { author: '', company: '' }
+  }
+}
+
 const emptyDoc = (): Doc => ({
   version: 1,
   paper: 'A3',
-  title: { title: '', author: '', company: '', date: new Date().toISOString().slice(0, 10), revision: 'A', sheet: '1/1' },
+  title: { title: '', ...titleDefaults(), date: new Date().toISOString().slice(0, 10), revision: 'A', sheet: '1/1' },
   symbols: [],
   wires: [],
 })
@@ -614,7 +624,14 @@ function Editor() {
     update((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === sel[0] ? { ...s, ...patch } : s)) }))
   const patchWire = (patch: Partial<Wire>) =>
     update((d) => ({ ...d, wires: d.wires.map((w) => (w.id === sel[0] ? { ...w, ...patch } : w)) }))
-  const patchTitle = (k: keyof Doc['title'], v: string) => update((d) => ({ ...d, title: { ...d.title, [k]: v } }))
+  const patchTitle = (k: keyof Doc['title'], v: string) => {
+    update((d) => ({ ...d, title: { ...d.title, [k]: v } }))
+    if (k === 'author' || k === 'company') {
+      try { localStorage.setItem('albertschema.titleDefaults', JSON.stringify({ ...titleDefaults(), [k]: v })) } catch { /* ignoré */ }
+    }
+  }
+  const TB_FIELDS: (keyof Doc['title'])[] = ['title', 'project', 'docNumber', 'company', 'author', 'approver', 'date', 'revision', 'sheet']
+  const [showTitleBlock, setShowTitleBlock] = useState(false)
 
   /** impression de toutes les feuilles : on affiche chaque page à son tour pour en capturer le dessin, puis on revient à la page d'origine */
   const printAllPages = async () => {
@@ -785,7 +802,7 @@ function Editor() {
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
           {pageTabs.map((pg, i) => (
             <button key={i} role="tab" aria-selected={i === (doc.page ?? 0)} className={i === (doc.page ?? 0) ? 'on' : ''}
@@ -989,9 +1006,10 @@ function Editor() {
               {['A4', 'A3', 'A2', 'A1'].map((p) => <option key={p}>{p}</option>)}
             </select>
           </label>
-          {(['title', 'company', 'author', 'date', 'revision', 'sheet'] as const).map((k) => (
-            <label key={k}>{t(k === 'sheet' ? 'sheetNo' : k)}<input value={doc.title[k]} onChange={(e) => patchTitle(k, e.target.value)} /></label>
+          {TB_FIELDS.map((k) => (
+            <label key={k}>{t(k === 'sheet' ? 'sheetNo' : k)}<input value={doc.title[k] ?? ''} onChange={(e) => patchTitle(k, e.target.value)} /></label>
           ))}
+          <button onClick={() => setShowTitleBlock(true)}>{t('tbEdit')}</button>
         </div>
         </>)}
       </aside>
@@ -1096,6 +1114,22 @@ function Editor() {
             <h3>{t('shortcutsTitle')}</h3>
             <table><tbody>{SHORTCUTS[lang].map(([k, d]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{d}</td></tr>)}</tbody></table>
             <div className="actions"><button onClick={() => setShowKeys(false)}>{t('close')}</button></div>
+          </div>
+        </div>
+      )}
+
+      {showTitleBlock && (
+        <div className="modal" onClick={() => setShowTitleBlock(false)}>
+          <div className="dialog" role="dialog" aria-label={t('tbTitle')} onClick={(e) => e.stopPropagation()} onFocus={checkpoint}>
+            <h3>{t('tbTitle')}</h3>
+            <p className="muted">{t('tbHelp')}</p>
+            <div className="form">
+              {TB_FIELDS.map((k) => (
+                <label key={k}>{t(k === 'sheet' ? 'sheetNo' : k)}<input autoFocus={k === 'title'} value={doc.title[k] ?? ''} onChange={(e) => patchTitle(k, e.target.value)} /></label>
+              ))}
+            </div>
+            <p className="muted small">{t('tbRemember')}</p>
+            <div className="actions"><button onClick={() => setShowTitleBlock(false)}>{t('close')}</button></div>
           </div>
         </div>
       )}

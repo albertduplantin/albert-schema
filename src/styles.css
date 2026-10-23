@@ -352,3 +352,5 @@ a, .dialog a { color: var(--lien); }
 .chrono.min { width: auto; right: auto; padding: 2px 6px; }
 .chrono.min .chrono-head { margin: 0; gap: 10px; }
 .chrono-head button.icon { width: 26px; }
+.tb-hit { fill: transparent; stroke: none; }
+.tb-hit:hover { fill: rgba(147,164,21,.10); }
