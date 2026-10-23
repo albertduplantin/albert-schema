@@ -23,13 +23,25 @@ const sheetLink: SymbolDef = {
   cat: 'sim', group: null, score: 91, top: true, decor: false,
 }
 
+/** Source 24 V alternatif : une borne phase et une borne neutre dans le même symbole. */
+const source24vac: SymbolDef = {
+  id: 'sim-24vac', domain: 'electrical', prefix: '', name: { fr: 'Source 24 V alternatif (phase + neutre)', en: '24 V AC source (phase + neutral)' }, std: 'Albert Schema Studio', w: 40, h: 20,
+  svg: '<path d="M10 14V20"/><path d="M30 14V20"/><rect x="0" y="0" width="40" height="14"/><text x="20" y="10" text-anchor="middle" font-size="6.5" fill="currentColor" stroke="none">24V~</text>',
+  ports: [{ id: 'a', x: 10, y: 20, dir: 'down', label: 'L' }, { id: 'b', x: 30, y: 20, dir: 'down', label: 'N' }],
+  cat: 'sim', group: null, score: 101, top: true, decor: false,
+  sim: { k: 'source', pot: { a: 'L24', b: 'N24' } },
+}
+
 export const simSources: SymbolDef[] = [
+  source24vac,
   sheetLink,
   source('sim-l1', 'L1', 'L1', 'Phase L1 (simulation)', 'Phase L1 (simulation)', true),
   source('sim-l2', 'L2', 'L2', 'Phase L2 (simulation)', 'Phase L2 (simulation)', true),
   source('sim-l3', 'L3', 'L3', 'Phase L3 (simulation)', 'Phase L3 (simulation)', true),
   source('sim-l', 'L', 'L', 'Phase L monophasée (simulation)', 'Single-phase L (simulation)', true),
   source('sim-n', 'N', 'N', 'Neutre N (simulation)', 'Neutral N (simulation)', false),
+  source('sim-l24', 'L24', 'L24', 'Phase 24 V alternatif (simulation)', 'Phase 24 V AC (simulation)', true),
+  source('sim-n24', 'N24', 'N24', 'Neutre 24 V alternatif (simulation)', 'Neutral 24 V AC (simulation)', false),
   source('sim-24v', '+', '+24V', '+24 V DC (simulation)', '+24 V DC (simulation)', true),
   source('sim-0v', '-', '0V', '0 V DC (simulation)', '0 V DC (simulation)', false),
 ]

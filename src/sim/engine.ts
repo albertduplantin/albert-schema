@@ -336,7 +336,8 @@ export function voltageBetween(a: string | null, b: string | null, doc: Doc, def
   if (!a || !b || a === b) return 0
   const pe = a === 'PE' ? b : b === 'PE' ? a : null
   if (pe) {
-    if (pe === 'N') return 0
+    if (pe === 'N' || pe === 'N24') return 0
+    if (pe === 'L24') return 24 // neutre 24 V relié à la terre (régime TN)
     if (PHASES.has(pe)) return 230
     if (pe.startsWith('~')) return pe.endsWith(':0') ? (doc.symbols.find((x) => x.id === pe.slice(1).split(':')[0])?.volts ?? 24) : 0
   }
@@ -362,10 +363,11 @@ function voltBetween(a: string | null, b: string | null, doc: Doc, defs: Record<
   if (PHASES.has(a) && PHASES.has(b)) return 400
   if ((PHASES.has(a) && b === 'N') || (PHASES.has(b) && a === 'N')) return 230
   if ((a === '+' && b === '-') || (a === '-' && b === '+')) return 24
+  if ((a === 'L24' && b === 'N24') || (a === 'N24' && b === 'L24')) return 24 // source 24 V alternatif phase + neutre
   return undefined
 }
 
-const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
+const HOT = new Set(['L', 'L1', 'L2', 'L3', '+', 'L24'])
 /** Potentiel « chaud » : phase, +, ou première borne d'un secondaire de transformateur. */
 const isHot = (pot: string) => HOT.has(pot) || pot.endsWith(':0')
 

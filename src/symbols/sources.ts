@@ -10,7 +10,7 @@ export const SOURCES_NAME = { fr: 'Sources et alimentations', en: 'Sources and p
 
 const G = (fr: string, en: string) => ({ fr, en })
 const GROUPS: { group: { fr: string; en: string }; ids: string[] }[] = [
-  { group: G('Repères de simulation', 'Simulation sources'), ids: ['sim-l1', 'sim-l2', 'sim-l3', 'sim-l', 'sim-n', 'sim-24v', 'sim-0v'] },
+  { group: G('Repères de simulation', 'Simulation sources'), ids: ['sim-24vac', 'sim-l1', 'sim-l2', 'sim-l3', 'sim-l', 'sim-n', 'sim-l24', 'sim-n24', 'sim-24v', 'sim-0v'] },
   { group: G('Réseaux triphasés', 'Three-phase supplies'), ids: ['110_network_supplies/src_3p', '110_network_supplies/src_3pn', '110_network_supplies/src_3p_pe_n', '110_network_supplies/src_3ppe', '110_network_supplies/src_3p_pen', '110_network_supplies/src_tnc_tns'] },
   { group: G('Réseaux monophasés', 'Single-phase supplies'), ids: ['110_network_supplies/src_1pn', '110_network_supplies/src_1p_pe_n'] },
   { group: G('Terres et masses', 'Earth and frame'), ids: ['110_network_supplies/terre', '110_network_supplies/masse'] },

@@ -15,7 +15,7 @@ export type Advice = Partial<Record<keyof Ratings | 'volts' | 'power' | 'voltsPr
 
 const S = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
 const key = (symId: string, portId: string) => `${symId}:${portId}`
-const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
+const HOT = new Set(['L', 'L1', 'L2', 'L3', '+', 'L24'])
 const fmt = (lang: Lang, x: number) => String(x).replace('.', lang === 'fr' ? ',' : '.')
 const upTo = (x: number) => RATINGS.find((r) => r >= x) ?? RATINGS[RATINGS.length - 1]
 
@@ -261,7 +261,7 @@ export function wireKind(w: Wire, doc: Doc, defs: Record<string, SymbolDef>): Wi
     if (s && def && /02_power_contacts/.test(def.id)) power = true
     for (const e of g.adj.get(n) ?? []) if (!seen.has(e.to)) { seen.add(e.to); stack.push(e.to) }
   }
-  if (pots.has('N') || secNeutral) return 'neutral'
+  if (pots.has('N') || pots.has('N24') || secNeutral) return 'neutral'
   if (pots.has('+') || pots.has('-')) return 'control-dc'
   if (derived && ![...pots].some((p) => p.startsWith('L'))) return 'control-ac'
   if (pots.size === 0) return derived ? 'control-ac' : undefined

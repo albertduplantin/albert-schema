@@ -99,5 +99,23 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   check('renvoi de feuille : un repère différent ne relie rien', !(() => { const w2: any = { ...withPages, pages: [withPages.pages[0], { ...withPages.pages[1], symbols: p2.symbols.map((s: any) => (s.defId === 'sim-ref' ? { ...s, label: 'B' } : s)) }] }; const a2 = mergedDoc(w2); return simulate(a2, SYMBOL_MAP, {}, { pressed: new Set([idOf('S2')]), toggled: new Set() }, 1_000_000).energized.has(idOf('KM1', 'bobine')) })())
   void switchPage
 }
+// ── source 24 V alternatif phase + neutre
+{
+  const { simulate } = await import(ROOT + '/src/sim/engine.ts')
+  const { adviseDoc } = await import(ROOT + '/src/advice.ts')
+  const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  const mk = (volts: number) => {
+    const d = T.build(base, [['src', 'sim-24vac', 400, 30], ['s', Q('380_signaling_operating/20_push_buttons/poussoir'), 400, 100, 'S2'], ['c', Q('310_relays_contactors_contacts/01_coils/bobine3'), 390, 200, 'KA1']], [['src', 'a', 's', 't0'], ['s', 't1', 'c', 't0'], ['c', 't1', 'src', 'b']])
+    d.symbols.find((x: any) => x.label === 'KA1').volts = volts
+    return d
+  }
+  const run = (d: any, press: boolean) => simulate(d, SYMBOL_MAP, {}, { pressed: new Set(press ? [d.symbols.find((x: any) => x.label === 'S2').id] : []), toggled: new Set() }, 1_000_000)
+  const d24 = mk(24), coil = d24.symbols.find((x: any) => x.label === 'KA1').id
+  check('source 24 V ~ : bobine 24 V alimentée à l’appui, sans tension anormale', run(d24, true).energized.has(coil) && !run(d24, true).badVoltage[coil] && run(d24, true).volts[coil] === 24)
+  check('source 24 V ~ : repos, bobine coupée', !run(d24, false).energized.has(coil))
+  const d230 = mk(230), r230 = run(d230, true)
+  check('source 24 V ~ : bobine 230 V signalée en sous-tension', !!r230.badVoltage[d230.symbols.find((x: any) => x.label === 'KA1').id])
+  check('source 24 V ~ : Contrôle sans erreur sur le montage correct', adviseDoc(d24, SYMBOL_MAP, 'fr').filter((x: any) => x.level === 'error').length === 0, JSON.stringify(adviseDoc(d24, SYMBOL_MAP, 'fr').filter((x: any) => x.level === 'error').map((x: any) => x.text)))
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

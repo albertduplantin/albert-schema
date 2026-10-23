@@ -45,7 +45,7 @@ function Rotor({ cx, cy, r }: { cx: number; cy: number; r: number }) {
 }
 
 const POT_COLOR: Record<string, string> = {
-  L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
+  L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', L24: '#d62728', N24: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
   // fluide : pression (P), échappement (R), fuite (X)
   P: '#1e88e5', R: '#90a4ae', X: '#e53935',
 }

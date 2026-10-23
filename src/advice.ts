@@ -17,7 +17,7 @@ export interface Issue {
 
 const S = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
 const key = (symId: string, portId: string) => `${symId}:${portId}`
-const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
+const HOT = new Set(['L', 'L1', 'L2', 'L3', '+', 'L24'])
 
 interface Edge { to: string; sc: boolean; ol: boolean; sym?: string; wire?: string }
 
