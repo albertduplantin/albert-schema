@@ -745,7 +745,7 @@ function Editor() {
         !s.legacy && s.domain === domain &&
         (q
           ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q
-          : cat === TOP ? s.top || usageCount(s.id, now) >= 1 || globalShare(s.id) >= 30 : s.cat === cat),
+          : cat === TOP ? s.top || usageCount(s.id, now) >= 1 || globalShare(s.id) >= 30 : (s.menu ?? s.cat) === cat),
     )
     if (q || cat === TOP) {
       // recherche et « les plus utilisés » : par score adaptatif (a priori + usage de l'utilisateur)

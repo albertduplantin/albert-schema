@@ -70,6 +70,8 @@ export interface SymbolDef {
   group?: { fr: string; en: string } | null
   /** Ancien symbole dessiné à la main, masqué de la palette */
   legacy?: boolean
+  /** menu de palette qui remplace `cat` (ex. menu unique des sources) */
+  menu?: string
   /** Modèle de simulation (absent : symbole non simulé) */
   sim?: SimModel
   /** Modèle fluidique (distributeurs, vérins, sources d'air…) */

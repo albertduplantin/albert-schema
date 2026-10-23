@@ -1,6 +1,7 @@
 import { electrical } from './electrical'
 import { pneumatic, hydraulic } from './fluid'
 import { simSources } from './simulation'
+import { SOURCES_MENU, SOURCES_NAME, organizeSources } from './sources'
 import type { Domain, SymbolDef } from '../types'
 
 /** Symboles dessinés à la main : conservés pour les anciens fichiers, masqués de la palette. */
@@ -30,12 +31,15 @@ export function loadLibrary(): Promise<void> {
     })
     .then((lib) => {
       for (const d of Object.keys(lib.categories) as Domain[]) CATEGORIES[d] = lib.categories[d]
-      CATEGORIES.electrical.unshift({ id: 'sim', name: { fr: 'Sources de simulation', en: 'Simulation sources' } })
       for (const s of lib.symbols) {
         s.std = 'QElectroTech'
         SYMBOLS.push(s)
         SYMBOL_MAP[s.id] = s
       }
+      organizeSources(SYMBOLS)
+      // un seul menu pour toutes les sources : les catégories « sources réseau » et « générateurs et sources » y sont fondues
+      const merged = new Set(['10_electric_10_allpole/110_network_supplies', '10_electric_10_allpole/392_generators_sources'])
+      CATEGORIES.electrical = [{ id: SOURCES_MENU, name: SOURCES_NAME }, ...CATEGORIES.electrical.filter((c) => !merged.has(c.id))]
     })
   return loading
 }
