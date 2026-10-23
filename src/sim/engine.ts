@@ -1,5 +1,6 @@
 import type { Doc, PlacedSymbol, SimModel, SymbolDef, TimerKind } from '../types'
 import { cylPos, solveFluid, STROKE_S } from './fluid'
+import { DEFAULT_WATTS, motorCurrent } from './estimate'
 
 /**
  * Simulation « logique de relais » d'un schéma électrique.
@@ -55,6 +56,8 @@ export interface SimResult {
   badVoltage: Record<string, { applied: number; rated: number }>
   /** un relais thermique a déclenché (surcharge moteur injectée) */
   thermalTrip: boolean
+  /** intensité (A) circulant dans chaque conducteur, d'après les caractéristiques des récepteurs (estimations si non renseignées) */
+  amps: Record<string, number>
   /** vérins : position de 0 (rentré) à 1 (sorti) */
   cylPos: Record<string, number>
   /** distributeurs : vrai = case actionnée */
@@ -310,6 +313,21 @@ function solveAll(x: Ctx) {
 const PHASES = new Set(['L', 'L1', 'L2', 'L3'])
 
 /** Tension entre deux potentiels, si elle est déterminable (réseau 230/400 V, source continue 24 V, secondaires de transformateurs). */
+/**
+ * Tension (V) entre deux points du schéma d'après leurs potentiels, comme la lirait un voltmètre : 0 entre deux points au même
+ * potentiel ou si l'un est en l'air ; indéfinie (undefined) si le logiciel ne sait pas l'évaluer.
+ */
+export function voltageBetween(a: string | null, b: string | null, doc: Doc, defs: Record<string, SymbolDef>): number | undefined {
+  if (!a || !b || a === b) return 0
+  const pe = a === 'PE' ? b : b === 'PE' ? a : null
+  if (pe) {
+    if (pe === 'N') return 0
+    if (PHASES.has(pe)) return 230
+    if (pe.startsWith('~')) return pe.endsWith(':0') ? (doc.symbols.find((x) => x.id === pe.slice(1).split(':')[0])?.volts ?? 24) : 0
+  }
+  return voltBetween(a, b, doc, defs)
+}
+
 function voltBetween(a: string | null, b: string | null, doc: Doc, defs: Record<string, SymbolDef>): number | undefined {
   if (!a || !b || a === b) return undefined
   const aD = a.startsWith('~')
@@ -345,7 +363,7 @@ const isHot = (pot: string) => HOT.has(pot) || pot.endsWith(':0')
  * répartit entre branches parallèles, les impasses n'en reçoivent pas, et le sens est celui du courant conventionnel
  * (source chaude → récepteur → retour).
  */
-function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<typeof solve>): Record<string, 1 | -1> {
+function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<typeof solve>): { dir: Record<string, 1 | -1>; amps: Record<string, number> } {
   interface Edge { u: string; v: string; wire?: string }
   const edges: Edge[] = []
   for (const w of doc.wires) {
@@ -358,7 +376,8 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
   const inject = new Map<string, number>() // courant extrait du réseau (négatif) ou restitué (positif) par les récepteurs
   const sourceNodes = new Set<string>()
   const add = (k: string, x: number) => inject.set(k, (inject.get(k) ?? 0) + x)
-  const load = (symId: string, ports: string[]) => {
+  /** un récepteur absorbe `amps` ampères sur sa borne chaude (répartis entre ses bornes chaudes) et les restitue sur le retour ; sans retour (moteur triphasé), chaque phase porte `amps` */
+  const load = (symId: string, ports: string[], amps: number) => {
     const hot: string[] = []
     const cold: string[] = []
     for (const p of ports) {
@@ -366,17 +385,44 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
       if (!pot) continue
       ;(isHot(pot) ? hot : cold).push(key(symId, p))
     }
-    hot.forEach((k) => add(k, -1 / hot.length))
-    cold.forEach((k) => add(k, 1 / cold.length))
+    if (cold.length) {
+      hot.forEach((k) => add(k, -amps / hot.length))
+      cold.forEach((k) => add(k, amps / cold.length))
+    } else hot.forEach((k) => add(k, -amps))
   }
+  const volt = (s: PlacedSymbol, ports: string[]) => {
+    const pots = ports.map((p) => out.potOf(s.id, p))
+    let v: number | undefined
+    for (let i = 0; i < pots.length; i++) for (let j = i + 1; j < pots.length; j++) v = Math.max(v ?? 0, voltBetween(pots[i], pots[j], doc, defs) ?? 0) || v
+    return v
+  }
+  // 1. récepteurs ordinaires : courant d'après la puissance absorbée (valeurs par défaut si non renseignée) ou le courant nominal du moteur
+  const trafoVA = new Map<string, number>() // puissance appelée au secondaire de chaque transformateur
+  for (const s of doc.symbols) {
+    const def = defs[s.defId]
+    const m = def?.sim
+    if (m?.k === 'source') { for (const [p, pot] of Object.entries(m.pot)) if (pot !== 'PE') sourceNodes.add(key(s.id, p)) } // la terre ne fournit aucun courant
+    else if ((m?.k === 'coil' || m?.k === 'load') && out.energized.has(s.id)) {
+      if (m.k === 'load' && m.role === 'motor') load(s.id, m.ports, motorCurrent(s, def)?.value ?? 5)
+      else {
+        const watts = s.rated?.watts ?? DEFAULT_WATTS[m.k === 'coil' ? 'coil' : m.role] ?? 5
+        const v = volt(s, m.ports) ?? s.volts ?? 24
+        load(s.id, m.ports, watts / v)
+        for (const p of m.ports) {
+          const pot = out.potOf(s.id, p)
+          if (pot?.startsWith('~')) { const tid = pot.slice(1).split(':')[0]; trafoVA.set(tid, (trafoVA.get(tid) ?? 0) + watts); break }
+        }
+      }
+    }
+  }
+  // 2. primaires de transformateurs : courant déduit de la puissance appelée au secondaire
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
-    if (m?.k === 'source') for (const p of Object.keys(m.pot)) sourceNodes.add(key(s.id, p))
-    else if ((m?.k === 'coil' || m?.k === 'load') && out.energized.has(s.id)) load(s.id, m.ports)
-    else if (m?.k === 'transformer' && out.trafoOn.has(s.id)) {
-      load(s.id, m.primary)
-      for (const p of m.secondary) sourceNodes.add(key(s.id, p)) // le secondaire alimente le circuit aval
-    }
+    if (m?.k !== 'transformer' || !out.trafoOn.has(s.id)) continue
+    const u1 = s.voltsPrimary ?? volt(s, m.primary) ?? 230
+    const k = m.primary.length >= 3 ? Math.sqrt(3) : 1
+    load(s.id, m.primary, Math.max(0.02, (trafoVA.get(s.id) ?? 0) / (k * u1)))
+    for (const p of m.secondary) sourceNodes.add(key(s.id, p)) // le secondaire alimente le circuit aval
   }
 
   // composantes connexes du graphe
@@ -446,13 +492,17 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
   }
 
   const res: Record<string, 1 | -1> = {}
+  const amps: Record<string, number> = {}
   for (const e of edges) {
     if (!e.wire) continue
     const f = phi[nodes.get(e.u)!] - phi[nodes.get(e.v)!]
-    if (Math.abs(f) > 1e-3) res[e.wire] = f > 0 ? 1 : -1
+    if (Math.abs(f) > 1e-4) {
+      res[e.wire] = f > 0 ? 1 : -1
+      amps[e.wire] = Math.abs(f)
+    }
   }
   void names
-  return res
+  return { dir: res, amps }
 }
 
 export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now = Date.now()): SimResult {
@@ -557,7 +607,7 @@ export function simulate(docIn: Doc, defs: Record<string, SymbolDef>, previous: 
   return {
     state: memory, energized, closed: out.closed, potentialOf, shorts: out.shorts, unstable, unsupported,
     pendingMs: ctx.pending.length || fluidPending.length ? Math.min(...ctx.pending, ...fluidPending) : null,
-    current: currentFlow(doc, defs, out),
+    ...(() => { const f = currentFlow(doc, defs, out); return { current: f.dir, amps: f.amps } })(),
     volts,
     badVoltage,
     thermalTrip: applyDelay(memory[THERMAL], 'on', THERMAL_S, now, []),

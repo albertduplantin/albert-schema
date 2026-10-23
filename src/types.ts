@@ -89,6 +89,8 @@ export interface Ratings {
   curve?: string
   /** pouvoir de coupure (kA) */
   icu?: number
+  /** sensibilité différentielle IΔn (mA) */
+  idn?: number
   /** réglage thermique (A) et plage de réglage (A) */
   set?: number
   min?: number
@@ -158,6 +160,20 @@ export interface TitleBlock {
 
 export type Paper = 'A4' | 'A3' | 'A2' | 'A1'
 
+/** Appareil de mesure posé sur la feuille : voltmètre (deux pointes de touche) ou pince ampèremétrique. */
+export interface Instrument {
+  id: string
+  kind: 'voltmeter' | 'clamp'
+  /** affichage : aiguille ou numérique */
+  style: 'needle' | 'digital'
+  x: number
+  y: number
+  /** calibre : volts (voltmètre) ou ampères (pince) */
+  range: number
+  /** voltmètre : position des deux pointes de touche (COM, V) ; par défaut sous le boîtier */
+  probes?: [{ x: number; y: number }, { x: number; y: number }]
+}
+
 /** Annotation libre posée sur la feuille. */
 export interface Note {
   id: string
@@ -173,6 +189,7 @@ export interface Page {
   symbols: PlacedSymbol[]
   wires: Wire[]
   notes?: Note[]
+  instruments?: Instrument[]
 }
 
 export interface Doc {
@@ -182,6 +199,7 @@ export interface Doc {
   symbols: PlacedSymbol[]
   wires: Wire[]
   notes?: Note[]
+  instruments?: Instrument[]
   /** projet à plusieurs feuilles : le contenu de la feuille active est dans symbols/wires/notes */
   pages?: Page[]
   page?: number

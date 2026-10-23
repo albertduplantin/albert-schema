@@ -1,6 +1,6 @@
-import type { Doc, Lang, PlacedSymbol, SymbolDef } from './types'
+import type { Doc, Lang, PlacedSymbol, Ratings, SymbolDef } from './types'
 import { devKey, simulate } from './sim/engine'
-import { describeInfo, transformerInfo, transformerTopology } from './transformer'
+import { RATINGS, describeInfo, transformerInfo, transformerTopology } from './transformer'
 import { kindOf, maxProtection, motorCurrent, parseSection } from './ratings'
 
 export interface Issue {
@@ -9,6 +9,8 @@ export interface Issue {
   /** conséquence d'un oubli ou d'une erreur */
   why?: string
   symId?: string
+  /** correction proposée : valeurs à appliquer aux caractéristiques d'un appareil */
+  fix?: { symId: string; rated: Ratings }
 }
 
 const S = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
@@ -49,8 +51,9 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     } else if (m.k === 'transformer') {
       if (m.secondary[0]) origins.set(key(s.id, m.secondary[0]), s)
     } else if (m.k === 'switch') {
-      const sc = /10_fuses|11_circuit_breakers|12_magneto/.test(id)
-      const ol = /30_thermal_relays|11_circuit_breakers|12_magneto/.test(id)
+      const rcbo = /50_residual_current_circuit_breaker/.test(id) && /^Disjoncteur/i.test(defs[s.defId].name.fr) // disjoncteur différentiel : protège aussi contre les surintensités
+      const sc = /10_fuses|11_circuit_breakers|12_magneto/.test(id) || rcbo
+      const ol = /30_thermal_relays|11_circuit_breakers|12_magneto/.test(id) || rcbo
       for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b), sc, ol, s.id)
       for (const [com, nc, no] of m.changeover ?? []) { link(key(s.id, com), key(s.id, nc)); link(key(s.id, com), key(s.id, no)) }
     }
@@ -78,7 +81,7 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
   for (const s of doc.symbols) {
     const def = defs[s.defId]
     const m = def?.sim
-    if (m?.k !== 'switch' || !rest || !/10_fuses|11_circuit_breakers|12_magneto|20_disconnecting/.test(def.id)) continue
+    if (m?.k !== 'switch' || !rest || !/10_fuses|11_circuit_breakers|12_magneto|20_disconnecting|50_residual_current_circuit_breaker/.test(def.id)) continue
     if (!/1 pole protege|\+ ?neutre|P\+N|\+ ?N\b/i.test(def.name.fr + ' ' + def.name.en)) continue
     const pots = m.poles.map(([a, b]) => rest!.potentialOf[key(s.id, a)] ?? rest!.potentialOf[key(s.id, b)] ?? null)
     const phases = [...new Set(pots.filter((p): p is string => !!p && PHASES.has(p)))]
@@ -322,6 +325,55 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
             })
           }
         }
+      }
+    }
+  }
+
+  // suggestions applicables en un clic : réglages et calibres conseillés pour les appareils dont la caractéristique n'est pas renseignée
+  const AC3 = [6, 9, 12, 18, 25, 32, 40, 50, 65, 80, 95]
+  const suggested = new Set<string>()
+  const suggest = (d: PlacedSymbol, rated: Ratings, text: string) => {
+    const k = d.id + JSON.stringify(rated)
+    if (suggested.has(k)) return
+    suggested.add(k)
+    out.push({ level: 'info', symId: d.id, text, fix: { symId: d.id, rated } })
+  }
+  const upTo = (x: number) => RATINGS.find((r) => r >= x) ?? RATINGS[RATINGS.length - 1]
+  for (const s of doc.symbols) {
+    const def = defs[s.defId]
+    const m = def?.sim
+    if (m?.k !== 'load' || m.role !== 'motor') continue
+    const mc = motorCurrent(s, def)
+    if (!mc) continue
+    for (const d of upstream(portsOf(s, m.ports))) {
+      const k = kindOf(defs[d.defId])
+      const r = d.rated
+      if ((k === 'thermal' || k === 'motorBreaker') && !r?.set) suggest(d, { set: mc.value }, S(lang, `${nm(d)} : réglage thermique conseillé ${fmt(mc.value)} A (courant nominal du moteur ${nm(s)}).`, `${nm(d)}: suggested thermal setting ${fmt(mc.value)} A (rated current of motor ${nm(s)}).`))
+      if ((k === 'fuse' || k === 'breaker') && !r?.in) suggest(d, { in: upTo(mc.value), curve: k === 'fuse' ? 'aM' : 'D' }, S(lang, `${nm(d)} : calibre conseillé ${upTo(mc.value)} A, ${k === 'fuse' ? 'type aM' : 'courbe D'} (moteur ${nm(s)} de ${fmt(mc.value)} A).`, `${nm(d)}: suggested rating ${upTo(mc.value)} A, ${k === 'fuse' ? 'aM type' : 'D curve'} (motor ${nm(s)} of ${fmt(mc.value)} A).`))
+      if (k === 'contactor' && !r?.in) { const a = AC3.find((v) => v >= mc.value) ?? AC3[AC3.length - 1]; suggest(d, { in: a }, S(lang, `${nm(d)} : courant assigné AC-3 conseillé ${a} A (moteur ${nm(s)} de ${fmt(mc.value)} A).`, `${nm(d)}: suggested AC-3 rating ${a} A (motor ${nm(s)} of ${fmt(mc.value)} A).`)) }
+    }
+  }
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k !== 'transformer') continue
+    const info = transformerInfo(s, defs[s.defId])
+    for (const d of upstream(portsOf(s, m.primary))) {
+      const k = kindOf(defs[d.defId])
+      if (info.prot1 && (k === 'fuse' || k === 'breaker') && !d.rated?.in) suggest(d, { in: info.prot1, curve: k === 'fuse' ? 'aM' : 'D' }, S(lang, `${nm(d)} : calibre conseillé ${fmt(info.prot1)} A, ${k === 'fuse' ? 'type aM' : 'courbe D'} (primaire de ${nm(s)}).`, `${nm(d)}: suggested rating ${fmt(info.prot1)} A, ${k === 'fuse' ? 'aM type' : 'D curve'} (primary of ${nm(s)}).`))
+    }
+    const hot0 = key(s.id, m.secondary[0])
+    const seen0 = new Set([hot0])
+    const st = [hot0]
+    while (st.length) {
+      const n = st.pop()!
+      for (const e of adj.get(n) ?? []) {
+        if ((dist.get(e.to) ?? -1) <= (dist.get(n) ?? 0) || seen0.has(e.to)) continue
+        seen0.add(e.to)
+        const d = e.sym ? byId.get(e.sym) : undefined
+        if (d && e.sc) {
+          const k = kindOf(defs[d.defId])
+          if (info.prot2 && (k === 'fuse' || k === 'breaker') && !d.rated?.in) suggest(d, { in: info.prot2, curve: k === 'fuse' ? 'gG' : 'C' }, S(lang, `${nm(d)} : calibre conseillé ${fmt(info.prot2)} A (secondaire de ${nm(s)}).`, `${nm(d)}: suggested rating ${fmt(info.prot2)} A (secondary of ${nm(s)}).`))
+        } else st.push(e.to)
       }
     }
   }

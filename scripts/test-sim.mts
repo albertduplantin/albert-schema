@@ -457,5 +457,63 @@ function rig(doc: any) {
   check('bilan : 75 VA sur 100 VA → aucun message de charge', checkDoc(t, SYMBOL_MAP, 'fr').some((i: any) => /chargé à|surchargé/.test(i.text)), false)
   void tr
 }
+// ── appareils de mesure : voltmètre à pointes de touche et pince ampèremétrique
+{
+  const { readVoltage, readCurrent, pickAt, defaultInstrument, stepRange, formatReading } = await import(ROOT + '/src/instruments.ts')
+  const { routeAll } = await import(ROOT + '/src/routing.ts')
+  const d = T.motorStarterTransformer(base)
+  const S2 = d.symbols.find((s: any) => s.label === 'S2').id
+  let mem: any = {}, now = 1e6
+  let r: any = simulate(d, SYMBOL_MAP, mem, { pressed: new Set([S2]), toggled: new Set() }, now); mem = r.state
+  r = simulate(d, SYMBOL_MAP, mem, { pressed: new Set(), toggled: new Set() }, now + 100)
+  const routes = routeAll(d.wires, d.symbols)
+  const ctx = { symbols: d.symbols, defs: SYMBOL_MAP, routes, wires: d.wires }
+  const sym = (id: string) => d.symbols.find((s: any) => s.id === id)
+  const wireOf = (a: string, b: string) => d.wires.find((w: any) => (sym(w.from.symId).label === a || sym(w.from.symId).defId === a) && (sym(w.to.symId).label === b || sym(w.to.symId).defId === b))
+  const mid = (w: any) => { const p = routes[w.id]; let best = [p[0], p[1]], bl = 0; for (let i = 0; i + 1 < p.length; i++) { const l = Math.hypot(p[i + 1].x - p[i].x, p[i + 1].y - p[i].y); if (l > bl) { bl = l; best = [p[i], p[i + 1]] } } return { x: (best[0].x + best[1].x) / 2, y: (best[0].y + best[1].y) / 2 } }
+  const volt = (pa: any, pb: any) => { const i = defaultInstrument('voltmeter', 'digital', 0, 0); i.probes = [pa, pb]; return readVoltage(i, ctx, r, d, SYMBOL_MAP) }
+  const wl1 = mid(wireOf('sim-l1', 'Q1')), wl2 = mid(wireOf('sim-l2', 'Q1')), wl3 = mid(wireOf('sim-l3', 'Q1'))
+  check('voltmètre : entre deux phases = 400 V', volt(wl1, wl2), 400)
+  check('voltmètre : entre trois phases (L2, L3) = 400 V', volt(wl2, wl3), 400)
+  check('voltmètre : deux pointes sur le même conducteur = 0 V', volt(wl1, { x: wl1.x, y: wl1.y + 1 }), 0)
+  check('voltmètre : une pointe en l\'air = 0 V', volt(wl1, { x: 5, y: 5 }), 0)
+  const trT = d.symbols.find((s: any) => s.label === 'T1')
+  // au secondaire : phase (via F2) – terre : 24 V ; neutre – terre : 0 V
+  const sec = mid(wireOf('F2', 'S1')), ret = mid(wireOf('KM1', 'T1'))
+  check('voltmètre : secondaire, phase vers neutre = 24 V', volt(sec, ret), 24)
+  const pe = d.symbols.find((s: any) => s.defId.includes('/terre') ).id
+  void pe; void trT
+  // pince : courant dans les phases du moteur (4 kW → 7,7 A) et au secondaire (11 VA / 24 V → 0,458 A)
+  const clamp = (pt: any) => { const i = defaultInstrument('clamp', 'digital', 0, 0); i.x = pt.x - 45; i.y = pt.y - 34; return readCurrent(i, ctx, r) }
+  const c1 = clamp(mid(wireOf('Q1', 'KM1')))
+  check('pince : 7,7 A dans une phase du moteur', [c1.clamped, Math.round(c1.amps * 10) / 10], [true, 7.7])
+  const c2 = clamp(mid(wireOf('F2', 'S1')))
+  check('pince : 0,46 A au secondaire du transformateur', Math.round(c2.amps * 100) / 100, 0.46)
+  check('pince : rien à serrer → 0 A', clamp({ x: 5, y: 5 }), { amps: 0, clamped: false })
+  check('pickAt : une borne a priorité sur le conducteur', Object.keys(pickAt(mid(wireOf('Q1', 'KM1')), ctx)).includes('wire'), true)
+  const i0 = defaultInstrument('voltmeter', 'needle', 0, 0)
+  check('calibres : 600 V → 1000 V → plus haut impossible', [stepRange(i0, 1), stepRange({ ...i0, range: 1000 }, 1)], [1000, 1000])
+  check('affichage numérique : 400,0 V sur 600 V ; 7,70 A sur 10 A ; 0,458 A sur 1 A', [formatReading(400, 600, 'fr'), formatReading(7.7, 10, 'fr'), formatReading(0.458, 1, 'fr')], ['400,0', '7,70', '0,458'])
+}
+// ── disjoncteurs différentiels simulés + propriétés ; corrections proposées par le Contrôle
+{
+  const { checkDoc } = await import(ROOT + '/src/check.ts')
+  const { kindOf, fieldsFor } = await import(ROOT + '/src/ratings.ts')
+  const rcd = lib.symbols.filter((s: any) => /50_residual_current_circuit_breaker/.test(s.id))
+  check('disjoncteurs différentiels : tous simulés', rcd.every((s: any) => s.sim?.k === 'switch'), true)
+  const bk = rcd.find((s: any) => /^Disjoncteur/.test(s.name.fr)), sw = rcd.find((s: any) => /^Interrupteur/.test(s.name.fr))
+  check('disjoncteur différentiel : calibre, courbe, pouvoir de coupure et sensibilité', fieldsFor(SYMBOL_MAP[bk.id]).map((f: any) => f.key).join(), 'in,curve,icu,idn')
+  check('interrupteur différentiel : calibre et sensibilité', [kindOf(SYMBOL_MAP[sw.id]), fieldsFor(SYMBOL_MAP[sw.id]).map((f: any) => f.key).join()], ['rcd', 'in,idn'])
+  // départ moteur sans aucune caractéristique : le Contrôle propose des valeurs applicables
+  const m = T.motorStarter(base)
+  for (const s of m.symbols) delete s.rated
+  m.symbols.find((s: any) => s.label === 'M1').rated = { kw: 4 }
+  const fixes = checkDoc(m, SYMBOL_MAP, 'fr').filter((i: any) => i.fix)
+  check('propositions applicables : calibre 8 A courbe D pour le disjoncteur, contacteur 9 A', [fixes.some((i: any) => i.fix.rated.in === 8 && i.fix.rated.curve === 'D'), fixes.some((i: any) => i.fix.rated.in === 9)], [true, true])
+  // les appliquer fait disparaître les propositions
+  for (const i of fixes) { const s = m.symbols.find((x: any) => x.id === i.fix.symId); s.rated = { ...s.rated, ...i.fix.rated } }
+  check('propositions appliquées : plus aucune proposition', checkDoc(m, SYMBOL_MAP, 'fr').filter((i: any) => i.fix).length, 0)
+  check('… et aucune erreur de caractéristiques', checkDoc(m, SYMBOL_MAP, 'fr').filter((i: any) => i.level === 'error').length, 0)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

@@ -1,8 +1,9 @@
 import type { Lang, PlacedSymbol, Ratings, SymbolDef } from './types'
 import { RATINGS } from './transformer'
+import { motorCurrent as motorCurrentImpl } from './sim/estimate'
 
 /** Famille d'appareil, qui détermine les caractéristiques que l'on peut renseigner. */
-export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer'
+export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer' | 'rcd'
 
 export function kindOf(def: SymbolDef | undefined): Kind | null {
   if (!def) return null
@@ -11,6 +12,7 @@ export function kindOf(def: SymbolDef | undefined): Kind | null {
   if (m?.k === 'switch') {
     if (/10_fuses/.test(id)) return 'fuse'
     if (/30_thermal_relays/.test(id)) return 'thermal'
+    if (/50_residual_current_circuit_breaker/.test(id)) return /^Interrupteur/i.test(def.name.fr) ? 'rcd' : 'breaker'
     if (/12_magneto|11_circuit_breakers/.test(id)) return /moteur|motor|GV/i.test(def.name.fr + ' ' + def.name.en) ? 'motorBreaker' : 'breaker'
     if (/02_power_contacts/.test(id)) return 'contactor'
     return null
@@ -37,6 +39,7 @@ const F = {
   curveB: { key: 'curve', label: { fr: 'Courbe de déclenchement', en: 'Trip curve' }, list: ['B', 'C', 'D', 'K', 'Z'], text: true } as FieldDef,
   fuseType: { key: 'curve', label: { fr: 'Type de fusible', en: 'Fuse type' }, list: ['gG', 'aM', 'gR'], text: true } as FieldDef,
   trip: { key: 'curve', label: { fr: 'Classe de déclenchement', en: 'Trip class' }, list: ['10A', '10', '20', '30'], text: true } as FieldDef,
+  idn: { key: 'idn', label: { fr: 'Sensibilité différentielle IΔn (mA)', en: 'Residual current rating IΔn (mA)' }, list: [10, 30, 100, 300, 500] } as FieldDef,
   icu: { key: 'icu', label: { fr: 'Pouvoir de coupure (kA)', en: 'Breaking capacity (kA)' }, list: [3, 4.5, 6, 10, 15, 25, 50], step: 0.5 } as FieldDef,
   set: { key: 'set', label: { fr: 'Réglage thermique (A)', en: 'Thermal setting (A)' }, step: 0.1 } as FieldDef,
   min: { key: 'min', label: { fr: 'Plage de réglage : minimum (A)', en: 'Setting range: minimum (A)' }, step: 0.1 } as FieldDef,
@@ -56,21 +59,18 @@ export const FIELDS: Record<Kind, FieldDef[]> = {
   contactor: [F.ac3],
   motor: [F.kw, F.ie, F.cos, F.ratio],
   consumer: [F.watts],
+  rcd: [F.calibre, F.idn],
 }
 
-/** Courant nominal d'un moteur : valeur de plaque, sinon estimé d'après la puissance (rendement 0,88). */
-export function motorCurrent(s: PlacedSymbol, def: SymbolDef): { value: number; estimated: boolean } | undefined {
-  const r = s.rated
-  if (r?.ie && r.ie > 0) return { value: r.ie, estimated: false }
-  if (r?.kw && r.kw > 0) {
-    const threePhase = (def.sim?.k === 'load' ? def.sim.ports.length : 0) >= 3
-    const u = s.volts && s.volts > 0 ? s.volts : threePhase ? 400 : 230
-    const cos = r.cos && r.cos > 0 ? r.cos : 0.85
-    const i = (r.kw * 1000) / ((threePhase ? Math.sqrt(3) : 1) * u * cos * 0.88)
-    return { value: Math.round(i * 10) / 10, estimated: true }
-  }
-  return undefined
+/** Champs d'un appareil : ceux de sa famille, plus la sensibilité différentielle pour un disjoncteur différentiel. */
+export function fieldsFor(def: SymbolDef | undefined): FieldDef[] {
+  const k = kindOf(def)
+  if (!k) return []
+  const f = FIELDS[k]
+  return k === 'breaker' && def && /50_residual_current_circuit_breaker/.test(def.id) ? [...f, F.idn] : f
 }
+
+export const motorCurrent = motorCurrentImpl
 
 /**
  * Calibre maximal usuel de la protection d'un conducteur en cuivre isolé PVC, par section (mm²) : la règle de base est

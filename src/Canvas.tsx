@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { termsWithTopology } from './transformer'
 import { junctionPoints, routeAll } from './routing'
 import { autoConnect } from './splice'
-import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
+import InstrumentView from './InstrumentView'
+import { jawPoint, pickAt, probesOf, readCurrent, readVoltage, stepRange, type PickContext } from './instruments'
+import type { Doc, Instrument, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
   GRID, MARGIN, PAPER_SIZE, TB_H, TB_W, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
@@ -99,6 +101,8 @@ type Interaction =
   | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
   | { kind: 'label'; id: string; part: 'labelOff' | 'nameOff'; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'note'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
+  | { kind: 'instr'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
+  | { kind: 'probe'; id: string; i: 0 | 1; moved: boolean }
   | { kind: 'band'; x0: number; y0: number; add: boolean }
   | { kind: 'handle'; wireId: string; idx: number; moved: boolean; mid: boolean }
 
@@ -264,6 +268,33 @@ export default function Canvas(p: Props) {
       return
     }
     if (e.button !== 0) return
+    {
+      const t = e.target as Element
+      const ir = t.closest('[data-ir]')
+      const is = t.closest('[data-is]')
+      const ix = t.closest('[data-ix]')
+      const pr = t.closest('[data-probe]')
+      const ib = t.closest('[data-ib]')
+      const edit = (id: string, fn: (i: Instrument) => Instrument | null) => p.commit((d) => ({ ...d, instruments: (d.instruments ?? []).flatMap((i) => (i.id === id ? (fn(i) ? [fn(i) as Instrument] : []) : [i])) }))
+      if (ir) {
+        const [id, dir] = ir.getAttribute('data-ir')!.split('|')
+        edit(id, (i) => ({ ...i, range: stepRange(i, Number(dir) > 0 ? 1 : -1) }))
+        return
+      }
+      if (is) { edit(is.getAttribute('data-is')!, (i) => ({ ...i, style: i.style === 'needle' ? 'digital' : 'needle' })); return }
+      if (ix) { edit(ix.getAttribute('data-ix')!, () => null); return }
+      if (pr) {
+        const [id, k] = pr.getAttribute('data-probe')!.split('|')
+        p.checkpoint()
+        inter.current = { kind: 'probe', id, i: Number(k) as 0 | 1, moved: false }
+        return
+      }
+      if (ib) {
+        const id = ib.getAttribute('data-ib')!
+        const ins = (doc.instruments ?? []).find((i) => i.id === id)
+        if (ins) { inter.current = { kind: 'instr', id, sx: pt.x, sy: pt.y, ox: ins.x, oy: ins.y, moved: false }; return }
+      }
+    }
     if (p.sim && !e.shiftKey && !wiringRef.current && !p.placing && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-nm],[data-note]')) {
       // simulation : un clic manœuvre l'organe visé (bouton, interrupteur, défaut). Tout le reste, et Maj + clic, édite le schéma.
       const el = (e.target as Element).closest('[data-sym]')
@@ -390,6 +421,17 @@ export default function Canvas(p: Props) {
         p.checkpoint()
       }
       if (it.moved) p.update((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === it.id ? { ...n, x: nx, y: ny } : n)) }))
+    } else if (it.kind === 'probe') {
+      const q = { x: Math.round(pt.x * 2) / 2, y: Math.round(pt.y * 2) / 2 }
+      p.update((d) => ({ ...d, instruments: (d.instruments ?? []).map((i) => (i.id === it.id ? { ...i, probes: (probesOf(i).map((o, k) => (k === it.i ? q : o)) as unknown) as Instrument['probes'] } : i)) }))
+    } else if (it.kind === 'instr') {
+      const nx = Math.round(it.ox + pt.x - it.sx)
+      const ny = Math.round(it.oy + pt.y - it.sy)
+      if (!it.moved && (Math.abs(nx - it.ox) > 1 || Math.abs(ny - it.oy) > 1)) {
+        it.moved = true
+        p.checkpoint()
+      }
+      if (it.moved) p.update((d) => ({ ...d, instruments: (d.instruments ?? []).map((i) => (i.id === it.id ? { ...i, x: nx, y: ny } : i)) }))
     } else if (it.kind === 'label') {
       const off = { x: it.ox + Math.round(pt.x - it.sx), y: it.oy + Math.round(pt.y - it.sy) }
       if (!it.moved && (off.x !== it.ox || off.y !== it.oy)) {
@@ -714,6 +756,22 @@ export default function Canvas(p: Props) {
             const lines = n.text.split('\n')
             const w = Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
             return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={lines.length * n.size * 1.2 + 4} />
+          })}
+          {(doc.instruments ?? []).map((ins) => {
+            const simDoc = { ...doc, symbols: [...doc.symbols, ...(p.extra ?? [])] }
+            const ctx: PickContext = { symbols: doc.symbols, defs: SYMBOL_MAP, routes, wires: doc.wires }
+            let value: number | null | undefined
+            let touching: boolean[] = [false, false]
+            if (ins.kind === 'voltmeter') {
+              const [a, b] = probesOf(ins)
+              touching = [!!pickAt(a, ctx).node, !!pickAt(b, ctx).node]
+              value = p.sim ? readVoltage(ins, ctx, p.sim, simDoc, SYMBOL_MAP) : undefined
+            } else {
+              const c = p.sim ? readCurrent(ins, ctx, p.sim) : undefined
+              touching = [!!pickAt(jawPoint(ins), ctx, 9).wire]
+              value = c ? c.amps : undefined
+            }
+            return <InstrumentView key={ins.id} instr={ins} value={value} touching={touching} lang={p.lang} />
           })}
           {p.highlight && (() => {
             const s = symById(p.highlight.symId)

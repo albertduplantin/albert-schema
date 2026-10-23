@@ -137,7 +137,7 @@ export function classify({ id, nameFr, nameEn, ports }) {
   if (has(/21_selector_switches|25_lever_switches|41_limit_switches/)) return contact('toggle')
 
   // ── protection : disjoncteurs et sectionneurs (fermés par défaut, basculables) ; fusibles et relais thermiques (toujours fermés)
-  if (has(/200_fuses_protective_gears\/(11_circuit_breakers|12_magneto|20_disconnecting)/)) {
+  if (has(/200_fuses_protective_gears\/(11_circuit_breakers|12_magneto|20_disconnecting|50_residual_current_circuit_breaker)/)) {
     const poles = pairPoles(ports)
     return poles.length ? { k: 'switch', poles, ctl: 'toggle', nc: true } : null
   }

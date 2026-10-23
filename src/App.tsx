@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Doc, Note, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
+import type { Doc, Instrument, Note, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
 import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
-import { symBBox, uid } from './geometry'
+import { PAPER_SIZE, symBBox, uid } from './geometry'
+import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
 import { bomRows, exportCsv, exportPng, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
 import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
-import { FIELDS, fieldLabel, kindOf, motorCurrent } from './ratings'
+import { fieldLabel, fieldsFor, kindOf, motorCurrent } from './ratings'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
@@ -271,6 +272,11 @@ function Editor() {
     return () => window.clearInterval(id)
   }, [simMode, clockUi.paused, clockUi.speed]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showCheck, setShowCheck] = useState(false)
+  /** applique une correction proposée par le Contrôle (calibre, réglage…) aux caractéristiques d'un appareil */
+  const applyFix = (fix: { symId: string; rated: Ratings }) => {
+    commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === fix.symId ? { ...s, rated: { ...s.rated, ...fix.rated } } : s)) }))
+    say(tr(lang, 'fixApplied'))
+  }
   const issues = useMemo(() => (showCheck ? checkDoc(all, SYMBOL_MAP, lang) : []), [showCheck, all, lang])
   // pastille du bouton Contrôle : nombre d'erreurs et d'avertissements, recalculé un instant après la dernière modification
   const [issueCount, setIssueCount] = useState({ e: 0, w: 0 })
@@ -518,6 +524,16 @@ function Editor() {
     setDomain('electrical')
   }
 
+  /** pose un appareil de mesure en haut à droite de la feuille (à déplacer ensuite, ainsi que ses pointes) */
+  const addInstrument = (kind: Instrument['kind'], style: Instrument['style']) => {
+    commit((d) => {
+      const n = (d.instruments ?? []).length
+      const paper = PAPER_SIZE[d.paper]
+      const ins = defaultInstrument(kind, style, paper.w - 14 - 150 - (n % 4) * 125, 40 + Math.floor(n / 4) * 30)
+      return { ...d, instruments: [...(d.instruments ?? []), ins] }
+    })
+  }
+
   const duplicate = useCallback(() => { copySel(); paste() }, [copySel, paste])
 
   const nudge = useCallback((dx: number, dy: number) => {
@@ -732,7 +748,7 @@ function Editor() {
               return (
                 <fieldset className="ratings">
                   <legend>{t('ratings')}</legend>
-                  {FIELDS[kind].map((f) => (
+                  {fieldsFor(def).map((f) => (
                     <label key={f.key}>{fieldLabel(f, lang)}
                       <input type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} list={f.list ? `rl-${kind}-${f.key}` : undefined}
                         placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
@@ -865,6 +881,16 @@ function Editor() {
           <button onClick={autoLabel}>{t('autoLabel')}</button>
           <button onClick={autoWire}>{t('autoWire')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
+          <details className="menu">
+            <summary>⏲ {t('measure')} ▾</summary>
+            <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
+              <button onClick={() => addInstrument('voltmeter', 'needle')}>{t('mVoltNeedle')}</button>
+              <button onClick={() => addInstrument('voltmeter', 'digital')}>{t('mVoltDigital')}</button>
+              <button onClick={() => addInstrument('clamp', 'needle')}>{t('mClampNeedle')}</button>
+              <button onClick={() => addInstrument('clamp', 'digital')}>{t('mClampDigital')}</button>
+              <p className="muted" style={{ margin: '6px 10px', fontSize: 11, maxWidth: 230 }}>{t('measureHelp')}</p>
+            </div>
+          </details>
           <label className="chk" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
           <button onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
           <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
@@ -1247,6 +1273,7 @@ function Editor() {
                       <button className="link" disabled={!i.symId} onClick={() => { if (i.symId) { setSel([i.symId]); setShowCheck(false) } }}>
                         {i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : '💡'} {i.text}
                       </button>
+                      {i.fix && <button className="mini" onClick={() => applyFix(i.fix!)}>{t('applyFix')}</button>}
                       {i.why && <p className="why">{i.why}</p>}
                     </li>
                   ))}
