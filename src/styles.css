@@ -348,3 +348,7 @@ a, .dialog a { color: var(--lien); }
 .toolbar button, .toolbar .menu summary { padding: 6px 7px; letter-spacing: 0.05em; font-size: 10px; }
 .toolbar .group { padding-right: 4px; gap: 0; }
 .tabs button { padding: 5px 1px; font-size: 9px; letter-spacing: 0.02em; }
+.chrono-head { gap: 6px; }
+.chrono.min { width: auto; right: auto; padding: 2px 6px; }
+.chrono.min .chrono-head { margin: 0; gap: 10px; }
+.chrono-head button.icon { width: 26px; }
