@@ -102,7 +102,7 @@ export default function Examples({ call, onError }: { call: Call; onError: (msg:
         <button className="primary" onClick={() => setForm({ ...EMPTY })} disabled={!!form}>Ajouter un exemple</button>
       </header>
       <p className="muted">
-        Les exemples publiés apparaissent dans la galerie de l’application, après les exemples intégrés. Pour en créer un : dessinez le schéma dans AlbertSchema,
+        Les exemples publiés apparaissent en premier, dans la liste de départ d’une feuille vide et dans la galerie, avant les exemples intégrés ; ils se classent entre eux par « ordre ». Pour en créer un : dessinez le schéma dans AlbertSchema,
         cliquez sur « Enregistrer » (fichier .albert.json), puis ajoutez-le ici.
       </p>
 

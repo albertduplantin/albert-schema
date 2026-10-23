@@ -172,8 +172,7 @@ function Editor() {
   const [showGallery, setShowGallery] = useState(false)
   const [remoteEx, setRemoteEx] = useState<{ items: RemoteExample[]; hidden: string[] }>({ items: [], hidden: [] })
   useEffect(() => {
-    // exemples publiés par l'administrateur : chargés à l'ouverture de la galerie ; sans réseau, seuls les exemples intégrés restent
-    if (!showGallery) return
+    // exemples publiés par l'administrateur : chargés au démarrage et à chaque ouverture de la galerie ; sans réseau, seuls les exemples intégrés restent
     fetch(import.meta.env.BASE_URL + 'api/examples')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d && Array.isArray(d.items)) setRemoteEx({ items: d.items, hidden: Array.isArray(d.hidden) ? d.hidden : [] }) })
@@ -830,15 +829,12 @@ function Editor() {
             <h2>{t('emptyTitle')}</h2>
             <p>{t('emptyText')}</p>
             <div className="tpls">
-              <button onClick={() => startTemplate(motorStarter)}>{t('tplMotor')}</button>
-              <button onClick={() => startTemplate(motorStarterTransformer)}>{t('tplTrafo')}</button>
-              <button onClick={() => startTemplate(reversingStarter)}>{t('tplReversing')}</button>
-              <button onClick={() => startTemplate(timerOnDelay)}>{t('tplTimer')}</button>
-              <button onClick={() => startTemplate(startLamps)}>{t('tplLamps')}</button>
-              <button onClick={() => startTemplate(delayedCascade)}>{t('tplCascade')}</button>
-              <button onClick={() => startTemplate(pneumaticCylinder)}>{t('tplPneu')}</button>
-              <button onClick={() => startTemplate(pneumaticElectric)}>{t('tplPneuElec')}</button>
-              <button onClick={() => startTemplate(pneumaticAuto)}>{t('tplPneuAuto')}</button>
+              {remoteEx.items.map((ex) => (
+                <button key={ex.id} onClick={() => openRemote(ex)}>{ex.title[lang] || ex.title.fr}</button>
+              ))}
+              {GALLERY.filter((g) => !remoteEx.hidden.includes(g.key)).map((g) => (
+                <button key={g.key} onClick={() => startTemplate(g.fn)}>{t(g.key)}</button>
+              ))}
             </div>
           </div>
         )}
@@ -1063,20 +1059,20 @@ function Editor() {
           <div className="dialog gallery" role="dialog" aria-label={t('gallery')} onClick={(e) => e.stopPropagation()}>
             <h3>{t('galleryExamples')}</h3>
             <div className="cards">
-              {GALLERY.filter((g) => !remoteEx.hidden.includes(g.key)).map((g) => (
-                <div key={g.key} className="card">
-                  <strong>{t(g.key)}</strong>
-                  <span className="lvl">{'★'.repeat(g.level)}{'☆'.repeat(3 - g.level)} {t(('level' + g.level) as Key)}</span>
-                  <p className="muted">{g.about[lang]}</p>
-                  <button onClick={() => { if (!doc.symbols.length || window.confirm(tr(lang, 'galleryReplace'))) { startTemplate(g.fn); setShowGallery(false) } }}>{t('galleryLoad')}</button>
-                </div>
-              ))}
               {remoteEx.items.map((ex) => (
                 <div key={ex.id} className="card">
                   <strong>{ex.title[lang] || ex.title.fr}</strong>
                   <span className="lvl">{'★'.repeat(ex.level)}{'☆'.repeat(3 - ex.level)} {t(('level' + ex.level) as Key)}</span>
                   <p className="muted">{ex.about[lang] || ex.about.fr}</p>
                   <button onClick={() => openRemote(ex)}>{t('galleryLoad')}</button>
+                </div>
+              ))}
+              {GALLERY.filter((g) => !remoteEx.hidden.includes(g.key)).map((g) => (
+                <div key={g.key} className="card">
+                  <strong>{t(g.key)}</strong>
+                  <span className="lvl">{'★'.repeat(g.level)}{'☆'.repeat(3 - g.level)} {t(('level' + g.level) as Key)}</span>
+                  <p className="muted">{g.about[lang]}</p>
+                  <button onClick={() => { if (!doc.symbols.length || window.confirm(tr(lang, 'galleryReplace'))) { startTemplate(g.fn); setShowGallery(false) } }}>{t('galleryLoad')}</button>
                 </div>
               ))}
             </div>
