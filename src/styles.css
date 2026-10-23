@@ -407,3 +407,23 @@ textarea.inlineedit { resize: both; }
 .toolbar .menu-list .namestyle { padding: 6px 10px 8px; min-width: 0; }
 .toolbar .menu-list kbd { background: transparent; border-color: #3a463d; color: #9aa494; }
 .toolbar .saved { padding: 0 4px; }
+
+/* les menus de la barre d'outils doivent se lire comme des menus : cadre, flèche, panneau contrasté */
+.toolbar .menu > summary { border: 1px solid #36423a; border-bottom: 2px solid #36423a; background: #161d18; color: #e3e9e1; padding: 6px 9px; display: flex; align-items: center; gap: 4px; }
+.toolbar .menu > summary:hover, .toolbar .menu[open] > summary { border-color: #36423a; border-bottom-color: var(--clair); background: #1f2922; }
+.toolbar .menu-list { border-top: 3px solid var(--clair); background: #121813; border-color: #36423a; box-shadow: 0 14px 40px #000000a0; min-width: 230px; padding: 6px 0; }
+.toolbar .menu-list.wide { min-width: 300px; }
+.toolbar .menu-list button { padding: 8px 14px; color: #e3e9e1; }
+.toolbar .menu-list button:hover:not(:disabled) { background: #26332a; color: #fff; }
+.toolbar .menu-list button:disabled { opacity: 0.4; }
+.toolbar .menu-list .menu-title { margin: 8px 0 3px; padding: 8px 14px 3px; border-top: 1px solid #2a322b; color: var(--clair); }
+.toolbar .menu-list .menu-title:first-child { margin-top: 0; border-top: 0; }
+.toolbar .menu-list .menu-grid button { padding: 7px 14px; }
+.toolbar .menu-list .chk { display: flex; align-items: center; gap: 8px; padding: 6px 14px; color: #e3e9e1; font-size: 12px; }
+.toolbar .menu-list .namestyle { padding: 4px 14px 10px; color: #c9d2c8; }
+.toolbar .menu-list .namestyle label { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; font-size: 11px; }
+.toolbar .menu-list .namestyle select, .toolbar .menu-list .namestyle input { background: #1f2922; color: #fff; border: 1px solid #36423a; padding: 5px 7px; }
+.toolbar .menu-list .namestyle .row { display: flex; gap: 6px; }
+.toolbar .menu-list .namestyle .row button { flex: 1; justify-content: center; border: 1px solid #36423a; padding: 5px; }
+.toolbar .menu-list button.on { background: var(--accent-olive); color: #fff; border-color: var(--accent-olive); }
+.toolbar .menu-list .muted { padding: 0 14px; }
