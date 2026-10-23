@@ -2,6 +2,7 @@ import type { Doc, Lang } from './types'
 import { PAPER_SIZE, UNIT_MM } from './geometry'
 import { SYMBOL_MAP } from './symbols'
 import { terminalRows } from './strips'
+import { dxfOf } from './dxf'
 
 function download(name: string, blob: Blob) {
   const a = document.createElement('a')
@@ -11,9 +12,18 @@ function download(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
+/** Exports en noir et blanc : toutes les couleurs (fils, formes, remplissages) deviennent du noir, pour une impression sobre. */
+let monochrome = false
+export const setMonochrome = (on: boolean) => { monochrome = on }
+export const toMonochrome = (svg: string) =>
+  svg
+    .replace(/(stroke|fill)="(#[0-9a-fA-F]{3,6}|gnye)"/g, (m, k: string, v: string) => (/^#(fff|ffffff)$/i.test(v) ? m : `${k}="#000000"`))
+    .replace(/(stroke|fill)="rgb\([^)]*\)"/g, (m, k: string) => `${k}="#000000"`)
+
 export function sheetSvg(doc: Doc, content: SVGGElement): string {
   const { w, h } = PAPER_SIZE[doc.paper]
-  const body = new XMLSerializer().serializeToString(content)
+  let body = new XMLSerializer().serializeToString(content)
+  if (monochrome) body = toMonochrome(body)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * UNIT_MM}mm" height="${h * UNIT_MM}mm">` +
     body.replace(/ xmlns="[^"]*"/g, '') +
@@ -25,6 +35,10 @@ export const fileBase = (doc: Doc) => (doc.title.title || 'schema').replace(/[^\
 
 export function exportSvg(doc: Doc, content: SVGGElement) {
   download(fileBase(doc) + '.svg', new Blob([sheetSvg(doc, content)], { type: 'image/svg+xml' }))
+}
+
+export function exportDxf(doc: Doc) {
+  download(fileBase(doc) + '.dxf', new Blob([dxfOf(doc)], { type: 'application/dxf' }))
 }
 
 export function exportPng(doc: Doc, content: SVGGElement) {

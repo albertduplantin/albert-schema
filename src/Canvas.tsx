@@ -5,7 +5,7 @@ import { autoConnect } from './splice'
 import { fontCss } from './fonts'
 import InstrumentView from './InstrumentView'
 import { jawPoint, pickAt, probesOf, readCurrent, readVoltage, stepRange, type PickContext } from './instruments'
-import { ShapeView, arcPath, insideOf, polyPoints, resizeShape, shapeBox, shapeHandles, snapTargets, snapTo, straighten } from './shapes'
+import { ShapeView, arcPath, dashArray, insideOf, polyPoints, resizeShape, shapeBox, shapeHandles, snapTargets, snapTo, straighten } from './shapes'
 import type { Doc, Instrument, Lang, PlacedSymbol, PortRef, Shape } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
@@ -94,6 +94,7 @@ interface Props {
   onEditText?: (kind: 'note' | 'name' | 'label', id: string, x: number, y: number) => void
   onSimFault?: (id: string) => void
   /** outil de dessin actif (rectangle, ellipse, ligne), style des nouvelles formes, et fin de l'outil après le tracé */
+  dark?: boolean
   tool?: Shape['kind'] | null
   toolStyle?: Partial<Shape>
   onToolDone?: () => void
@@ -668,7 +669,7 @@ export default function Canvas(p: Props) {
       ref={svgRef}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('text/x-albert-symbol')) e.preventDefault() }}
       onDrop={onDrop}
-      className={'canvas' + (p.placing || p.tool ? ' placing' : '') + (wiring ? ' wiring' : '') + (p.sim ? ' simulating' : '')}
+      className={'canvas' + (p.dark ? ' dark-sheet' : '') + (p.placing || p.tool ? ' placing' : '') + (wiring ? ' wiring' : '') + (p.sim ? ' simulating' : '')}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
@@ -712,8 +713,8 @@ export default function Canvas(p: Props) {
             const stroke = p.sim ? (pot ? potColor(pot) : '#9aa0a8') : wr.color === 'gnye' ? '#2e9b2e' : wr.color
             return (
               <g key={wr.id}>
-                <polyline points={pointsAttr(pts)} stroke={p.faults?.has(wr.id) ? '#e53935' : stroke} strokeWidth={p.sim && pot ? 2.2 : 1.6} strokeDasharray={p.faults?.has(wr.id) ? '3 5' : undefined} />
-                {wr.color === 'gnye' && !p.sim && <polyline points={pointsAttr(pts)} stroke="#f0d800" strokeWidth={1.6} strokeDasharray="5 5" strokeLinecap="butt" />}
+                <polyline points={pointsAttr(pts)} stroke={p.faults?.has(wr.id) ? '#e53935' : stroke} strokeWidth={p.sim && pot ? Math.max(2.2, wr.width ?? 0) : wr.width ?? 1.6} strokeDasharray={p.faults?.has(wr.id) ? '3 5' : dashArray(wr.dash ?? 'solid', wr.width ?? 1.6)} />
+                {wr.color === 'gnye' && !p.sim && <polyline points={pointsAttr(pts)} stroke="#f0d800" strokeWidth={wr.width ?? 1.6} strokeDasharray="5 5" strokeLinecap="butt" />}
                 {p.faults?.has(wr.id) && <text x={mx - 4} y={my + 4} fontSize={12} fill="#e53935" stroke="none">✂</text>}
                 {p.sim?.current[wr.id] && (
                   <polyline points={pointsAttr(pts)} stroke="#fff" strokeOpacity={0.95} strokeWidth={1.3} strokeDasharray="2 6" strokeLinecap="butt">

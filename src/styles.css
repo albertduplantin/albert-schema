@@ -457,3 +457,6 @@ textarea.inlineedit { resize: both; }
 .ctx .ctx-colors { display: flex; flex-wrap: wrap; gap: 5px; }
 
 .brand .studio { font-weight: 400; opacity: 0.75; }
+
+/* vue sombre de la feuille (affichage seulement : les exports restent clairs) */
+svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }

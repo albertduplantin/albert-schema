@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { addVersion, loadVersions, removeVersion, type Version } from './versions'
 import { isTerminal, stripOf, terminalRows } from './strips'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
 import type { Doc, Instrument, Note, Shape, StrokeStyle, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
@@ -8,7 +9,7 @@ import { PAPER_SIZE, symBBox, uid } from './geometry'
 import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
-import { bomRows, exportCsv, exportPng, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
+import { bomRows, exportCsv, exportDxf, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
 import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
@@ -193,6 +194,19 @@ function Editor() {
   }
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
+  // visite guidée : proposée une seule fois, sur une feuille vierge, et relançable depuis l'aide (?)
+  const [tourStep, setTourStep] = useState<number | null>(() => {
+    try { return localStorage.getItem('albertschema.tour') === '1' || loadDoc().symbols.length ? null : 0 } catch { return null }
+  })
+  const endTour = () => { setTourStep(null); try { localStorage.setItem('albertschema.tour', '1') } catch { /* ignoré */ } }
+  // historique des versions : une version automatique toutes les 5 minutes si le schéma a changé, et des versions nommées à la demande
+  const [showVersions, setShowVersions] = useState(false)
+  const [versions, setVersions] = useState<Version[]>(() => loadVersions())
+  const lastSnap = useRef('')
+  const [darkSheet, setDarkSheet] = useState(() => { try { return localStorage.getItem('albertschema.darksheet') === '1' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('albertschema.darksheet', darkSheet ? '1' : '0') } catch { /* ignoré */ } }, [darkSheet])
+  const [bw, setBw] = useState(() => { try { return localStorage.getItem('albertschema.bw') === '1' } catch { return false } })
+  useEffect(() => { setMonochrome(bw); try { localStorage.setItem('albertschema.bw', bw ? '1' : '0') } catch { /* ignoré */ } }, [bw])
   const [showKeys, setShowKeys] = useState(false)
   const [showGallery, setShowGallery] = useState(false)
   const [remoteEx, setRemoteEx] = useState<{ items: RemoteExample[]; hidden: string[] }>({ items: [], hidden: [] })
@@ -233,6 +247,24 @@ function Editor() {
   const clip = useRef<{ symbols: PlacedSymbol[]; wires: Wire[]; shapes?: Shape[] } | null>(null)
   const toastTimer = useRef<number>()
   const doc = h.doc
+  const docRef = useRef(doc)
+  docRef.current = doc
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const d = docRef.current
+      const sig = JSON.stringify(d)
+      if (!d.symbols.length || sig === lastSnap.current) return
+      lastSnap.current = sig
+      setVersions(addVersion(d, '', true, uid()))
+    }, 5 * 60 * 1000)
+    return () => window.clearInterval(id)
+  }, [])
+  const saveVersion = () => {
+    const name = window.prompt(tr(lang, 'versionName'), '')?.trim()
+    if (name === undefined) return
+    setVersions(addVersion(doc, name || new Date().toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB'), false, uid()))
+    say(tr(lang, 'versionSaved'))
+  }
   const t = (k: Key) => tr(lang, k)
   // infobulles des propriétés : texte plus grand que celui du navigateur, affiché dès le survol (ou la prise de focus) de la case
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number; above: boolean } | null>(null)
@@ -719,6 +751,28 @@ function Editor() {
     setTool(kind); setToolStyle(style); setPlacing(null); setSel([])
   }
   const imageRef = useRef<HTMLInputElement>(null)
+  const blocksRef = useRef<HTMLInputElement>(null)
+  /** blocs réutilisables : sauvegarde en fichier et import (partage entre postes ou entre collègues) */
+  const exportBlocks = () => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ albertBlocks: 1, blocks }, null, 2)], { type: 'application/json' }))
+    a.download = 'blocs.albert-blocs.json'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+  const importBlocks = (f: File) => {
+    const rd = new FileReader()
+    rd.onload = () => {
+      try {
+        const j = JSON.parse(String(rd.result))
+        const list = (Array.isArray(j?.blocks) ? j.blocks : []).filter((b: { name?: unknown; symbols?: unknown }) => typeof b?.name === 'string' && Array.isArray(b?.symbols))
+        if (!list.length) throw new Error('vide')
+        storeBlocks([...blocks, ...list.map((b: { id: string }) => ({ ...b, id: uid() }))])
+        say(tr(lang, 'blocksImported'))
+      } catch { say(tr(lang, 'blocksInvalid')) }
+    }
+    rd.readAsText(f)
+  }
   /** insère une image (logo, photo) : réduite à 600 px au plus pour garder le schéma léger */
   const addImage = (f: File) => {
     const rd = new FileReader()
@@ -1014,15 +1068,19 @@ function Editor() {
             <button onClick={() => { saveJson(doc); say(t('toastSaved')) }}><span>{t('save')}</span><kbd>Ctrl+S</kbd></button>
             <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
             <button onClick={() => setShowBom(true)}>{t('bom')}</button>
+            <button onClick={() => { setVersions(loadVersions()); setShowVersions(true) }}>{t('versions')}</button>
             <p className="menu-title">{t('export')}</p>
             <button onClick={withContent((c) => exportSvg(doc, c))}>{t('exportSvg')}</button>
             <button onClick={withContent((c) => exportPng(doc, c))}>{t('exportPng')}</button>
             <button onClick={withContent((c) => printSheet(doc, c))}>{t('print')}</button>
             {pageCount(doc) > 1 && <button onClick={printAllPages}>{t('printAll')}</button>}
+            <button onClick={() => exportDxf(doc)}>{t('exportDxf')}</button>
             <button onClick={() => exportCsv(all, lang)}>{t('exportCsv')}</button>
             <button onClick={copyShareLink}>{t('shareLink')}</button>
+            <label className="chk keep" title={t('bwHelp')}><input type="checkbox" checked={bw} onChange={(e) => setBw(e.target.checked)} /> {t('bw')}</label>
           </div>
         </details>
+        <input ref={blocksRef} type="file" accept=".json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importBlocks(f); e.target.value = '' }} />
         <input ref={imageRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) addImage(f); e.target.value = '' }} />
         <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) openFile(f); e.target.value = '' }} />
 
@@ -1057,6 +1115,8 @@ function Editor() {
             <button onClick={addNote} title={t('note')}>T {t('note')}</button>
             <button onClick={saveBlock} disabled={!sel.length}>{t('blockSave')}</button>
             {blocks.length === 0 && <p className="muted small menu-note">{t('blockNone')}</p>}
+            <button className="keep" onClick={() => blocksRef.current?.click()}>{t('blocksImport')}</button>
+            {blocks.length > 0 && <button className="keep" onClick={exportBlocks}>{t('blocksExport')}</button>}
             {blocks.map((blk) => (
               <div key={blk.id} style={{ display: 'flex' }}>
                 <button style={{ flex: 1 }} onClick={() => insertBlock(blk)}>▦ {blk.name} <span className="muted">({blk.symbols.length})</span></button>
@@ -1076,6 +1136,7 @@ function Editor() {
             <label className="chk keep"><input type="checkbox" checked={!!doc.hideShapes} onChange={() => commit((d) => ({ ...d, hideShapes: d.hideShapes ? undefined : true }))} /> {t('shapesHide')}</label>
             <label className="chk keep"><input type="checkbox" checked={!!doc.lockShapes} onChange={() => commit((d) => ({ ...d, lockShapes: d.lockShapes ? undefined : true }))} /> {t('shapesLock')}</label>
             <p className="menu-title">{t('display')}</p>
+            <label className="chk keep" title={t('darkSheetHelp')}><input type="checkbox" checked={darkSheet} onChange={(e) => setDarkSheet(e.target.checked)} /> {t('darkSheet')}</label>
             <label className="chk keep" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
             {doc.showNames && (
               <div className="namestyle">
@@ -1178,7 +1239,7 @@ function Editor() {
       </aside>
 
       <main className="stage">
-        <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} tool={tool} toolStyle={toolStyle} onToolDone={() => setTool(null)}
+        <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
           onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
@@ -1424,7 +1485,7 @@ function Editor() {
 
       {menu && (
         <div className="ctx-back" onMouseDown={() => setMenu(null)} onContextMenu={(e) => e.preventDefault()}>
-          <div className="ctx" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.max(8, Math.min(menu.y, window.innerHeight - (menu.target && (doc.shapes ?? []).some((s) => s.id === menu.target) ? 420 : 220))) }} onMouseDown={(e) => e.stopPropagation()}>
+          <div className="ctx" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.max(8, Math.min(menu.y, window.innerHeight - (menu.target && ((doc.shapes ?? []).some((s) => s.id === menu.target) || doc.wires.some((w) => w.id === menu.target)) ? 420 : 220))) }} onMouseDown={(e) => e.stopPropagation()}>
             {menu.target ? (
               <>
                 {(doc.shapes ?? []).some((s) => s.id === menu.target) && (() => {
@@ -1467,6 +1528,14 @@ function Editor() {
                 })()}
                 {doc.wires.some((w) => w.id === menu.target) && (
                   <>
+                    <p className="ctx-title">{t('strokeWidth')}</p>
+                    <div className="ctx-chips">
+                      {[1, 1.6, 2.4, 3.5].map((n) => <button key={n} className={'chip' + ((doc.wires.find((w) => w.id === menu.target)?.width ?? 1.6) === n ? ' on' : '')} title={String(n)} onClick={() => commit((d) => ({ ...d, wires: d.wires.map((w) => (sel.includes(w.id) ? { ...w, width: n === 1.6 ? undefined : n } : w)) }))}><svg width="26" height="14"><line x1="2" y1="7" x2="24" y2="7" stroke="currentColor" strokeWidth={n} /></svg></button>)}
+                    </div>
+                    <p className="ctx-title">{t('strokeStyle')}</p>
+                    <div className="ctx-chips">
+                      {STROKES.map((k) => <button key={k} className={'chip' + ((doc.wires.find((w) => w.id === menu.target)?.dash ?? 'solid') === k ? ' on' : '')} title={t(k === 'solid' ? 'strokeSolid' : k === 'dashed' ? 'strokeDashed' : k === 'dotted' ? 'strokeDotted' : 'strokeDashDot')} onClick={() => commit((d) => ({ ...d, wires: d.wires.map((w) => (sel.includes(w.id) ? { ...w, dash: k === 'solid' ? undefined : k } : w)) }))}><svg width="26" height="14"><line x1="2" y1="7" x2="24" y2="7" stroke="currentColor" strokeWidth={1.6} strokeDasharray={dashArray(k, 1.6)} strokeLinecap={k === 'dotted' ? 'round' : 'butt'} /></svg></button>)}
+                    </div>
                     <p className="ctx-title">{t('color')}</p>
                     <div className="colors ctx-colors">
                       {WIRE_COLORS.map((c) => <button key={c} className="swatch" style={{ background: c === 'gnye' ? 'repeating-linear-gradient(45deg,#2e9b2e 0 4px,#f0d800 4px 8px)' : c }} aria-label={c}
@@ -1571,7 +1640,7 @@ function Editor() {
           <div className="dialog" role="dialog" aria-label={t('shortcutsTitle')} onClick={(e) => e.stopPropagation()}>
             <h3>{t('shortcutsTitle')}</h3>
             <table><tbody>{SHORTCUTS[lang].map(([k, d]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{d}</td></tr>)}</tbody></table>
-            <div className="actions"><button onClick={() => setShowKeys(false)}>{t('close')}</button></div>
+            <div className="actions"><button onClick={() => { setShowKeys(false); setTourStep(0) }}>{t('tourReplay')}</button><button onClick={() => setShowKeys(false)}>{t('close')}</button></div>
           </div>
         </div>
       )}
@@ -1614,6 +1683,52 @@ function Editor() {
               </>
             )}
             <div className="actions"><button onClick={() => setShowCheck(false)}>{t('close')}</button></div>
+          </div>
+        </div>
+      )}
+
+      {tourStep !== null && (
+        <div className="modal" onClick={endTour}>
+          <div className="dialog tour" role="dialog" aria-label={t('tourTitle')} onClick={(e) => e.stopPropagation()}>
+            <p className="muted small">{t('tourTitle')} — {tourStep + 1}/6</p>
+            <h3>{t(('tour' + (tourStep + 1) + 't') as Key)}</h3>
+            <p>{t(('tour' + (tourStep + 1)) as Key)}</p>
+            <div className="actions">
+              <button onClick={endTour}>{t('tourSkip')}</button>
+              {tourStep > 0 && <button onClick={() => setTourStep(tourStep - 1)}>{t('tourPrev')}</button>}
+              <button className="primary" onClick={() => (tourStep >= 5 ? endTour() : setTourStep(tourStep + 1))}>{tourStep >= 5 ? t('tourDone') : t('tourNext')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVersions && (
+        <div className="modal" onClick={() => setShowVersions(false)}>
+          <div className="dialog" role="dialog" aria-label={t('versions')} onClick={(e) => e.stopPropagation()}>
+            <h3>{t('versions')}</h3>
+            <p className="muted small">{t('versionsHelp')}</p>
+            {versions.length === 0 ? <p>{t('versionsNone')}</p> : (
+              <table>
+                <thead><tr><th>{t('versionDate')}</th><th>{t('versionName')}</th><th>{t('versionSymbols')}</th><th /></tr></thead>
+                <tbody>
+                  {versions.map((v) => (
+                    <tr key={v.id}>
+                      <td>{new Date(v.at).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB')}</td>
+                      <td>{v.auto ? t('versionAuto') : v.name}</td>
+                      <td>{v.symbols}</td>
+                      <td>
+                        <button className="mini" onClick={() => { if (window.confirm(tr(lang, 'versionRestoreConfirm'))) { commit(() => sanitize(v.doc)); setSel([]); setShowVersions(false) } }}>{t('versionRestore')}</button>{' '}
+                        <button className="mini" onClick={() => setVersions(removeVersion(v.id))}>{t('delete')}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div className="actions">
+              <button onClick={saveVersion}>{t('versionSave')}</button>
+              <button onClick={() => setShowVersions(false)}>{t('close')}</button>
+            </div>
           </div>
         </div>
       )}

@@ -145,6 +145,9 @@ export interface Wire {
   section: string
   /** points de passage imposés par l'utilisateur (tracé manuel) ; absent = tracé automatique */
   via?: { x: number; y: number }[]
+  /** épaisseur et type de trait (câble multiconducteur, liaison optionnelle…) ; par défaut 1,6 et continu */
+  width?: number
+  dash?: StrokeStyle
 }
 
 export interface TitleBlock {
