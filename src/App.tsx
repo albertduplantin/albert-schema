@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES } from './shapes'
+import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
 import type { Doc, Instrument, Note, Shape, StrokeStyle, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
 import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
@@ -690,7 +690,34 @@ function Editor() {
   // outils de dessin : cadres, ellipse, lignes, flèches
   const [tool, setTool] = useState<Shape['kind'] | null>(null)
   const [toolStyle, setToolStyle] = useState<Partial<Shape>>({})
-  const startTool = (kind: Shape['kind'], style: Partial<Shape> = {}) => { setTool(kind); setToolStyle(style); setPlacing(null); setSel([]) }
+  const startTool = (kind: Shape['kind'], style: Partial<Shape> = {}) => {
+    if (doc.hideShapes || doc.lockShapes) update((d) => ({ ...d, hideShapes: undefined, lockShapes: undefined }))
+    setTool(kind); setToolStyle(style); setPlacing(null); setSel([])
+  }
+  const imageRef = useRef<HTMLInputElement>(null)
+  /** insère une image (logo, photo) : réduite à 600 px au plus pour garder le schéma léger */
+  const addImage = (f: File) => {
+    const rd = new FileReader()
+    rd.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const k = Math.min(1, 600 / Math.max(img.width, img.height))
+        const cv = document.createElement('canvas')
+        cv.width = Math.max(1, Math.round(img.width * k)); cv.height = Math.max(1, Math.round(img.height * k))
+        const ctx = cv.getContext('2d')
+        if (!ctx) return
+        const png = /png|gif|svg|webp/.test(f.type)
+        if (!png) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height) }
+        ctx.drawImage(img, 0, 0, cv.width, cv.height)
+        const w = 120, h = Math.max(10, Math.round((w * img.height) / img.width))
+        const made: Shape = { id: uid(), kind: 'image', x: 160, y: 120, w, h, stroke: 'solid', width: 1, color: '#000000', href: cv.toDataURL(png ? 'image/png' : 'image/jpeg', 0.8) }
+        commit((d) => ({ ...d, hideShapes: undefined, lockShapes: undefined, shapes: [...(d.shapes ?? []), made] }))
+        setSel([made.id])
+      }
+      img.src = String(rd.result)
+    }
+    rd.readAsDataURL(f)
+  }
   const selShape = sel.length === 1 ? (doc.shapes ?? []).find((s) => s.id === sel[0]) : undefined
   const patchShape = (patch: Partial<Shape>) => update((d) => ({ ...d, shapes: (d.shapes ?? []).map((s) => (s.id === sel[0] ? { ...s, ...patch } : s)) }))
   const selNote = sel.length === 1 ? (doc.notes ?? []).find((n) => n.id === sel[0]) : undefined
@@ -972,6 +999,7 @@ function Editor() {
             <button onClick={copyShareLink}>{t('shareLink')}</button>
           </div>
         </details>
+        <input ref={imageRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) addImage(f); e.target.value = '' }} />
         <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) openFile(f); e.target.value = '' }} />
 
         <div className="group editonly">
@@ -1018,6 +1046,11 @@ function Editor() {
             <button onClick={() => startTool('ellipse', { stroke: 'solid' })}>◯ {t('shapeEllipse')}</button>
             <button onClick={() => startTool('line', { stroke: 'solid' })}>╱ {t('shapeLine')}</button>
             <button onClick={() => startTool('line', { stroke: 'solid', arrow: 'end' })}>→ {t('shapeArrow')}</button>
+            <button onClick={() => startTool('poly', { stroke: 'solid' })}>⌇ {t('shapePoly')}</button>
+            <button onClick={() => startTool('arc', { stroke: 'solid' })}>◠ {t('shapeArc')}</button>
+            <button onClick={() => imageRef.current?.click()}>🖼 {t('shapeImage')}</button>
+            <label className="chk keep"><input type="checkbox" checked={!!doc.hideShapes} onChange={() => commit((d) => ({ ...d, hideShapes: d.hideShapes ? undefined : true }))} /> {t('shapesHide')}</label>
+            <label className="chk keep"><input type="checkbox" checked={!!doc.lockShapes} onChange={() => commit((d) => ({ ...d, lockShapes: d.lockShapes ? undefined : true }))} /> {t('shapesLock')}</label>
             <p className="menu-title">{t('display')}</p>
             <label className="chk keep" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
             {doc.showNames && (
@@ -1218,33 +1251,49 @@ function Editor() {
           symForm
         ) : selShape ? (
           <div className="form" onFocus={checkpoint}>
-            <div className="kind">{t(selShape.kind === 'rect' ? 'shapeFrame' : selShape.kind === 'ellipse' ? 'shapeEllipse' : 'shapeLine')}</div>
-            <label data-tip={t('helpStroke')}>{t('strokeStyle')}{tip('helpStroke')}
-              <select value={selShape.stroke} onChange={(e) => patchShape({ stroke: e.target.value as StrokeStyle })}>
-                {STROKES.map((k) => <option key={k} value={k}>{t(k === 'solid' ? 'strokeSolid' : k === 'dashed' ? 'strokeDashed' : k === 'dotted' ? 'strokeDotted' : 'strokeDashDot')}</option>)}
-              </select>
-            </label>
-            <label data-tip={t('helpStrokeWidth')}>{t('strokeWidth')}{tip('helpStrokeWidth')}
-              <select value={selShape.width} onChange={(e) => patchShape({ width: Number(e.target.value) })}>
-                {[...new Set([...SHAPE_WIDTHS, selShape.width])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </label>
-            <div className="colors" data-tip={t('helpShapeColor')}>
-              <span className="colors-title">{t('shapeColor')}</span>
-              {SHAPE_COLORS.map((c) => <button key={c} className={'swatch' + (selShape.color === c ? ' on' : '')} style={{ background: c }} aria-label={c} onClick={() => patchShape({ color: c })} />)}
-            </div>
-            {selShape.kind !== 'line' && (
+            <div className="kind">{t(selShape.kind === 'rect' ? 'shapeFrame' : selShape.kind === 'ellipse' ? 'shapeEllipse' : selShape.kind === 'line' ? 'shapeLine' : selShape.kind === 'poly' ? 'shapePoly' : selShape.kind === 'arc' ? 'shapeArc' : 'shapeImage')}</div>
+            {selShape.kind !== 'image' && (
+              <>
+                <label data-tip={t('helpStroke')}>{t('strokeStyle')}{tip('helpStroke')}
+                  <select value={selShape.stroke} onChange={(e) => patchShape({ stroke: e.target.value as StrokeStyle })}>
+                    {STROKES.map((k) => <option key={k} value={k}>{t(k === 'solid' ? 'strokeSolid' : k === 'dashed' ? 'strokeDashed' : k === 'dotted' ? 'strokeDotted' : 'strokeDashDot')}</option>)}
+                  </select>
+                </label>
+                <label data-tip={t('helpStrokeWidth')}>{t('strokeWidth')}{tip('helpStrokeWidth')}
+                  <select value={selShape.width} onChange={(e) => patchShape({ width: Number(e.target.value) })}>
+                    {[...new Set([...SHAPE_WIDTHS, selShape.width])].sort((x, y) => x - y).map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+                <div className="colors" data-tip={t('helpShapeColor')}>
+                  <span className="colors-title">{t('shapeColor')}</span>
+                  {SHAPE_COLORS.map((c) => <button key={c} className={'swatch' + (selShape.color === c ? ' on' : '')} style={{ background: c }} aria-label={c} onClick={() => patchShape({ color: c })} />)}
+                </div>
+              </>
+            )}
+            {(selShape.kind === 'rect' || selShape.kind === 'ellipse' || (selShape.kind === 'poly' && selShape.closed)) && (
               <div className="colors" data-tip={t('helpShapeFill')}>
                 <span className="colors-title">{t('shapeFill')}</span>
                 <button className={'swatch' + (!selShape.fill ? ' on' : '')} style={{ background: 'repeating-linear-gradient(45deg,#fff 0 3px,#ccc 3px 6px)' }} aria-label={t('shapeFillNone')} title={t('shapeFillNone')} onClick={() => patchShape({ fill: undefined })} />
                 {SHAPE_FILLS.map((c) => <button key={c} className={'swatch' + (selShape.fill === c ? ' on' : '')} style={{ background: c + '40' }} aria-label={c} onClick={() => patchShape({ fill: c })} />)}
               </div>
             )}
-            {selShape.kind !== 'line' && (
+            {selShape.kind === 'rect' && (
               <label data-tip={t('helpShapeLabel')}>{t('shapeLabel')}{tip('helpShapeLabel')}<input value={selShape.label ?? ''} onChange={(e) => patchShape({ label: e.target.value || undefined })} /></label>
             )}
             {selShape.kind === 'rect' && (
               <label className="chk row-chk"><input type="checkbox" checked={!!selShape.rounded} onChange={(e) => patchShape({ rounded: e.target.checked || undefined })} /> {t('shapeRounded')}</label>
+            )}
+            {selShape.kind === 'rect' && (
+              <label className="chk row-chk" data-tip={t('helpCarry')}><input type="checkbox" checked={!!selShape.carry} onChange={(e) => patchShape({ carry: e.target.checked || undefined })} /> {t('shapeCarry')}{tip('helpCarry')}</label>
+            )}
+            {selShape.kind === 'poly' && (
+              <label className="chk row-chk"><input type="checkbox" checked={!!selShape.closed} onChange={(e) => patchShape({ closed: e.target.checked || undefined })} /> {t('shapeClosed')}</label>
+            )}
+            {selShape.kind === 'arc' && (
+              <div className="row2">
+                <label data-tip={t('helpArc')}>{t('arcStart')}<input type="number" step={15} value={selShape.a0 ?? 180} onChange={(e) => patchShape({ a0: Number(e.target.value) })} /></label>
+                <label data-tip={t('helpArc')}>{t('arcEnd')}<input type="number" step={15} value={selShape.a1 ?? 360} onChange={(e) => patchShape({ a1: Number(e.target.value) })} /></label>
+              </div>
             )}
             {selShape.kind === 'line' && (
               <label>{t('shapeArrowHead')}
@@ -1255,7 +1304,7 @@ function Editor() {
                 </select>
               </label>
             )}
-            <p className="muted small">{t('shapeHelp')}</p>
+            <p className="muted small">{t(selShape.kind === 'image' ? 'imageHelp' : 'shapeHelp')}</p>
           </div>
         ) : selNote ? (
           <div className="form" onFocus={checkpoint}>
@@ -1351,9 +1400,57 @@ function Editor() {
 
       {menu && (
         <div className="ctx-back" onMouseDown={() => setMenu(null)} onContextMenu={(e) => e.preventDefault()}>
-          <div className="ctx" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 220) }} onMouseDown={(e) => e.stopPropagation()}>
+          <div className="ctx" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.max(8, Math.min(menu.y, window.innerHeight - (menu.target && (doc.shapes ?? []).some((s) => s.id === menu.target) ? 420 : 220))) }} onMouseDown={(e) => e.stopPropagation()}>
             {menu.target ? (
               <>
+                {(doc.shapes ?? []).some((s) => s.id === menu.target) && (() => {
+                  const ids = sel.filter((id) => (doc.shapes ?? []).some((s) => s.id === id))
+                  const first = (doc.shapes ?? []).find((s) => s.id === menu.target)!
+                  const patchAll = (patch: Partial<Shape>) => commit((d) => ({ ...d, shapes: (d.shapes ?? []).map((s) => (ids.includes(s.id) ? { ...s, ...patch } : s)) }))
+                  return (
+                    <>
+                      {first.kind !== 'image' && (
+                        <>
+                          <p className="ctx-title">{t('strokeWidth')}</p>
+                          <div className="ctx-chips">
+                            {SHAPE_WIDTHS.map((n) => <button key={n} className={'chip' + (first.width === n ? ' on' : '')} title={String(n)} onClick={() => patchAll({ width: n })}><svg width="26" height="14"><line x1="2" y1="7" x2="24" y2="7" stroke="currentColor" strokeWidth={n} /></svg></button>)}
+                          </div>
+                          <p className="ctx-title">{t('shapeColor')}</p>
+                          <div className="colors ctx-colors">
+                            {SHAPE_COLORS.map((c) => <button key={c} className={'swatch' + (first.color === c ? ' on' : '')} style={{ background: c }} aria-label={c} onClick={() => patchAll({ color: c })} />)}
+                          </div>
+                          <p className="ctx-title">{t('strokeStyle')}</p>
+                          <div className="ctx-chips">
+                            {STROKES.map((k) => <button key={k} className={'chip' + (first.stroke === k ? ' on' : '')} title={t(k === 'solid' ? 'strokeSolid' : k === 'dashed' ? 'strokeDashed' : k === 'dotted' ? 'strokeDotted' : 'strokeDashDot')} onClick={() => patchAll({ stroke: k })}><svg width="26" height="14"><line x1="2" y1="7" x2="24" y2="7" stroke="currentColor" strokeWidth={1.6} strokeDasharray={dashArray(k, 1.6)} strokeLinecap={k === 'dotted' ? 'round' : 'butt'} /></svg></button>)}
+                          </div>
+                        </>
+                      )}
+                      {(first.kind === 'rect' || first.kind === 'ellipse' || (first.kind === 'poly' && first.closed)) && (
+                        <>
+                          <p className="ctx-title">{t('shapeFill')}</p>
+                          <div className="colors ctx-colors">
+                            <button className={'swatch' + (!first.fill ? ' on' : '')} style={{ background: 'repeating-linear-gradient(45deg,#fff 0 3px,#ccc 3px 6px)' }} aria-label={t('shapeFillNone')} onClick={() => patchAll({ fill: undefined })} />
+                            {SHAPE_FILLS.map((c) => <button key={c} className={'swatch' + (first.fill === c ? ' on' : '')} style={{ background: c + '40' }} aria-label={c} onClick={() => patchAll({ fill: c })} />)}
+                          </div>
+                        </>
+                      )}
+                      <hr />
+                      <button onClick={() => { duplicate(); setMenu(null) }}><span>{t('duplicate')}</span><kbd>Ctrl+D</kbd></button>
+                      <button onClick={() => { copySel(); setMenu(null) }}><span>{t('copy')}</span><kbd>Ctrl+C</kbd></button>
+                      <hr />
+                    </>
+                  )
+                })()}
+                {doc.wires.some((w) => w.id === menu.target) && (
+                  <>
+                    <p className="ctx-title">{t('color')}</p>
+                    <div className="colors ctx-colors">
+                      {WIRE_COLORS.map((c) => <button key={c} className="swatch" style={{ background: c === 'gnye' ? 'repeating-linear-gradient(45deg,#2e9b2e 0 4px,#f0d800 4px 8px)' : c }} aria-label={c}
+                        onClick={() => commit((d) => ({ ...d, wires: d.wires.map((w) => (sel.includes(w.id) ? { ...w, color: c } : w)) }))} />)}
+                    </div>
+                    <hr />
+                  </>
+                )}
                 {doc.symbols.some((s) => s.id === menu.target) && (
                   <>
                     <button onClick={() => { openProps(menu.target!, menu.x, menu.y); setMenu(null) }}><span>⚙ {t('propsMenu')}</span><kbd>Entrée</kbd></button>

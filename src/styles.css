@@ -441,3 +441,17 @@ textarea.inlineedit { resize: both; }
 .form .colors-title { flex-basis: 100%; font-size: 11px; color: var(--ui-muted); }
 .form label.row-chk { flex-direction: row; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; }
 .form label.row-chk input { width: auto; margin: 0; }
+
+.shape-hit.solid > rect:not(.shape-sel):not(.shandle):not(.shape-label-hit) { fill: transparent; stroke: none; pointer-events: all; }
+
+.ctx .ctx-title { margin: 6px 12px 3px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ui-muted); }
+.ctx .ctx-chips { display: flex; gap: 4px; padding: 0 10px 4px; }
+.ctx .ctx-chips .chip { width: auto; padding: 3px 5px; border: 1px solid var(--ui-line); background: transparent; color: var(--ui-text); }
+.ctx .ctx-chips .chip.on { border-color: var(--accent-olive); background: #93a41522; }
+.ctx .ctx-colors { padding: 0 10px 4px; }
+.ctx .ctx-colors .swatch { width: 20px; height: 20px; }
+.form .row2 { display: flex; gap: 8px; }
+.form .row2 label { flex: 1; }
+
+.ctx .ctx-colors .swatch { padding: 0; display: block; border-radius: 50%; }
+.ctx .ctx-colors { display: flex; flex-wrap: wrap; gap: 5px; }

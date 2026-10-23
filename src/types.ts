@@ -197,7 +197,7 @@ export type StrokeStyle = 'solid' | 'dashed' | 'dotted' | 'dashdot'
  */
 export interface Shape {
   id: string
-  kind: 'rect' | 'ellipse' | 'line'
+  kind: 'rect' | 'ellipse' | 'line' | 'poly' | 'arc' | 'image'
   x: number
   y: number
   w: number
@@ -213,6 +213,16 @@ export interface Shape {
   rounded?: boolean
   /** flèche à l'extrémité (ligne) : à l'arrivée, ou aux deux bouts */
   arrow?: 'end' | 'both'
+  /** polyligne : sommets relatifs à (x, y) ; fermée, elle devient un polygone */
+  pts?: { x: number; y: number }[]
+  closed?: boolean
+  /** arc d'ellipse inscrit dans le rectangle (x, y, w, h) : angles de départ et d'arrivée en degrés, sens horaire depuis l'est */
+  a0?: number
+  a1?: number
+  /** image (logo, photo) : adresse de données, redimensionnée à l'import */
+  href?: string
+  /** cadre qui emporte avec lui les symboles, textes et formes qu'il contient quand on le déplace */
+  carry?: boolean
 }
 
 /** Style des noms de composants affichés sous les symboles (option « Noms des composants »). */
@@ -248,4 +258,7 @@ export interface Doc {
   /** afficher le nom (type) de chaque composant sous son symbole */
   showNames?: boolean
   nameStyle?: NameStyle
+  /** calque des formes de dessin : masqué, ou verrouillé (non sélectionnable) */
+  hideShapes?: boolean
+  lockShapes?: boolean
 }
