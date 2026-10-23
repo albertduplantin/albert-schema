@@ -388,5 +388,74 @@ function rig(doc: any) {
   check('transformateur 400 V sur phase + neutre (230 V) → erreur de sous-tension', all(trDoc('sim-l', 'sim-n', 400)).some((i: any) => i.level === 'error' && /400 V branché sur 230 V/.test(i.text)), true)
   check('transformateur sans tension primaire → avertissement', all(trDoc('sim-l1', 'sim-l2')).some((i: any) => i.level === 'warn' && /tension primaire non renseignée \(400 V/.test(i.text)), true)
 }
+// ── secondaire relié à la terre : la borne reliée est le retour (neutre), quelle que soit sa position sur le symbole
+{
+  for (const swap of [false, true]) {
+    const d = T.motorStarterTransformer(base)
+    const tr = d.symbols.find((s: any) => s.label === 'T1').id
+    if (swap) {
+      // on permute les deux bornes du secondaire : la phase passe sur t3, la terre sur t2
+      for (const w of d.wires) for (const e of [w.from, w.to]) if (e.symId === tr && (e.portId === 't2' || e.portId === 't3')) e.portId = e.portId === 't2' ? 't3' : 't2'
+    }
+    const g = rig(d)
+    const S2 = g.idOf('S2')
+    let r = g.run([S2], [], 100); r = g.run([], [], 100)
+    check(`secondaire relié à la terre (${swap ? 'permuté' : 'normal'}) : la bobine est alimentée`, g.on(r, 'KM1', 'bobine'), true)
+    const hotPort = swap ? 't3' : 't2'
+    const f2 = d.wires.find((w: any) => w.from.symId === tr && w.from.portId === hotPort && d.symbols.find((s: any) => s.id === w.to.symId)?.label === 'F2')
+    check(`secondaire relié à la terre (${swap ? 'permuté' : 'normal'}) : le courant sort du transformateur par la phase, vers la commande`, r.current[f2.id], 1)
+    const ret = d.wires.find((w: any) => w.to.symId === tr && d.symbols.find((s: any) => s.id === w.from.symId)?.label === 'KM1')
+    check(`secondaire relié à la terre (${swap ? 'permuté' : 'normal'}) : le courant revient par le neutre vers le transformateur`, r.current[ret.id], 1)
+  }
+}
+// ── caractéristiques assignées : cohérence des calibres, réglages, câbles et bilan de puissance
+{
+  const { checkDoc } = await import(ROOT + '/src/check.ts')
+  const { motorCurrent } = await import(ROOT + '/src/ratings.ts')
+  const msgs = (d: any) => checkDoc(d, SYMBOL_MAP, 'fr')
+  const mk = () => {
+    const d = T.motorStarter(base)
+    const by = (label: string, part = '') => d.symbols.find((s: any) => s.label === label && s.defId.includes(part))
+    return { d, by }
+  }
+  const { d, by } = mk()
+  const motor = by('M1')
+  motor.rated = { kw: 7.5 }
+  check('moteur 7,5 kW 400 V : courant estimé ≈ 14,5 A', motorCurrent(motor, SYMBOL_MAP[motor.defId])?.value, 14.5)
+  by('KM1', 'com_puiss4').rated = { in: 12 }
+  let r = msgs(d)
+  check('contacteur 12 A pour un moteur de 14,5 A → erreur (soudure des contacts)', r.some((i: any) => i.level === 'error' && /AC-3 12 A inférieur/.test(i.text) && /souder/.test(i.why ?? '')), true)
+  by('KM1', 'com_puiss4').rated = { in: 18 }
+  by('Q1').rated = { in: 25, curve: 'C', set: 20 }
+  r = msgs(d)
+  check('contacteur 18 A : plus d\'erreur de contacteur', r.some((i: any) => /AC-3/.test(i.text)), false)
+  check('réglage thermique 20 A pour 14,5 A → erreur « moteur n\'est plus protégé »', r.some((i: any) => i.level === 'error' && /réglage thermique 20 A.*trop élevé/.test(i.text)), true)
+  by('Q1').rated = { in: 25, curve: 'C', set: 10 }
+  check('réglage thermique 10 A pour 14,5 A → avertissement (déclenchements intempestifs)', msgs(d).some((i: any) => i.level === 'warn' && /inférieur au courant nominal/.test(i.text)), true)
+  check('courbe C devant un moteur → avertissement (courant de démarrage)', msgs(d).some((i: any) => i.level === 'warn' && /courbe C/.test(i.text)), true)
+  by('Q1').rated = { in: 10 }
+  check('calibre 10 A pour un moteur de 14,5 A → erreur', msgs(d).some((i: any) => i.level === 'error' && /calibre 10 A inférieur/.test(i.text)), true)
+  by('Q1').rated = { in: 16, curve: 'D', set: 14.5 }
+  check('Q1 16 A courbe D réglé 14,5 A : aucune erreur de caractéristiques', msgs(d).some((i: any) => i.level !== 'info' && /moteur|calibre|réglage|AC-3/i.test(i.text) && /M1|Q1|KM1/.test(i.text) && i.level === 'error'), false)
+  // câble
+  const q = by('Q1'), k = by('KM1', 'com_puiss4')
+  const cab = d.wires.find((w: any) => w.from.symId === q.id && w.to.symId === k.id)
+  cab.section = '1,5'
+  q.rated = { in: 25, curve: 'D' }
+  check('câble 1,5 mm² protégé par 25 A → erreur (max usuel 16 A)', msgs(d).some((i: any) => i.level === 'error' && /1,5 mm².*25 A.*16 A/.test(i.text)), true)
+  q.rated = { in: 16, curve: 'D' }
+  check('câble 1,5 mm² protégé par 16 A → aucune erreur de câble', msgs(d).some((i: any) => /mm² protégé/.test(i.text)), false)
+  // bilan de puissance du transformateur de commande
+  const t = T.motorStarterTransformer(base)
+  const tr = t.symbols.find((s: any) => s.label === 'T1')
+  t.symbols.find((s: any) => s.label === 'KM1' && s.defId.includes('bobine')).rated = { watts: 70 }
+  t.symbols.find((s: any) => s.label === 'H1').rated = { watts: 40 }
+  check('bilan : 110 VA sur un transformateur de 100 VA → erreur', checkDoc(t, SYMBOL_MAP, 'fr').some((i: any) => i.level === 'error' && /surchargé.*110 VA/.test(i.text)), true)
+  t.symbols.find((s: any) => s.label === 'H1').rated = { watts: 15 }
+  check('bilan : 85 VA sur 100 VA → avertissement (peu de marge)', checkDoc(t, SYMBOL_MAP, 'fr').some((i: any) => i.level === 'warn' && /85 %/.test(i.text)), true)
+  t.symbols.find((s: any) => s.label === 'H1').rated = { watts: 5 }
+  check('bilan : 75 VA sur 100 VA → aucun message de charge', checkDoc(t, SYMBOL_MAP, 'fr').some((i: any) => /chargé à|surchargé/.test(i.text)), false)
+  void tr
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

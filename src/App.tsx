@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Doc, Note, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
+import type { Doc, Note, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
 import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
 import { symBBox, uid } from './geometry'
@@ -9,6 +9,7 @@ import { bomRows, exportCsv, exportPng, exportSvg, printProject, printSheet, sav
 import { delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
+import { FIELDS, fieldLabel, kindOf, motorCurrent } from './ratings'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
@@ -931,6 +932,34 @@ function Editor() {
                   {!selSym.power && <p className="muted small">💡 {t('trafoPowerHint')}</p>}
                   {sec === 2 && <p className="muted small">{topo.earthed[selSym.id] ? '⏚ ' + t('trafoEarthed') : '◌ ' + t('trafoIsolated')}</p>}
                 </>
+              )
+            })()}
+            {(() => {
+              const def = SYMBOL_MAP[selSym.defId]
+              const kind = kindOf(def)
+              if (!kind) return null
+              const setR = (key: string, raw: string, text?: boolean) => {
+                const next = { ...(selSym.rated ?? {}) } as Record<string, unknown>
+                const v = text ? raw.trim() : Number(raw)
+                if (text ? v === '' : !(Number(raw) > 0)) delete next[key]
+                else next[key] = v
+                patchSym({ rated: Object.keys(next).length ? (next as Ratings) : undefined })
+              }
+              const mc = kind === 'motor' ? motorCurrent(selSym, def) : undefined
+              return (
+                <fieldset className="ratings">
+                  <legend>{t('ratings')}</legend>
+                  {FIELDS[kind].map((f) => (
+                    <label key={f.key}>{fieldLabel(f, lang)}
+                      <input type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} list={f.list ? `rl-${kind}-${f.key}` : undefined}
+                        placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
+                        value={String(selSym.rated?.[f.key] ?? '')} onChange={(e) => setR(f.key, e.target.value, f.text)} />
+                      {f.list && <datalist id={`rl-${kind}-${f.key}`}>{f.list.map((v) => <option key={String(v)} value={v} />)}</datalist>}
+                    </label>
+                  ))}
+                  {mc?.estimated && <p className="muted small">⚡ {t('motorEstimated')} {String(mc.value).replace('.', lang === 'fr' ? ',' : '.')} A</p>}
+                  {kind === 'consumer' && <p className="muted small">{t('wattsHint')}</p>}
+                </fieldset>
               )
             })()}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (

@@ -1,6 +1,7 @@
 import type { Doc, Lang, PlacedSymbol, SymbolDef } from './types'
 import { devKey, simulate } from './sim/engine'
 import { describeInfo, transformerInfo, transformerTopology } from './transformer'
+import { kindOf, maxProtection, motorCurrent, parseSection } from './ratings'
 
 export interface Issue {
   level: 'error' | 'warn' | 'info'
@@ -14,7 +15,7 @@ const S = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
 const key = (symId: string, portId: string) => `${symId}:${portId}`
 const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
 
-interface Edge { to: string; sc: boolean; ol: boolean }
+interface Edge { to: string; sc: boolean; ol: boolean; sym?: string; wire?: string }
 
 /**
  * Conseils de conception : protections manquantes et leurs conséquences.
@@ -31,13 +32,13 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
   try { rest = simulate(doc, defs, {}, { pressed: new Set(), toggled: new Set() }, 0) } catch { /* schéma incomplet */ }
   const nm = (s: PlacedSymbol) => s.label || defs[s.defId]?.name[lang] || '?'
   const adj = new Map<string, Edge[]>()
-  const link = (a: string, b: string, sc = false, ol = false) => {
+  const link = (a: string, b: string, sc = false, ol = false, sym?: string, wire?: string) => {
     if (!adj.has(a)) adj.set(a, [])
     if (!adj.has(b)) adj.set(b, [])
-    adj.get(a)!.push({ to: b, sc, ol })
-    adj.get(b)!.push({ to: a, sc, ol })
+    adj.get(a)!.push({ to: b, sc, ol, sym, wire })
+    adj.get(b)!.push({ to: a, sc, ol, sym, wire })
   }
-  for (const w of doc.wires) link(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
+  for (const w of doc.wires) link(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId), false, false, undefined, w.id)
   const origins = new Map<string, PlacedSymbol>() // borne chaude → symbole qui l'alimente (source ou transformateur)
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
@@ -50,7 +51,7 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
     } else if (m.k === 'switch') {
       const sc = /10_fuses|11_circuit_breakers|12_magneto/.test(id)
       const ol = /30_thermal_relays|11_circuit_breakers|12_magneto/.test(id)
-      for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b), sc, ol)
+      for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b), sc, ol, s.id)
       for (const [com, nc, no] of m.changeover ?? []) { link(key(s.id, com), key(s.id, nc)); link(key(s.id, com), key(s.id, no)) }
     }
   }
@@ -232,6 +233,143 @@ export function adviseDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang)
           ? S(lang, 'Surtension : bobine ou lampe grillée, transformateur saturé qui chauffe.', 'Overvoltage: burnt-out coil or lamp, saturated transformer overheating.')
           : S(lang, 'Sous-tension : la bobine ne colle pas franchement (contacts qui vibrent et chauffent), le récepteur ne fonctionne pas.', 'Undervoltage: the coil does not pull in cleanly (chattering, overheating contacts), the load does not work.'),
       })
+    }
+  }
+
+  // ── caractéristiques assignées : calibres, réglages, sections de câbles, bilan de puissance
+  const fmt = (x: number) => String(x).replace('.', lang === 'fr' ? ',' : '.')
+  const byId = new Map(doc.symbols.map((x) => [x.id, x]))
+  const dist = new Map<string, number>()
+  {
+    const queue = [...origins.keys()]
+    queue.forEach((k) => dist.set(k, 0))
+    for (let i = 0; i < queue.length; i++) {
+      for (const e of adj.get(queue[i]) ?? []) if (!dist.has(e.to)) { dist.set(e.to, dist.get(queue[i])! + 1); queue.push(e.to) }
+    }
+  }
+  /** appareils traversés en remontant vers les sources depuis `starts` */
+  const upstream = (starts: string[]): PlacedSymbol[] => {
+    const seen = new Set(starts)
+    const stack = [...starts]
+    const found = new Set<string>()
+    while (stack.length) {
+      const n = stack.pop()!
+      for (const e of adj.get(n) ?? []) {
+        if ((dist.get(e.to) ?? Infinity) >= (dist.get(n) ?? Infinity)) continue
+        if (e.sym) found.add(e.sym)
+        if (!seen.has(e.to)) { seen.add(e.to); stack.push(e.to) }
+      }
+    }
+    return [...found].map((id) => byId.get(id)).filter((x): x is PlacedSymbol => !!x)
+  }
+
+  // moteurs : courant nominal et appareils en amont
+  for (const s of doc.symbols) {
+    const def = defs[s.defId]
+    const m = def?.sim
+    if (m?.k !== 'load' || m.role !== 'motor') continue
+    const ps = portsOf(s, m.ports)
+    const ups = upstream(ps)
+    const mc = motorCurrent(s, def)
+    if (!mc) {
+      if (ups.length) out.push({ level: 'info', symId: s.id, text: S(lang, `Moteur ${nm(s)} : renseignez sa puissance (kW) ou son courant nominal pour contrôler les calibres et les réglages des protections.`, `Motor ${nm(s)}: enter its power (kW) or rated current to check protection ratings and settings.`) })
+      continue
+    }
+    const In = mc.value
+    for (const d of ups) {
+      const k = kindOf(defs[d.defId])
+      const r = d.rated
+      if (!k || !r) continue
+      if ((k === 'thermal' || k === 'motorBreaker' || k === 'breaker') && r.set) {
+        if (r.set > In * 1.1) out.push({ level: 'error', symId: d.id, text: S(lang, `${nm(d)} : réglage thermique ${fmt(r.set)} A pour le moteur ${nm(s)} de ${fmt(In)} A : trop élevé, le moteur n'est plus protégé.`, `${nm(d)}: thermal setting ${fmt(r.set)} A for motor ${nm(s)} rated ${fmt(In)} A: too high, the motor is no longer protected.`), why: S(lang, 'Le relais ne déclenche qu’après une surcharge importante : les enroulements chauffent au-delà de leur limite et vieillissent vite ou brûlent.', 'The relay only trips after a large overload: windings overheat beyond their limit and age fast or burn out.') })
+        else if (r.set < In * 0.95) out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : réglage thermique ${fmt(r.set)} A inférieur au courant nominal du moteur ${nm(s)} (${fmt(In)} A).`, `${nm(d)}: thermal setting ${fmt(r.set)} A below the rated current of motor ${nm(s)} (${fmt(In)} A).`), why: S(lang, 'Déclenchements intempestifs en marche normale : arrêts de production. Le réglage se fait sur le courant de la plaque signalétique.', 'Nuisance tripping in normal operation: production stops. The setting should match the nameplate current.') })
+      }
+      if ((k === 'thermal' || k === 'motorBreaker') && r.min && r.max && (In < r.min - 1e-9 || In > r.max + 1e-9)) out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : plage de réglage ${fmt(r.min)}–${fmt(r.max)} A ne couvre pas le courant du moteur ${nm(s)} (${fmt(In)} A).`, `${nm(d)}: setting range ${fmt(r.min)}–${fmt(r.max)} A does not cover motor ${nm(s)} current (${fmt(In)} A).`), why: S(lang, 'Le réglage correct est impossible : choisissez un appareil dont la plage contient le courant nominal, de préférence vers le milieu.', 'The correct setting is impossible: choose a device whose range contains the rated current, preferably near the middle.') })
+      if ((k === 'fuse' || k === 'breaker') && r.in && r.in < In) out.push({ level: 'error', symId: d.id, text: S(lang, `${nm(d)} : calibre ${fmt(r.in)} A inférieur au courant nominal du moteur ${nm(s)} (${fmt(In)} A).`, `${nm(d)}: rating ${fmt(r.in)} A below motor ${nm(s)} rated current (${fmt(In)} A).`), why: S(lang, 'La protection déclenche en marche normale, et plus encore au démarrage (courant de 5 à 8 fois le courant nominal).', 'The protection trips in normal operation, and even more at start-up (5 to 8 times the rated current).') })
+      if (k === 'breaker' && r.curve && /^[BC]$/i.test(r.curve.trim())) out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : courbe ${r.curve.toUpperCase()} pour le moteur ${nm(s)} : le courant de démarrage risque de la faire déclencher.`, `${nm(d)}: ${r.curve.toUpperCase()} curve for motor ${nm(s)}: the starting current may trip it.`), why: S(lang, 'Un moteur appelle 5 à 8 fois son courant nominal au démarrage : utilisez une courbe D, un fusible aM, ou un disjoncteur-moteur.', 'A motor draws 5 to 8 times its rated current at start-up: use a D curve, an aM fuse, or a motor circuit breaker.') })
+      if (k === 'contactor' && r.in && r.in < In) out.push({ level: 'error', symId: d.id, text: S(lang, `${nm(d)} : courant assigné AC-3 ${fmt(r.in)} A inférieur au courant du moteur ${nm(s)} (${fmt(In)} A).`, `${nm(d)}: AC-3 rated current ${fmt(r.in)} A below motor ${nm(s)} current (${fmt(In)} A).`), why: S(lang, 'Contacteur sous-dimensionné : contacts qui s’usent vite, chauffent et finissent par se souder (le moteur ne s’arrête plus).', 'Undersized contactor: contacts wear fast, overheat and eventually weld (the motor no longer stops).') })
+    }
+  }
+
+  // câbles : le calibre de la protection ne doit pas dépasser ce que supporte le conducteur (Ib ≤ In ≤ Iz)
+  const warned = new Set<string>()
+  for (const d of doc.symbols) {
+    const def = defs[d.defId]
+    const k = kindOf(def)
+    const m = def?.sim
+    if ((k !== 'fuse' && k !== 'breaker') || m?.k !== 'switch' || !d.rated?.in) continue
+    for (const [a, b] of m.poles) {
+      const ka = key(d.id, a), kb = key(d.id, b)
+      const start = (dist.get(ka) ?? 0) >= (dist.get(kb) ?? 0) ? ka : kb // côté aval
+      const seen = new Set([start])
+      const stack = [start]
+      while (stack.length) {
+        const n = stack.pop()!
+        for (const e of adj.get(n) ?? []) {
+          if ((dist.get(e.to) ?? -1) <= (dist.get(n) ?? 0) || seen.has(e.to)) continue
+          if (e.sc && e.sym !== d.id) continue // la protection suivante prend le relais
+          seen.add(e.to)
+          stack.push(e.to)
+          const w = e.wire ? doc.wires.find((x) => x.id === e.wire) : undefined
+          const sec = parseSection(w?.section)
+          const max = sec ? maxProtection(sec) : undefined
+          if (w && sec && max && d.rated.in > max && !warned.has(w.id + d.id)) {
+            warned.add(w.id + d.id)
+            out.push({
+              level: 'error', symId: d.id,
+              text: S(lang, `Conducteur de ${fmt(sec)} mm² protégé par ${nm(d)} de ${fmt(d.rated.in)} A (maximum usuel ${max} A pour cette section).`, `${fmt(sec)} mm² conductor protected by ${nm(d)} of ${fmt(d.rated.in)} A (usual maximum ${max} A for this cross-section).`),
+              why: S(lang, 'Le conducteur peut chauffer au-delà de sa limite sans que la protection ne déclenche : isolant fondu, risque d’incendie. Augmentez la section ou réduisez le calibre.', 'The conductor can overheat beyond its limit without the protection tripping: melted insulation, fire risk. Increase the cross-section or reduce the rating.'),
+            })
+          }
+        }
+      }
+    }
+  }
+
+  // transformateurs : calibres des protections et bilan de puissance
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k !== 'transformer') continue
+    const info = transformerInfo(s, defs[s.defId])
+    for (const d of upstream(portsOf(s, m.primary))) {
+      const k = kindOf(defs[d.defId])
+      const r = d.rated
+      if (!r || (k !== 'fuse' && k !== 'breaker')) continue
+      if (info.in1 && r.in && r.in < info.in1) out.push({ level: 'error', symId: d.id, text: S(lang, `${nm(d)} : calibre ${fmt(r.in)} A inférieur au courant primaire de ${nm(s)} (${fmt(info.in1)} A).`, `${nm(d)}: rating ${fmt(r.in)} A below the primary current of ${nm(s)} (${fmt(info.in1)} A).`), why: S(lang, 'Elle déclenche en marche normale, et à chaque mise sous tension (courant d’enclenchement de 10 à 15 fois In).', 'It trips in normal operation, and at every power-up (inrush of 10 to 15 times In).') })
+      if (info.prot1 && r.in && r.in > info.prot1 * 4) out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : calibre ${fmt(r.in)} A très supérieur au courant primaire de ${nm(s)} (${fmt(info.in1 ?? 0)} A, conseillé ${fmt(info.prot1)} A).`, `${nm(d)}: rating ${fmt(r.in)} A far above the primary current of ${nm(s)} (${fmt(info.in1 ?? 0)} A, suggested ${fmt(info.prot1)} A).`), why: S(lang, 'Une surcharge ou un court-circuit du transformateur ne fera pas déclencher cette protection : échauffement.', 'An overload or short circuit of the transformer will not trip this protection: overheating.') })
+      if (r.curve && /^B$/i.test(r.curve.trim())) out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : courbe B devant le transformateur ${nm(s)} : le courant d’enclenchement risque de la faire déclencher (préférez D ou un fusible aM).`, `${nm(d)}: B curve in front of transformer ${nm(s)}: inrush may trip it (prefer D or an aM fuse).`) })
+    }
+    // protection du secondaire : premier appareil rencontré en descendant depuis la phase du secondaire
+    const hot = key(s.id, m.secondary[0])
+    const seen = new Set([hot])
+    const stack = [hot]
+    while (stack.length) {
+      const n = stack.pop()!
+      for (const e of adj.get(n) ?? []) {
+        if ((dist.get(e.to) ?? -1) <= (dist.get(n) ?? 0) || seen.has(e.to)) continue
+        seen.add(e.to)
+        const d = e.sym ? byId.get(e.sym) : undefined
+        if (d && e.sc && d.rated?.in && info.in2 && d.rated.in > info.in2 * 1.25 && !warned.has('s' + d.id)) {
+          warned.add('s' + d.id)
+          out.push({ level: 'warn', symId: d.id, text: S(lang, `${nm(d)} : calibre ${fmt(d.rated.in)} A supérieur au courant secondaire de ${nm(s)} (${fmt(info.in2)} A).`, `${nm(d)}: rating ${fmt(d.rated.in)} A above the secondary current of ${nm(s)} (${fmt(info.in2)} A).`), why: S(lang, 'Le transformateur peut être surchargé sans que la protection du secondaire ne déclenche.', 'The transformer can be overloaded without the secondary protection tripping.') })
+        }
+        if (!(d && e.sc)) stack.push(e.to)
+      }
+    }
+    // puissance appelée par les récepteurs du secondaire
+    if (s.power) {
+      let total = 0
+      let counted = 0
+      for (const l of doc.symbols) {
+        const lm = defs[l.defId]?.sim
+        if (!l.rated?.watts || !lm || !(lm.k === 'coil' || (lm.k === 'load' && lm.role !== 'motor'))) continue
+        const o = reach(portsOf(l, lm.ports), null)
+        if (o?.id === s.id) { total += l.rated.watts; counted++ }
+      }
+      if (counted) {
+        if (total > s.power) out.push({ level: 'error', symId: s.id, text: S(lang, `Transformateur ${nm(s)} (${fmt(s.power)} VA) surchargé : ${counted} récepteur${counted > 1 ? 's' : ''} absorbent ${fmt(total)} VA.`, `Transformer ${nm(s)} (${fmt(s.power)} VA) overloaded: ${counted} load${counted > 1 ? 's' : ''} draw ${fmt(total)} VA.`), why: S(lang, 'Le transformateur chauffe, sa tension de sortie s’effondre : les bobines ne collent plus. Prévoyez aussi l’appel des bobines à la fermeture, plusieurs fois supérieur au courant maintenu.', 'The transformer overheats and its output voltage collapses: coils no longer pull in. Also allow for coil inrush on closing, several times the holding current.') })
+        else if (total > s.power * 0.8) out.push({ level: 'warn', symId: s.id, text: S(lang, `Transformateur ${nm(s)} chargé à ${Math.round((total / s.power) * 100)} % (${fmt(total)} VA sur ${fmt(s.power)} VA) : peu de marge.`, `Transformer ${nm(s)} loaded at ${Math.round((total / s.power) * 100)} % (${fmt(total)} VA of ${fmt(s.power)} VA): little margin.`), why: S(lang, 'L’appel de courant des bobines à la fermeture peut faire chuter la tension du secondaire et empêcher le contacteur de coller.', 'Coil inrush on closing can pull the secondary voltage down and prevent the contactor from pulling in.') })
+      }
     }
   }
 

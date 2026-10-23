@@ -81,6 +81,27 @@ export interface SymbolDef {
   top?: boolean
 }
 
+/** Caractéristiques assignées d'un appareil (selon sa famille : voir ratings.ts). */
+export interface Ratings {
+  /** calibre (fusible, disjoncteur) ou courant assigné AC-3 (contacteur), en A */
+  in?: number
+  /** courbe de déclenchement (B, C, D…), type de fusible (gG, aM) ou classe de déclenchement */
+  curve?: string
+  /** pouvoir de coupure (kA) */
+  icu?: number
+  /** réglage thermique (A) et plage de réglage (A) */
+  set?: number
+  min?: number
+  max?: number
+  /** moteur : puissance utile (kW), courant nominal de plaque (A), cos φ, rapport Id/In */
+  kw?: number
+  ie?: number
+  cos?: number
+  ratio?: number
+  /** récepteurs : puissance absorbée (W ou VA) */
+  watts?: number
+}
+
 export interface PlacedSymbol {
   id: string
   defId: string
@@ -96,6 +117,8 @@ export interface PlacedSymbol {
   /** transformateurs : tension assignée du primaire (V) et puissance (VA) */
   voltsPrimary?: number
   power?: number
+  /** caractéristiques assignées (calibre, courbe, réglages, puissance…) */
+  rated?: Ratings
   /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
   terms?: Record<string, string>
   /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */

@@ -251,6 +251,38 @@ function solve(x: Ctx) {
   return { closed, energized, coilOn, potOf, shorts, swEdges, trafoOn }
 }
 
+type Key = string
+/** Bornes reliées par des fils (et par les bornes de passage) : ensembles de potentiels « source » atteints depuis `start`. */
+export function reachedSources(doc: Doc, defs: Record<string, SymbolDef>, start: Key): { pe: boolean; neutral: boolean } {
+  const adj = new Map<Key, Key[]>()
+  const link = (a: Key, b: Key) => {
+    if (!adj.has(a)) adj.set(a, [])
+    if (!adj.has(b)) adj.set(b, [])
+    adj.get(a)!.push(b)
+    adj.get(b)!.push(a)
+  }
+  for (const w of doc.wires) link(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
+  const srcPot = new Map<Key, string>()
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k === 'source') for (const [p, pot] of Object.entries(m.pot)) srcPot.set(key(s.id, p), pot)
+    else if (m?.k === 'switch' && m.ctl === 'fixed') for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b)) // bornes, barrettes de terre
+  }
+  const seen = new Set<Key>([start])
+  const stack = [start]
+  let pe = false
+  let neutral = false
+  while (stack.length) {
+    const n = stack.pop()!
+    const pot = srcPot.get(n)
+    if (pot === 'PE') pe = true
+    if (pot === 'N') neutral = true
+    for (const o of adj.get(n) ?? []) if (!seen.has(o)) { seen.add(o); stack.push(o) }
+  }
+  return { pe, neutral }
+}
+
+
 /** Calcul complet : les secondaires des transformateurs alimentés deviennent des sources, jusqu'à stabilité. */
 function solveAll(x: Ctx) {
   let out = solve(x)
@@ -259,7 +291,13 @@ function solveAll(x: Ctx) {
     for (const s of x.doc.symbols) {
       const m = x.defs[s.defId]?.sim
       if (m?.k !== 'transformer' || !out.trafoOn.has(s.id)) continue
-      m.secondary.forEach((p, n) => next.set(key(s.id, p), `~${s.id}:${n}`))
+      // secondaire à deux bornes dont une est reliée à la terre ou au neutre : cette borne est le retour (neutre), l'autre la phase
+      let ports = m.secondary
+      if (ports.length === 2) {
+        const e = ports.map((p) => { const r = reachedSources(x.doc, x.defs, key(s.id, p)); return r.pe || r.neutral })
+        if (e[0] && !e[1]) ports = [ports[1], ports[0]]
+      }
+      ports.forEach((p, n) => next.set(key(s.id, p), `~${s.id}:${n}`))
     }
     const same = next.size === x.derived.size && [...next].every(([k, v]) => x.derived.get(k) === v)
     if (same) break

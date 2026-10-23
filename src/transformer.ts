@@ -1,6 +1,6 @@
 import type { Doc, Lang, PlacedSymbol, SymbolDef } from './types'
 import { effectiveTerms } from './terminals'
-import { simulate } from './sim/engine'
+import { reachedSources, simulate } from './sim/engine'
 
 /** Calibres normalisés (A) des fusibles et disjoncteurs modulaires. */
 export const RATINGS = [0.5, 1, 1.6, 2, 3, 4, 6, 8, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125]
@@ -49,38 +49,7 @@ export function describeInfo(i: TransformerInfo, lang: Lang): string[] {
   return out
 }
 
-type Key = string
-const key = (symId: string, portId: string): Key => `${symId}:${portId}`
-
-/** Bornes reliées par des fils (et par les bornes de passage) : ensembles de potentiels « source » atteints depuis `start`. */
-function reachedSources(doc: Doc, defs: Record<string, SymbolDef>, start: Key): { pe: boolean; neutral: boolean } {
-  const adj = new Map<Key, Key[]>()
-  const link = (a: Key, b: Key) => {
-    if (!adj.has(a)) adj.set(a, [])
-    if (!adj.has(b)) adj.set(b, [])
-    adj.get(a)!.push(b)
-    adj.get(b)!.push(a)
-  }
-  for (const w of doc.wires) link(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
-  const srcPot = new Map<Key, string>()
-  for (const s of doc.symbols) {
-    const m = defs[s.defId]?.sim
-    if (m?.k === 'source') for (const [p, pot] of Object.entries(m.pot)) srcPot.set(key(s.id, p), pot)
-    else if (m?.k === 'switch' && m.ctl === 'fixed') for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b)) // bornes, barrettes de terre
-  }
-  const seen = new Set<Key>([start])
-  const stack = [start]
-  let pe = false
-  let neutral = false
-  while (stack.length) {
-    const n = stack.pop()!
-    const pot = srcPot.get(n)
-    if (pot === 'PE') pe = true
-    if (pot === 'N') neutral = true
-    for (const o of adj.get(n) ?? []) if (!seen.has(o)) { seen.add(o); stack.push(o) }
-  }
-  return { pe, neutral }
-}
+const key = (symId: string, portId: string) => `${symId}:${portId}`
 
 export interface TrafoTopology {
   /** repères proposés par borne : primaire (L, N, L1…), secondaire (N si relié à la terre ou au neutre, L sinon) */

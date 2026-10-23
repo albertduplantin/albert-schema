@@ -361,3 +361,6 @@ a, .dialog a { color: var(--lien); }
 .pill { font-size: 10px; letter-spacing: 0; }
 .pill.err { color: #ff6b7f; }
 .pill.warn { color: #ffd77a; }
+
+.ratings { border: 1px solid var(--ui-line); padding: 8px; display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.ratings legend { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--sombre); padding: 0 6px; }

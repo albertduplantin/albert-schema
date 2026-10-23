@@ -31,7 +31,7 @@ const P = (p: string) => 'qet:50_pneumatic/' + p
  * Puissance : L1-L2-L3 → disjoncteur-moteur Q1 → contacteur KM1 → moteur M1.
  * Commande : L → arrêt S1 (NF) → marche S2 (NO, shuntée par le contact KM1) → bobine KM1 → N.
  */
-export const motorStarter = (base: Doc): Doc =>
+const motorStarterRaw = (base: Doc): Doc =>
   build(base,
     [
       ['l1', 'sim-l1', 120, 30], ['l2', 'sim-l2', 140, 30], ['l3', 'sim-l3', 160, 30],
@@ -180,6 +180,19 @@ export const reversingStarter = (base: Doc): Doc =>
  * Départ moteur dont la commande est alimentée en 24 V par un transformateur de commande T1 (230 V entre L1 et L2).
  * Le secondaire de T1 alimente S1 (arrêt) → S2 (marche, shuntée par KM1) → bobine KM1 24 V et voyant H1 24 V.
  */
+/** Caractéristiques cohérentes d'un moteur de 4 kW (≈ 8 A) : disjoncteur 10 A courbe D, contacteur 12 A AC-3. */
+const withMotorRatings = (d: Doc): Doc => {
+  for (const s of d.symbols) {
+    if (s.label === 'M1') s.rated = { kw: 4 }
+    if (s.label === 'Q1') s.rated = { in: 10, curve: 'D', icu: 10 }
+    if (s.label === 'KM1' && s.defId.includes('com_puiss4')) s.rated = { in: 12 }
+  }
+  return d
+}
+
+/** Départ moteur direct avec commande marche / arrêt (voir motorStarterRaw pour le dessin). */
+export const motorStarter = (base: Doc): Doc => withMotorRatings(motorStarterRaw(base))
+
 export const motorStarterTransformer = (base: Doc): Doc => {
   const d = build(base,
     [
@@ -212,6 +225,13 @@ export const motorStarterTransformer = (base: Doc): Doc => {
   for (const s of d.symbols) {
     if (s.label === 'F1') s.rot = 90
     if (s.label === 'T1') { s.voltsPrimary = 400; s.power = 100 }
+    if (s.label === 'F1') s.rated = { in: 1, curve: 'aM', icu: 10 }
+    if (s.label === 'F2') s.rated = { in: 4, curve: 'gG', icu: 10 }
+    if (s.label === 'KM1' && s.defId.includes('bobine')) s.rated = { watts: 8 }
+    if (s.label === 'H1') s.rated = { watts: 3 }
+    if (s.label === 'M1') s.rated = { kw: 4 }
+    if (s.label === 'Q1') s.rated = { in: 10, curve: 'D', icu: 10 }
+    if (s.label === 'KM1' && s.defId.includes('com_puiss4')) s.rated = { in: 12 }
   }
   return d
 }
