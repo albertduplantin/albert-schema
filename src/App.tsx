@@ -12,7 +12,7 @@ import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from 
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
 import { fieldLabel, fieldsFor, kindOf, motorCurrent } from './ratings'
 import { FONTS } from './fonts'
-import { settingsAdvice, wireSectionAdvice, type Suggestion } from './settings'
+import { settingsAdvice, wireAdvice as computeWireAdvice, type Suggestion } from './settings'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
 import { checkDoc } from './check'
@@ -101,7 +101,7 @@ interface RemoteExample { id: string; title: { fr: string; en: string }; about: 
 
 const TOP = '__top'
 const DOMAINS: Domain[] = ['electrical', 'pneumatic', 'hydraulic']
-const WIRE_COLORS = ['#000000', '#0050c8', '#c80000', '#008000', '#8a5a00', '#7a7a7a', '#e08000', '#6a00a0']
+const WIRE_COLORS = ['#000000', '#c80000', '#0050c8', '#4fc3f7', 'gnye', '#008000', '#8a5a00', '#7a7a7a', '#e08000', '#6a00a0']
 
 const SHORTCUTS: Record<Lang, [string, string][]> = {
   fr: [
@@ -620,6 +620,14 @@ function Editor() {
     say(t('toastNumbered'))
   }
 
+  /** colore tous les conducteurs selon la norme EN 60204-1 (puissance noir, commande rouge ou bleu, neutre bleu clair, terre vert-jaune) */
+  const autoColors = () => {
+    const colors: Record<string, string> = {}
+    for (const w of doc.wires) { const c = computeWireAdvice(w, all, SYMBOL_MAP, lang).color; if (c) colors[w.id] = c.value }
+    commit((d) => ({ ...d, wires: d.wires.map((w) => (colors[w.id] ? { ...w, color: colors[w.id] } : w)) }))
+    say(tr(lang, 'toastColors'))
+  }
+
   const autoWire = () => {
     const labels = netLabels(all, SYMBOL_MAP)
     commit((d) => ({ ...d, wires: d.wires.map((w) => ({ ...w, label: labels[w.id] ?? w.label })) }))
@@ -769,7 +777,7 @@ function Editor() {
       </span>
     )
   }
-  const wireAdvice = useMemo(() => (selWire ? wireSectionAdvice(selWire, all, SYMBOL_MAP, lang) : undefined), [selWire, all, lang])
+  const wireAdvice = useMemo(() => (selWire ? computeWireAdvice(selWire, all, SYMBOL_MAP, lang) : undefined), [selWire, all, lang])
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
@@ -957,6 +965,7 @@ function Editor() {
         <div className="group editonly">
           <button onClick={autoLabel}>{t('autoLabel')}</button>
           <button onClick={autoWire}>{t('autoWire')}</button>
+          <button onClick={autoColors} title={t('autoColorsHelp')}>{t('autoColors')}</button>
           <button onClick={() => setShowBom(true)}>{t('bom')}</button>
           <details className="menu">
             <summary>⏲ {t('measure')} ▾</summary>
@@ -1202,8 +1211,8 @@ function Editor() {
             <div className="kind">{t('wire')}</div>
             <label data-tip={t('helpWireLabel')}>{t('label')}{tip('helpWireLabel')}<input value={selWire.label} onChange={(e) => patchWire({ label: e.target.value })} /></label>
             <label data-tip={t('helpWireSection')}>{t('section')} (mm²){tip('helpWireSection')}<input value={selWire.section} onChange={(e) => patchWire({ section: e.target.value })} />
-              {wireAdvice && String(wireAdvice.value) !== selWire.section && (
-                <span className="advice">💡 {wireAdvice.text}<button type="button" className="mini" onClick={(e) => { e.preventDefault(); patchWire({ section: String(wireAdvice.value) }) }}>{t('applyAdvice')} {String(wireAdvice.value)}</button></span>
+              {wireAdvice?.section && String(wireAdvice.section.value) !== selWire.section && (
+                <span className="advice">💡 {wireAdvice.section.text}<button type="button" className="mini" onClick={(e) => { e.preventDefault(); patchWire({ section: String(wireAdvice.section!.value) }) }}>{t('applyAdvice')} {String(wireAdvice.section.value)}</button></span>
               )}
             </label>
             {selWire.via?.length ? (
@@ -1213,10 +1222,13 @@ function Editor() {
             )}
             <div className="colors">
               {WIRE_COLORS.map((c) => (
-                <button key={c} className={'swatch' + (selWire.color === c ? ' on' : '')} style={{ background: c }} title={t('color')} aria-label={c}
+                <button key={c} className={'swatch' + (selWire.color === c ? ' on' : '')} style={{ background: c === 'gnye' ? 'repeating-linear-gradient(45deg,#2e9b2e 0 4px,#f0d800 4px 8px)' : c }} title={c === 'gnye' ? t('colorGnye') : t('color')} aria-label={c}
                   onClick={() => commit((d) => ({ ...d, wires: d.wires.map((w) => (w.id === selWire.id ? { ...w, color: c } : w)) }))} />
               ))}
             </div>
+            {wireAdvice?.color && selWire.color !== wireAdvice.color.value && (
+              <span className="advice">💡 {wireAdvice.color.text}<button type="button" className="mini" onClick={() => patchWire({ color: wireAdvice.color!.value })}>{t('applyAdvice')} {wireAdvice.color.name}</button></span>
+            )}
           </div>
         ) : (
           <p className="muted">{sel.length > 1 ? `${sel.length} ${t('sym')}` : t('nothingSelected')}</p>

@@ -211,28 +211,110 @@ export function settingsAdvice(s: PlacedSymbol, doc: Doc, defs: Record<string, S
   return out
 }
 
-/** Section de conducteur conseillée d'après le calibre de la protection placée en amont. */
-export function wireSectionAdvice(w: Wire, doc: Doc, defs: Record<string, SymbolDef>, lang: Lang): Suggestion | undefined {
+export type WireKind = 'power' | 'control-ac' | 'control-dc' | 'neutral' | 'pe'
+
+const KIND_COLOR: Record<WireKind, { value: string; fr: string; en: string }> = {
+  power: { value: '#000000', fr: 'noir', en: 'black' },
+  'control-ac': { value: '#c80000', fr: 'rouge', en: 'red' },
+  'control-dc': { value: '#0050c8', fr: 'bleu', en: 'blue' },
+  neutral: { value: '#4fc3f7', fr: 'bleu clair', en: 'light blue' },
+  pe: { value: 'gnye', fr: 'vert-jaune', en: 'green-yellow' },
+}
+const KIND_WHY: Record<WireKind, { fr: string; en: string }> = {
+  power: { fr: 'circuit de puissance (phases, moteurs) : noir (EN 60204-1)', en: 'power circuit (phases, motors): black (EN 60204-1)' },
+  'control-ac': { fr: 'circuit de commande en courant alternatif : rouge (EN 60204-1)', en: 'AC control circuit: red (EN 60204-1)' },
+  'control-dc': { fr: 'circuit de commande en courant continu : bleu (EN 60204-1)', en: 'DC control circuit: blue (EN 60204-1)' },
+  neutral: { fr: 'conducteur neutre : bleu clair (EN 60204-1, NF C 15-100)', en: 'neutral conductor: light blue (EN 60204-1, NF C 15-100)' },
+  pe: { fr: 'conducteur de protection : bicolore vert-jaune, réservé à la terre (EN 60204-1)', en: 'protective conductor: green-yellow bicolour, reserved for earth (EN 60204-1)' },
+}
+
+/** Nature d'un conducteur d'après le câblage : terre, neutre, commande (alternatif ou continu) ou puissance. */
+export function wireKind(w: Wire, doc: Doc, defs: Record<string, SymbolDef>): WireKind | undefined {
+  const g = buildGraph(doc, defs)
+  const ends = [w.from, w.to]
+  // un fil raccordé à un symbole de terre ou à une borne PE est un conducteur de protection
+  for (const e of ends) {
+    const s = g.byId.get(e.symId)
+    const m = s && defs[s.defId]?.sim
+    if (m?.k === 'source' && m.pot[e.portId] === 'PE') return 'pe'
+    if (s && /^PE$/i.test(defs[s.defId]?.ports.find((p) => p.id === e.portId)?.label ?? '')) return 'pe'
+  }
+  // on remonte le circuit à travers les fils et les pôles des appareils : sources atteintes, récepteurs de puissance
+  const start = key(w.from.symId, w.from.portId)
+  const seen = new Set([start])
+  const stack = [start]
+  const pots = new Set<string>()
+  let derived = false
+  let power = false
+  while (stack.length) {
+    const n = stack.pop()!
+    const [id, port] = n.split(':')
+    const s = g.byId.get(id)
+    const def = s && defs[s.defId]
+    const m = def?.sim
+    if (m?.k === 'source') { const pot = m.pot[port]; if (pot && pot !== 'PE') pots.add(pot) }
+    if (m?.k === 'transformer' && m.secondary.includes(port)) derived = true
+    if (m?.k === 'load' && m.role === 'motor') power = true
+    if (s && def && /02_power_contacts/.test(def.id)) power = true
+    for (const e of g.adj.get(n) ?? []) if (!seen.has(e.to)) { seen.add(e.to); stack.push(e.to) }
+  }
+  if (pots.has('N')) return 'neutral'
+  if (pots.has('+') || pots.has('-')) return 'control-dc'
+  if (derived && ![...pots].some((p) => p.startsWith('L'))) return 'control-ac'
+  if (pots.size === 0) return derived ? 'control-ac' : undefined
+  return power ? 'power' : 'control-ac'
+}
+
+export interface WireAdvice {
+  color?: { value: string; name: string; text: string }
+  section?: Suggestion
+}
+
+/** Section minimale usuelle, en mm², pour qu'une protection de `rating` A protège le conducteur. */
+const sectionFor = (rating: number): number | undefined => CABLE_MAX_PROTECTION.find(([, a]) => a >= rating)?.[0]
+
+/** Couleur et section conseillées d'un conducteur (norme EN 60204-1 pour les couleurs ; règle Ib ≤ In ≤ Iz pour la section). */
+export function wireAdvice(w: Wire, doc: Doc, defs: Record<string, SymbolDef>, lang: Lang): WireAdvice {
+  const out: WireAdvice = {}
+  const kind = wireKind(w, doc, defs)
+  if (kind) {
+    const c = KIND_COLOR[kind]
+    out.color = { value: c.value, name: lang === 'fr' ? c.fr : c.en, text: S(lang, `Couleur conseillée : ${c.fr} — ${KIND_WHY[kind].fr}.`, `Suggested colour: ${c.en} — ${KIND_WHY[kind].en}.`) }
+  }
   const g = buildGraph(doc, defs)
   const start = key(w.from.symId, w.from.portId)
-  const d0 = g.dist.get(start)
-  if (d0 === undefined) return undefined
+  if (g.dist.get(start) === undefined) return out
+
   // protection la plus proche en remontant vers les sources
   const seen = new Set([start])
   const stack = [start]
-  let best: number | undefined
+  let protection: number | undefined
   while (stack.length) {
     const n = stack.pop()!
     for (const e of g.adj.get(n) ?? []) {
       if ((g.dist.get(e.to) ?? Infinity) >= (g.dist.get(n) ?? Infinity) || seen.has(e.to)) continue
       seen.add(e.to)
       const dev = e.sym ? g.byId.get(e.sym) : undefined
-      if (e.prot && dev?.rated?.in) best = Math.min(best ?? Infinity, dev.rated.in)
+      if (e.prot && dev?.rated?.in) protection = Math.min(protection ?? Infinity, dev.rated.in)
       stack.push(e.to)
     }
   }
-  if (!best) return undefined
-  const sec = CABLE_MAX_PROTECTION.find(([, a]) => a >= best!)?.[0]
-  if (!sec) return undefined
-  return { value: String(sec).replace('.', lang === 'fr' ? ',' : '.'), text: S(lang, `Protégé en amont par ${fmt(lang, best)} A : section minimale usuelle ${fmt(lang, sec)} mm² en cuivre (règle Ib ≤ In ≤ Iz).`, `Protected upstream by ${fmt(lang, best)} A: usual minimum cross-section ${fmt(lang, sec)} mm² copper (rule Ib ≤ In ≤ Iz).`) }
+  // courant d'emploi : récepteurs en aval de ce conducteur
+  const loads = loadsDownstream(g, doc, defs, [key(w.to.symId, w.to.portId)].filter((k) => (g.dist.get(k) ?? 0) >= (g.dist.get(start) ?? 0)))
+  const ib = loads.reduce((a, l) => a + l.amps, 0)
+  // usage courant : 1,5 mm² minimum en puissance, 1 mm² en commande (0,75 mm² au plus bas)
+  const minimum = kind === 'power' || kind === 'neutral' ? 1.5 : kind === 'pe' ? 1.5 : 1
+  const need = Math.max(minimum, protection ? sectionFor(protection) ?? 0 : 0, ib > 0 ? sectionFor(upTo(ib)) ?? 0 : 0)
+  if (need > 0) {
+    const reason = protection
+      ? S(lang, `protégé en amont par ${fmt(lang, protection)} A`, `protected upstream by ${fmt(lang, protection)} A`)
+      : ib > 0
+        ? S(lang, `courant d'emploi estimé ${fmt(lang, Math.round(ib * 100) / 100)} A`, `estimated load current ${fmt(lang, Math.round(ib * 100) / 100)} A`)
+        : S(lang, 'aucune protection ni récepteur identifié', 'no protection or load identified')
+    out.section = {
+      value: String(need).replace('.', lang === 'fr' ? ',' : '.'),
+      text: S(lang, `Section conseillée ${fmt(lang, need)} mm² en cuivre (${reason} ; minimum d'usage ${fmt(lang, minimum)} mm² en ${kind === 'power' || kind === 'neutral' ? 'puissance' : 'commande'}).`, `Suggested cross-section ${fmt(lang, need)} mm² copper (${reason}; usual minimum ${fmt(lang, minimum)} mm² for ${kind === 'power' || kind === 'neutral' ? 'power' : 'control'}).`),
+    }
+  }
+  return out
 }

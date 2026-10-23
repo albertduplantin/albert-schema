@@ -536,7 +536,7 @@ function rig(doc: any) {
 }
 // ── conseils de réglage d'après le circuit et les gammes de constructeurs
 {
-  const { settingsAdvice, wireSectionAdvice } = await import(ROOT + '/src/settings.ts')
+  const { settingsAdvice, wireAdvice } = await import(ROOT + '/src/settings.ts')
   const { typicalMotorCurrent, rangeFor, contactorFor } = await import(ROOT + '/src/catalog.ts')
   check('catalogue : moteur 4 kW ≈ 8,4 A, 7,5 kW = 15 A, 6 kW interpolé', [typicalMotorCurrent(4), typicalMotorCurrent(7.5), typicalMotorCurrent(6)], [8.4, 15, 12.2])
   check('catalogue : plage de réglage pour 8,4 A = 6–10 A ; pour 14 A : 13–18 A ; pour 0,3 A : 0,25–0,4 A', [rangeFor(8.4), rangeFor(14), rangeFor(0.3)], [[6, 10], [13, 18], [0.25, 0.4]])
@@ -566,7 +566,24 @@ function rig(doc: any) {
   // section de câble d'après la protection amont
   tby('F2').rated = { in: 4 }
   const wr = t.wires.find((w: any) => t.symbols.find((s: any) => s.id === w.from.symId)?.label === 'F2')
-  check('conducteur protégé par 4 A : 0,75 mm² au minimum', wireSectionAdvice(wr, t, SYMBOL_MAP, 'fr')?.value, '0,75')
+  check('conducteur de commande protégé par 4 A et 0,46 A : 1 mm² (minimum usuel en commande)', wireAdvice(wr, t, SYMBOL_MAP, 'fr').section?.value, '1')
+  // couleurs conseillées (EN 60204-1)
+  const m = T.motorStarterTransformer(base)
+  const sy = (id: string) => m.symbols.find((x: any) => x.id === id)
+  const wFind = (a: string, b: string) => m.wires.find((w: any) => (sy(w.from.symId).label === a || sy(w.from.symId).defId.includes(a)) && (sy(w.to.symId).label === b || sy(w.to.symId).defId.includes(b)))
+  const colorOf = (w: any) => wireAdvice(w, m, SYMBOL_MAP, 'fr').color?.value
+  check('couleur : phase vers disjoncteur de puissance → noir', colorOf(wFind('sim-l1', 'Q1')), '#000000')
+  check('couleur : puissance moteur → noir', colorOf(wFind('Q1', 'KM1')), '#000000')
+  check('couleur : conducteur de terre (moteur PE) → vert-jaune', colorOf(wFind('M1', 'terre')), 'gnye')
+  check('couleur : liaison du secondaire à la terre → vert-jaune', colorOf(wFind('T1', 'terre')), 'gnye')
+  check('couleur : commande 24 V alternatif (secondaire) → rouge', colorOf(wFind('F2', 'S1')), '#c80000')
+  const mm = T.motorStarter(base)
+  const sy2 = (id: string) => mm.symbols.find((x: any) => x.id === id)
+  const w2 = (a: string, b: string) => mm.wires.find((w: any) => (sy2(w.from.symId).label === a || sy2(w.from.symId).defId.includes(a)) && (sy2(w.to.symId).label === b || sy2(w.to.symId).defId.includes(b)))
+  check('couleur : commande directe sur la phase (sans transformateur) → rouge', wireAdvice(w2('sim-l', 'S1'), mm, SYMBOL_MAP, 'fr').color?.value, '#c80000')
+  check('couleur : retour de la bobine au neutre → bleu clair', wireAdvice(w2('KM1', 'sim-n'), mm, SYMBOL_MAP, 'fr').color?.value, '#4fc3f7')
+  const mot = wireAdvice(w2('KM1', 'M1'), mm, SYMBOL_MAP, 'fr')
+  check('section : phase du moteur de 4 kW (8,4 A, calibre 10 A) → 1,5 mm² au moins', mot.section?.value, '1,5')
 }
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

@@ -596,17 +596,18 @@ export default function Canvas(p: Props) {
             const mx = (m.x + n.x) / 2, my = (m.y + n.y) / 2
             const txt = [wr.label, wr.section && wr.section + ' mm²'].filter(Boolean).join(' ')
             const pot = p.sim ? p.sim.potentialOf[`${wr.from.symId}:${wr.from.portId}`] : null
-            const stroke = p.sim ? (pot ? potColor(pot) : '#9aa0a8') : wr.color
+            const stroke = p.sim ? (pot ? potColor(pot) : '#9aa0a8') : wr.color === 'gnye' ? '#2e9b2e' : wr.color
             return (
               <g key={wr.id}>
                 <polyline points={pointsAttr(pts)} stroke={p.faults?.has(wr.id) ? '#e53935' : stroke} strokeWidth={p.sim && pot ? 2.2 : 1.6} strokeDasharray={p.faults?.has(wr.id) ? '3 5' : undefined} />
+                {wr.color === 'gnye' && !p.sim && <polyline points={pointsAttr(pts)} stroke="#f0d800" strokeWidth={1.6} strokeDasharray="5 5" strokeLinecap="butt" />}
                 {p.faults?.has(wr.id) && <text x={mx - 4} y={my + 4} fontSize={12} fill="#e53935" stroke="none">✂</text>}
                 {p.sim?.current[wr.id] && (
                   <polyline points={pointsAttr(pts)} stroke="#fff" strokeOpacity={0.95} strokeWidth={1.3} strokeDasharray="2 6" strokeLinecap="butt">
                     <animate attributeName="stroke-dashoffset" from="0" to={p.sim.current[wr.id] > 0 ? '-8' : '8'} dur="0.45s" repeatCount="indefinite" />
                   </polyline>
                 )}
-                {txt && <text x={mx + 4} y={my - 4} fontSize={7} fill={wr.color} stroke="none">{txt}</text>}
+                {txt && <text x={mx + 4} y={my - 4} fontSize={7} fill={wr.color === 'gnye' ? '#2e9b2e' : wr.color} stroke="none">{txt}</text>}
               </g>
             )
           })}
