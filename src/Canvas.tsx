@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { effectiveTerms } from './terminals'
 import { junctionPoints, routeAll } from './routing'
+import { autoConnect } from './splice'
 import type { Doc, Lang, PlacedSymbol, PortRef } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
@@ -282,7 +283,7 @@ export default function Canvas(p: Props) {
         x: snap(pt.x - def.w / 2), y: snap(pt.y - def.h / 2),
         label: p.nextLabel(doc, def.id),
       }
-      p.commit((d) => ({ ...d, symbols: [...d.symbols, sym] }))
+      p.commit((d) => autoConnect({ ...d, symbols: [...d.symbols, sym] }, [sym.id]))
       p.onPlaced(def.id)
       return
     }
@@ -452,6 +453,10 @@ export default function Canvas(p: Props) {
         .map((s) => s.id)
       p.setSel(it.add ? Array.from(new Set([...sel, ...hit])) : hit)
       setBand(null)
+    } else if (it.kind === 'drag' && it.moved && !p.sim) {
+      // symboles déplacés sans fil : s'ils tombent sur des fils ou contre d'autres bornes, ils se raccordent
+      const free = Object.keys(it.orig).filter((id) => !doc.wires.some((w) => w.from.symId === id || w.to.symId === id))
+      if (free.length) p.update((d) => autoConnect(d, free))
     }
     inter.current = { kind: 'none' }
   }
@@ -471,7 +476,7 @@ export default function Canvas(p: Props) {
     e.preventDefault()
     const pt = toSheet(e)
     const sym: PlacedSymbol = { id: uid(), defId: id, rot: 0, desc: '', x: snap(pt.x - def.w / 2), y: snap(pt.y - def.h / 2), label: p.nextLabel(doc, id) }
-    p.commit((d) => ({ ...d, symbols: [...d.symbols, sym] }))
+    p.commit((d) => autoConnect({ ...d, symbols: [...d.symbols, sym] }, [sym.id]))
     p.setSel([sym.id])
     p.onPlaced(id)
   }

@@ -254,6 +254,23 @@ for (const r of roots) {
       if (anim.blades.length) sim.blades = anim.blades.map((b) => ({ rot: b.rot, closed: b.closed }))
       if (anim.spin) sim.spin = { cx: n1(anim.spin.cx - ox), cy: n1(anim.spin.cy - oy), r: n1(anim.spin.r) }
     }
+    // bornes ramenées sur la grille de 10 : les fils des appareils voisins (disjoncteur, transformateur, contacteur…) s'alignent.
+    // Un petit segment relie l'ancien point de raccordement du dessin à la borne ramenée sur la grille.
+    {
+      const snapped = ports.map((p) => ({ x: Math.round(p.x / 10) * 10, y: Math.round(p.y / 10) * 10 }))
+      if (new Set(snapped.map((q) => q.x + ',' + q.y)).size === ports.length) {
+        ports.forEach((p, i) => {
+          const q = snapped[i]
+          if (q.x === p.x && q.y === p.y) return
+          const pts = [[p.x, p.y]]
+          if (q.x !== p.x && q.y !== p.y) pts.push([q.x, p.y])
+          pts.push([q.x, q.y])
+          shapes.push('<path d="M' + pts.map(([a, b]) => n1(a + ox) + ' ' + n1(b + oy)).join(' L') + '"/>')
+          p.x = q.x
+          p.y = q.y
+        })
+      }
+    }
     const svg = shapes.join('')
     symbols.push({
       id: 'qet:' + relFromRoot.replace(/\.elmt$/, ''),

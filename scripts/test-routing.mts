@@ -248,5 +248,86 @@ for (const dx of [40, -40, 20, 80]) {
   const r3 = { ...routes, w3: [{ x: 100, y: 0 }, { x: 100, y: 40 }, { x: 150, y: 40 }, { x: 150, y: 90 }] }
   check('jonction : trois fils → points sans doublon', junctionPoints(r3, [W('w1', 'A', 'B'), W('w2', 'A', 'C'), W('w3', 'A', 'D')]).length >= 1, true)
 }
+// ── pose d'un symbole sur des fils : insertion automatique
+{
+  const { autoConnect } = await import('../src/splice.ts')
+  const { portPos } = await import('../src/geometry.ts')
+  const { readFileSync } = await import('node:fs')
+  const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+  for (const s of lib.symbols) if (!SYMBOL_MAP[s.id]) SYMBOL_MAP[s.id] = s
+  const id = (re: RegExp) => lib.symbols.find((s: any) => re.test(s.id)).id
+  const sym = (key: string, defId: string, x: number, y: number): any => ({ id: key, defId, x, y, rot: 0, label: '', desc: '' })
+  const W = (n: string, a: string, ap: string, b: string, bp: string): any => ({ id: n, from: { symId: a, portId: ap }, to: { symId: b, portId: bp }, label: '', color: '#000', section: '' })
+  const doc0 = (symbols: any[], wires: any[]): any => ({ version: 1, paper: 'A3', title: {}, symbols, wires })
+
+  // trois fils verticaux (L1, L2, L3) → un disjoncteur tripolaire posé à cheval dessus
+  const br = id(/disjonct-m_3f$/)
+  const b0 = sym('b', br, 100, 100)
+  const top = ['t5', 't4', 't3'].map((p) => portPos(b0, p)!)
+  const bot = ['t1', 't0', 't2'].map((p) => portPos(b0, p)!)
+  const sources = top.map((p, i) => sym('s' + i, 'sim-l', p.x - 10, 20)) // source : borne 'a' au bas
+  const sinks = bot.map((p, i) => sym('n' + i, 'sim-n', p.x - 10, 260))
+  void sources; void sinks
+  // fils entre deux contacts auxiliaires alignés (plus simple à contrôler)
+  const aux = id(/01_auxiliary_contacts\/con_simple$/)
+  const a1 = sym('a1', aux, 100, 20), a2 = sym('a2', aux, 100, 300)
+  const p1 = portPos(a1, 't1')!, p2 = portPos(a2, 't0')!
+  const wire = W('w', 'a1', 't1', 'a2', 't0')
+  const lampDef = id(/11_optical_signaling\/lampe2$/)
+  const lamp0 = sym('l', lampDef, 0, 0)
+  const lt = portPos(lamp0, 't0')!, lb = portPos(lamp0, 't1')!
+  // la lampe est posée de façon que ses deux bornes tombent sur le fil vertical x = p1.x, entre les deux contacts
+  const lamp = sym('l', lampDef, p1.x - lt.x, 140 - lt.y)
+  const d = autoConnect(doc0([a1, a2, lamp], [wire]), ['l'])
+  check('insertion : le fil est coupé en deux', d.wires.length === 2, String(d.wires.length))
+  const ends = d.wires.map((w: any) => `${w.from.symId}:${w.from.portId}>${w.to.symId}:${w.to.portId}`).sort().join(' ')
+  check('insertion : le fil entre dans la lampe puis en ressort', /a1:t1>l:t0|a1:t1>l:t1/.test(ends) && /l:t[01]>a2:t0/.test(ends), ends)
+  // une lampe posée à côté du fil ne touche à rien
+  const far = sym('l', lampDef, p1.x + 100, 140)
+  check('insertion : symbole posé à côté, fils inchangés', autoConnect(doc0([a1, a2, far], [wire]), ['l']).wires.length === 1)
+  // appareils bout à bout : deux contacts dont les bornes se touchent se raccordent
+  const c1 = sym('c1', aux, 300, 100)
+  const cb = portPos(c1, 't1')!
+  const c2p = portPos(sym('c2', aux, 0, 0), 't0')!
+  const c2 = sym('c2', aux, cb.x - c2p.x, cb.y - c2p.y)
+  const e = autoConnect(doc0([c1, c2], []), ['c2'])
+  check('bornes qui se touchent : raccordement direct', e.wires.length === 1 && e.wires[0].from.symId === 'c2', JSON.stringify(e.wires))
+  // coudes imposés : répartis de part et d'autre
+  const viaWire = { ...wire, via: [{ x: p1.x, y: 60 }, { x: p1.x, y: 220 }] }
+  const f = autoConnect(doc0([a1, a2, lamp], [viaWire]), ['l'])
+  check('insertion : coudes du fil d origine répartis', f.wires.length === 2 && f.wires.reduce((n: number, w: any) => n + (w.via?.length ?? 0), 0) === 2, JSON.stringify(f.wires.map((w: any) => w.via?.length ?? 0)))
+  void lb
+}
+// ── disjoncteur tripolaire (et bornier) posés sur trois fils parallèles
+{
+  const { autoConnect } = await import('../src/splice.ts')
+  const { portPos } = await import('../src/geometry.ts')
+  const { readFileSync } = await import('node:fs')
+  const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+  for (const s of lib.symbols) if (!SYMBOL_MAP[s.id]) SYMBOL_MAP[s.id] = s
+  const id = (re: RegExp) => lib.symbols.find((s: any) => re.test(s.id)).id
+  const sym = (key: string, defId: string, x: number, y: number): any => ({ id: key, defId, x, y, rot: 0, label: '', desc: '' })
+  const aux = id(/01_auxiliary_contacts\/con_simple$/)
+  const probe = sym('p', aux, 0, 0)
+  const pt1 = portPos(probe, 't1')!, pt0 = portPos(probe, 't0')!
+  for (const [name, re, ytop] of [['disjoncteur', /disjonct-m_3f$/, 100], ['bornier', /130_terminals_terminal_strips\/[^/]*\/?[^/]*$/, 100]] as const) {
+    const def = lib.symbols.find((s: any) => re.test(s.id) && s.sim?.poles?.length === 3) ?? lib.symbols.find((s: any) => re.test(s.id) && s.sim?.poles?.length >= 2)
+    if (!def) { console.log('(pas de ' + name + ' à 3 pôles dans la bibliothèque)'); continue }
+    const dev = sym('dev', def.id, 100, ytop)
+    const poles = def.sim.poles as [string, string][]
+    const symbols: any[] = [dev]
+    const wires: any[] = []
+    poles.forEach(([a, b], i) => {
+      const pa = portPos(dev, a)!, pb = portPos(dev, b)!
+      const upper = pa.y < pb.y ? pa : pb, lower = pa.y < pb.y ? pb : pa
+      const t = sym('t' + i, aux, upper.x - pt1.x, upper.y - 80 - pt1.y)
+      const u = sym('u' + i, aux, lower.x - pt0.x, lower.y + 60 - pt0.y)
+      symbols.push(t, u)
+      wires.push({ id: 'w' + i, from: { symId: 't' + i, portId: 't1' }, to: { symId: 'u' + i, portId: 't0' }, label: '', color: '#000', section: '' })
+    })
+    const d = autoConnect({ version: 1, paper: 'A3', title: {}, symbols, wires } as any, ['dev'])
+    check(`${name} à ${poles.length} pôles posé sur ${poles.length} fils : chaque fil est coupé et raccordé`, d.wires.length === 2 * poles.length && d.wires.every((w: any) => w.from.symId === 'dev' || w.to.symId === 'dev'), String(d.wires.length))
+  }
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests de tracé passent')
 process.exit(fails ? 1 : 0)
