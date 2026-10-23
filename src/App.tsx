@@ -915,6 +915,17 @@ function Editor() {
           </div>
   ) : null
 
+  /** ferme le menu après le clic sur une commande (les champs et les boutons « .keep » le laissent ouvert) */
+  const closeMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button:not(.keep)')) (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')
+  }
+  useEffect(() => {
+    // un clic en dehors d'un menu ouvert le referme
+    const onDown = (e: MouseEvent) => document.querySelectorAll('details.menu[open]').forEach((d) => { if (!d.contains(e.target as Node)) d.removeAttribute('open') })
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
+
   const hint = simMode ? t('simHint') : wiringOn ? t('hintWiring') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
   const symButton = (s: (typeof SYMBOLS)[number]) => (
@@ -932,56 +943,68 @@ function Editor() {
     <div className={'app' + (simMode ? ' simmode' : '')}>
       <header className="toolbar" role="toolbar">
         <span className="brand"><span className="vis" aria-hidden="true" />Albert<b>Schema</b></span>
-        <div className="group">
-          <button onClick={() => { if (!doc.symbols.length || confirm(t('newConfirm'))) { commit(() => emptyDoc()); setSel([]) } }}>{t('new')}</button>
-          <button onClick={() => fileRef.current?.click()}>{t('open')}</button>
-          <button onClick={() => { saveJson(doc); say(t('toastSaved')) }} title="Ctrl+S">{t('save')}</button>
-        </div>
+
+        {/* Fichier : ouvrir, enregistrer, exporter, exemples, nomenclature */}
+        <details className="menu" ref={exportRef}>
+          <summary>{t('file')} ▾</summary>
+          <div className="menu-list" onClick={closeMenu}>
+            <button onClick={() => { if (!doc.symbols.length || confirm(t('newConfirm'))) { commit(() => emptyDoc()); setSel([]) } }}>{t('new')}</button>
+            <button onClick={() => fileRef.current?.click()}>{t('open')}</button>
+            <button onClick={() => { saveJson(doc); say(t('toastSaved')) }}><span>{t('save')}</span><kbd>Ctrl+S</kbd></button>
+            <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
+            <button onClick={() => setShowBom(true)}>{t('bom')}</button>
+            <p className="menu-title">{t('export')}</p>
+            <button onClick={withContent((c) => exportSvg(doc, c))}>{t('exportSvg')}</button>
+            <button onClick={withContent((c) => exportPng(doc, c))}>{t('exportPng')}</button>
+            <button onClick={withContent((c) => printSheet(doc, c))}>{t('print')}</button>
+            {pageCount(doc) > 1 && <button onClick={printAllPages}>{t('printAll')}</button>}
+            <button onClick={() => exportCsv(all, lang)}>{t('exportCsv')}</button>
+            <button onClick={copyShareLink}>{t('shareLink')}</button>
+          </div>
+        </details>
         <input ref={fileRef} type="file" accept=".json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) openFile(f); e.target.value = '' }} />
+
         <div className="group editonly">
           <button className="icon" onClick={undo} disabled={!h.past.length} title={`${t('undo')} (Ctrl+Z)`} aria-label={t('undo')}>↶</button>
           <button className="icon" onClick={redo} disabled={!h.future.length} title={`${t('redo')} (Ctrl+Y)`} aria-label={t('redo')}>↷</button>
-        </div>
-        <div className="group editonly">
           <button className="icon" onClick={rotateSel} disabled={!sel.length} title={`${t('rotate')} (R)`} aria-label={t('rotate')}>⟳</button>
           <button className="icon" onClick={duplicate} disabled={!sel.length} title={`${t('duplicate')} (Ctrl+D)`} aria-label={t('duplicate')}>⧉</button>
-          <details className="menu">
-            <summary className={sel.length < 2 ? 'dis' : ''} title={t('align')}>⇔ {t('align')} ▾</summary>
-            {sel.length >= 2 && (
-              <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
-                <button onClick={() => alignSel('left')}>{t('alignLeft')}</button>
-                <button onClick={() => alignSel('hcenter')}>{t('alignHCenter')}</button>
-                <button onClick={() => alignSel('right')}>{t('alignRight')}</button>
-                <button onClick={() => alignSel('top')}>{t('alignTop')}</button>
-                <button onClick={() => alignSel('vcenter')}>{t('alignVCenter')}</button>
-                <button onClick={() => alignSel('bottom')}>{t('alignBottom')}</button>
-                <button onClick={() => alignSel('distH')} disabled={sel.length < 3}>{t('distH')}</button>
-                <button onClick={() => alignSel('distV')} disabled={sel.length < 3}>{t('distV')}</button>
-              </div>
-            )}
-          </details>
           <button className="icon danger" onClick={deleteSel} disabled={!sel.length} title={`${t('delete')} (Suppr)`} aria-label={t('delete')}>🗑</button>
         </div>
-        <div className="group editonly">
-          <button onClick={autoLabel}>{t('autoLabel')}</button>
-          <button onClick={autoWire}>{t('autoWire')}</button>
-          <button onClick={autoColors} title={t('autoColorsHelp')}>{t('autoColors')}</button>
-          <button onClick={() => setShowBom(true)}>{t('bom')}</button>
-          <details className="menu">
-            <summary>⏲ {t('measure')} ▾</summary>
-            <div className="menu-list" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open')}>
-              <button onClick={() => addInstrument('voltmeter', 'needle')}>{t('mVoltNeedle')}</button>
-              <button onClick={() => addInstrument('voltmeter', 'digital')}>{t('mVoltDigital')}</button>
-              <button onClick={() => addInstrument('clamp', 'needle')}>{t('mClampNeedle')}</button>
-              <button onClick={() => addInstrument('clamp', 'digital')}>{t('mClampDigital')}</button>
-              <p className="muted" style={{ margin: '6px 10px', fontSize: 11, maxWidth: 230 }}>{t('measureHelp')}</p>
+
+        {/* Dessin : disposition, numérotation, annotations, blocs, affichage des noms */}
+        <details className="menu editonly">
+          <summary>✎ {t('draw')} ▾</summary>
+          <div className="menu-list wide" onClick={closeMenu}>
+            <p className="menu-title">{t('align')}{sel.length < 2 ? ` — ${t('alignHint')}` : ''}</p>
+            <div className="menu-grid">
+              <button disabled={sel.length < 2} onClick={() => alignSel('left')}>{t('alignLeft')}</button>
+              <button disabled={sel.length < 2} onClick={() => alignSel('hcenter')}>{t('alignHCenter')}</button>
+              <button disabled={sel.length < 2} onClick={() => alignSel('right')}>{t('alignRight')}</button>
+              <button disabled={sel.length < 2} onClick={() => alignSel('top')}>{t('alignTop')}</button>
+              <button disabled={sel.length < 2} onClick={() => alignSel('vcenter')}>{t('alignVCenter')}</button>
+              <button disabled={sel.length < 2} onClick={() => alignSel('bottom')}>{t('alignBottom')}</button>
+              <button disabled={sel.length < 3} onClick={() => alignSel('distH')}>{t('distH')}</button>
+              <button disabled={sel.length < 3} onClick={() => alignSel('distV')}>{t('distV')}</button>
             </div>
-          </details>
-          <label className="chk" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
-          {doc.showNames && (
-            <details className="menu">
-              <summary title={t('nameStyle')}>Aa ▾</summary>
-              <div className="menu-list namestyle" onClick={(e) => e.stopPropagation()}>
+            <p className="menu-title">{t('numbering')}</p>
+            <button onClick={autoLabel}>{t('autoLabel')}</button>
+            <button onClick={autoWire}>{t('autoWire')}</button>
+            <button onClick={autoColors} title={t('autoColorsHelp')}>{t('autoColors')}</button>
+            <p className="menu-title">{t('annotate')}</p>
+            <button onClick={addNote} title={t('note')}>T {t('note')}</button>
+            <button onClick={saveBlock} disabled={!sel.length}>{t('blockSave')}</button>
+            {blocks.length === 0 && <p className="muted small menu-note">{t('blockNone')}</p>}
+            {blocks.map((blk) => (
+              <div key={blk.id} style={{ display: 'flex' }}>
+                <button style={{ flex: 1 }} onClick={() => insertBlock(blk)}>▦ {blk.name} <span className="muted">({blk.symbols.length})</span></button>
+                <button className="keep" title={t('delete')} aria-label={t('delete')} onClick={() => storeBlocks(blocks.filter((x) => x.id !== blk.id))}>×</button>
+              </div>
+            ))}
+            <p className="menu-title">{t('display')}</p>
+            <label className="chk keep" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
+            {doc.showNames && (
+              <div className="namestyle">
                 <label>{t('font')}
                   <select value={doc.nameStyle?.font ?? 'arial'} onChange={(e) => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, font: e.target.value } }))}>
                     {FONTS.map((f) => <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>)}
@@ -991,30 +1014,29 @@ function Editor() {
                   <input type="number" min={4} max={24} step={0.5} value={doc.nameStyle?.size ?? 7} onChange={(e) => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, size: Math.max(4, Math.min(24, Number(e.target.value) || 7)) } }))} />
                 </label>
                 <div className="row">
-                  <button className={doc.nameStyle?.bold ? 'on' : ''} onClick={() => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, bold: !d.nameStyle?.bold } }))}><b>B</b></button>
-                  <button className={doc.nameStyle?.italic ? 'on' : ''} onClick={() => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, italic: !d.nameStyle?.italic } }))}><i>I</i></button>
+                  <button className={'keep' + (doc.nameStyle?.bold ? ' on' : '')} onClick={() => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, bold: !d.nameStyle?.bold } }))}><b>B</b></button>
+                  <button className={'keep' + (doc.nameStyle?.italic ? ' on' : '')} onClick={() => commit((d) => ({ ...d, nameStyle: { ...d.nameStyle, italic: !d.nameStyle?.italic } }))}><i>I</i></button>
                 </div>
                 <p className="muted small">{t('fontExportHint')}</p>
               </div>
-            </details>
-          )}
-          <button onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
-          <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
-          <button onClick={addNote} title={t('note')}>T {t('note')}</button>
-          <details className="menu">
-            <summary>▦ {t('blocks')} ▾</summary>
-            <div className="menu-list" onClick={(e) => { if ((e.target as HTMLElement).closest('.del')) return; (e.currentTarget.parentElement as HTMLDetailsElement).removeAttribute('open') }}>
-              <button onClick={saveBlock} disabled={!sel.length}>{t('blockSave')}</button>
-              {blocks.length === 0 && <p className="muted" style={{ margin: '6px 10px', fontSize: 11 }}>{t('blockNone')}</p>}
-              {blocks.map((blk) => (
-                <div key={blk.id} style={{ display: 'flex' }}>
-                  <button style={{ flex: 1 }} onClick={() => insertBlock(blk)}>{blk.name} <span className="muted">({blk.symbols.length})</span></button>
-                  <button className="del" title={t('delete')} aria-label={t('delete')} onClick={() => storeBlocks(blocks.filter((x) => x.id !== blk.id))}>×</button>
-                </div>
-              ))}
-            </div>
-          </details>
-        </div>
+            )}
+          </div>
+        </details>
+
+        {/* Mesures */}
+        <details className="menu">
+          <summary>⏲ {t('measure')} ▾</summary>
+          <div className="menu-list" onClick={closeMenu}>
+            <button onClick={() => addInstrument('voltmeter', 'needle')}>{t('mVoltNeedle')}</button>
+            <button onClick={() => addInstrument('voltmeter', 'digital')}>{t('mVoltDigital')}</button>
+            <button onClick={() => addInstrument('clamp', 'needle')}>{t('mClampNeedle')}</button>
+            <button onClick={() => addInstrument('clamp', 'digital')}>{t('mClampDigital')}</button>
+            <p className="muted small menu-note">{t('measureHelp')}</p>
+          </div>
+        </details>
+
+        <button className="editonly" onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
+
         <div className="group">
           <button className={'simbtn' + (simMode ? ' on' : '')} onClick={() => (simMode ? setSimMode(false) : startSim())} title={t('simTitle')}>
             {simMode ? '■ ' + t('simStop') : '▶ ' + t('simStart')}
@@ -1029,20 +1051,10 @@ function Editor() {
             </>
           )}
         </div>
-        <details className="menu" ref={exportRef}>
-          <summary>{t('export')} ▾</summary>
-          <div className="menu-list">
-            <button onClick={withContent((c) => exportSvg(doc, c))}>{t('exportSvg')}</button>
-            <button onClick={withContent((c) => exportPng(doc, c))}>{t('exportPng')}</button>
-            <button onClick={withContent((c) => printSheet(doc, c))}>{t('print')}</button>
-            {pageCount(doc) > 1 && <button onClick={printAllPages}>{t('printAll')}</button>}
-            <button onClick={() => { if (exportRef.current) exportRef.current.open = false; exportCsv(all, lang) }}>{t('exportCsv')}</button>
-            <button onClick={copyShareLink}>{t('shareLink')}</button>
-          </div>
-        </details>
+
         <span className="grow" />
-        <span className="saved" aria-live="polite">✓ {t('saved')}</span>
-        <button className="feedback-btn" onClick={() => setShowFeedback(true)} title={t('feedbackHelp')}>💬 <span>{t('feedback')}</span></button>
+        <span className="saved" aria-live="polite" title={t('saved')}>✓</span>
+        <button className="icon feedback-btn" onClick={() => setShowFeedback(true)} title={`${t('feedback')} — ${t('feedbackHelp')}`} aria-label={t('feedback')}>💬</button>
         <button className="icon" onClick={() => setShowKeys(true)} title={`${t('shortcuts')} (?)`} aria-label={t('shortcuts')}>?</button>
         <div className="group">
           <button className="icon" onClick={toggleTheme} title={t('theme')} aria-label={t('theme')}>◐</button>

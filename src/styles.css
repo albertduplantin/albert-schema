@@ -396,3 +396,14 @@ textarea.inlineedit { resize: both; }
 
 .advice { display: block; margin-top: 3px; padding: 5px 7px; border-left: 3px solid var(--clair); background: #93a41514; font-size: 11.5px; line-height: 1.4; color: var(--ui-text); }
 .advice .mini { margin-left: 6px; }
+
+/* barre d'outils compacte : tout tient sur une ligne ; les commandes secondaires sont dans les menus */
+@media (min-width: 1000px) { .toolbar { flex-wrap: nowrap; } }
+.toolbar .menu-list.wide { min-width: 260px; max-height: 80vh; overflow-y: auto; }
+.menu-title { margin: 8px 10px 3px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.15em; text-transform: uppercase; color: #8a958c; }
+.menu-note { margin: 6px 10px; max-width: 240px; }
+.menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 4px; }
+.toolbar .menu-list button { display: flex; justify-content: space-between; gap: 16px; align-items: center; width: 100%; }
+.toolbar .menu-list .namestyle { padding: 6px 10px 8px; min-width: 0; }
+.toolbar .menu-list kbd { background: transparent; border-color: #3a463d; color: #9aa494; }
+.toolbar .saved { padding: 0 4px; }
