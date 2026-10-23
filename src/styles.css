@@ -430,3 +430,14 @@ textarea.inlineedit { resize: both; }
 
 .issues li.resolved { opacity: 0.7; }
 .issues li.resolved .link { text-decoration: none; color: var(--accent-olive); }
+
+/* formes de dessin : seul le trait se saisit, pour pouvoir cliquer les symboles placés à l'intérieur d'un cadre */
+.shape-hit > :not(.shape-sel):not(.shandle):not(.shape-label-hit) { fill: none; stroke: transparent; stroke-width: 10; pointer-events: stroke; cursor: move; }
+.shape-hit .shape-label-hit { fill: transparent; stroke: none; cursor: move; }
+.shape-hit:hover > :not(.shape-sel):not(.shandle):not(.shape-label-hit) { stroke: rgba(0,102,204,.18); }
+.shape-sel { fill: none; stroke: #0b6bcb; stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
+.shandle { fill: #fff; stroke: #0b6bcb; stroke-width: 1.4; cursor: crosshair; }
+
+.form .colors-title { flex-basis: 100%; font-size: 11px; color: var(--ui-muted); }
+.form label.row-chk { flex-direction: row; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; }
+.form label.row-chk input { width: auto; margin: 0; }

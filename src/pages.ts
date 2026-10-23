@@ -1,6 +1,6 @@
 import type { Doc, Page } from './types'
 
-const contentOf = (d: Doc): Page => ({ name: '', symbols: d.symbols, wires: d.wires, ...(d.notes ? { notes: d.notes } : {}), ...(d.instruments ? { instruments: d.instruments } : {}) })
+const contentOf = (d: Doc): Page => ({ name: '', symbols: d.symbols, wires: d.wires, ...(d.notes ? { notes: d.notes } : {}), ...(d.shapes ? { shapes: d.shapes } : {}), ...(d.instruments ? { instruments: d.instruments } : {}) })
 
 /** Toutes les pages du projet, la page active étant à jour. Un schéma sans `pages` n'a qu'une feuille. */
 export function pagesOf(doc: Doc): Page[] {
@@ -16,7 +16,7 @@ export function switchPage(doc: Doc, idx: number): Doc {
   const pages = pagesOf(doc)
   const i = Math.max(0, Math.min(idx, pages.length - 1))
   const t = pages[i]
-  return { ...doc, pages, page: i, symbols: t.symbols, wires: t.wires, notes: t.notes, instruments: t.instruments }
+  return { ...doc, pages, page: i, symbols: t.symbols, wires: t.wires, notes: t.notes, shapes: t.shapes, instruments: t.instruments }
 }
 
 export function addPage(doc: Doc): Doc {

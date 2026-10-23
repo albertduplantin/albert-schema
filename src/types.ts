@@ -188,6 +188,33 @@ export interface Note {
   italic?: boolean
 }
 
+/** Trait d'une forme : continu, tirets, pointillés ou trait-point. */
+export type StrokeStyle = 'solid' | 'dashed' | 'dotted' | 'dashdot'
+
+/**
+ * Forme de dessin posée sous le schéma : cadre (coffret, armoire, pupitre), ellipse, ligne ou flèche.
+ * Rectangle et ellipse : (x, y) coin haut gauche, (w, h) dimensions ≥ 0. Ligne : de (x, y) à (x + w, y + h), w et h pouvant être négatifs.
+ */
+export interface Shape {
+  id: string
+  kind: 'rect' | 'ellipse' | 'line'
+  x: number
+  y: number
+  w: number
+  h: number
+  stroke: StrokeStyle
+  width: number
+  color: string
+  /** couleur de remplissage (absent : transparent) */
+  fill?: string
+  /** titre du cadre, affiché en haut à gauche, sur le trait */
+  label?: string
+  /** angles arrondis (rectangle) */
+  rounded?: boolean
+  /** flèche à l'extrémité (ligne) : à l'arrivée, ou aux deux bouts */
+  arrow?: 'end' | 'both'
+}
+
 /** Style des noms de composants affichés sous les symboles (option « Noms des composants »). */
 export interface NameStyle {
   font?: string
@@ -202,6 +229,7 @@ export interface Page {
   symbols: PlacedSymbol[]
   wires: Wire[]
   notes?: Note[]
+  shapes?: Shape[]
   instruments?: Instrument[]
 }
 
@@ -212,6 +240,7 @@ export interface Doc {
   symbols: PlacedSymbol[]
   wires: Wire[]
   notes?: Note[]
+  shapes?: Shape[]
   instruments?: Instrument[]
   /** projet à plusieurs feuilles : le contenu de la feuille active est dans symbols/wires/notes */
   pages?: Page[]

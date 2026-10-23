@@ -5,7 +5,8 @@ import { autoConnect } from './splice'
 import { fontCss } from './fonts'
 import InstrumentView from './InstrumentView'
 import { jawPoint, pickAt, probesOf, readCurrent, readVoltage, stepRange, type PickContext } from './instruments'
-import type { Doc, Instrument, Lang, PlacedSymbol, PortRef } from './types'
+import { ShapeView, resizeShape, shapeBox, shapeHandles, straighten } from './shapes'
+import type { Doc, Instrument, Lang, PlacedSymbol, PortRef, Shape } from './types'
 import { SYMBOL_MAP } from './symbols'
 import {
   GRID, MARGIN, PAPER_SIZE, TB_H, TB_W, UNIT_MM, pointsAttr, portPos, route, routeVia, routeOpen, bestInsertIndex, rotCenter, snap, symBBox, uid,
@@ -92,6 +93,10 @@ interface Props {
   /** double-clic sur un texte (annotation, nom de composant, repère) : édition sur place */
   onEditText?: (kind: 'note' | 'name' | 'label', id: string, x: number, y: number) => void
   onSimFault?: (id: string) => void
+  /** outil de dessin actif (rectangle, ellipse, ligne), style des nouvelles formes, et fin de l'outil après le tracé */
+  tool?: Shape['kind'] | null
+  toolStyle?: Partial<Shape>
+  onToolDone?: () => void
   labels: { zoomIn: string; zoomOut: string; fit: string; grid: string }
 }
 
@@ -101,7 +106,9 @@ type Wiring = { from: PortRef; via: Pt[] }
 type Interaction =
   | { kind: 'none' }
   | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number; btn: number; target: string | null }
-  | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
+  | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; so: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
+  | { kind: 'draw'; x0: number; y0: number }
+  | { kind: 'sresize'; id: string; code: string; orig: Shape; moved: boolean }
   | { kind: 'label'; id: string; part: 'labelOff' | 'nameOff'; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'note'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'instr'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
@@ -139,6 +146,7 @@ export default function Canvas(p: Props) {
     setView({ k, x: (r.width - s.w * k) / 2, y: (r.height - s.h * k) / 2 })
   }
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
+  const [drawing, setDrawing] = useState<Shape | null>(null)
   const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [showGrid, setShowGrid] = useState(() => { try { return localStorage.getItem('albertschema.grid') === '1' } catch { return false } })
   const [hoverPort, setHoverPort] = useState<string | null>(null)
@@ -320,6 +328,18 @@ export default function Canvas(p: Props) {
       if (handled) return
     }
     if (wiringRef.current) return // tracé en cours : le coude ou la borne d'arrivée est pris au relâchement
+    if (p.tool && e.button === 0 && !p.sim) {
+      const q = { x: snap(pt.x), y: snap(pt.y) }
+      inter.current = { kind: 'draw', x0: q.x, y0: q.y }
+      setDrawing({ id: 'draft', kind: p.tool, x: q.x, y: q.y, w: 0, h: 0, stroke: 'solid', width: 1.6, color: '#000000', ...p.toolStyle })
+      return
+    }
+    const shHandle = (e.target as Element).closest('[data-shandle]')
+    if (shHandle) {
+      const [id, code] = shHandle.getAttribute('data-shandle')!.split('|')
+      const o = (doc.shapes ?? []).find((x) => x.id === id)
+      if (o) { inter.current = { kind: 'sresize', id, code, orig: o, moved: false }; return }
+    }
     if (p.placing) {
       const def = SYMBOL_MAP[p.placing]
       const sym: PlacedSymbol = {
@@ -373,6 +393,20 @@ export default function Canvas(p: Props) {
       setWiring({ from: port, via: [] })
       return
     }
+    const shEl = (e.target as Element).closest('[data-shape]')
+    if (shEl && !(e.target as Element).closest('[data-sym]')) {
+      const id = shEl.getAttribute('data-shape')!
+      let ids = sel
+      if (e.shiftKey) ids = sel.includes(id) ? sel.filter((s) => s !== id) : [...sel, id]
+      else if (!sel.includes(id)) ids = [id]
+      p.setSel(ids)
+      const orig: Record<string, { x: number; y: number }> = {}
+      for (const s of doc.symbols) if (ids.includes(s.id)) orig[s.id] = { x: s.x, y: s.y }
+      const so: Record<string, { x: number; y: number }> = {}
+      for (const s of doc.shapes ?? []) if (ids.includes(s.id)) so[s.id] = { x: s.x, y: s.y }
+      inter.current = { kind: 'drag', sx: pt.x, sy: pt.y, orig, so, vias: {}, moved: false }
+      return
+    }
     const symEl = (e.target as Element).closest('[data-sym]')
     if (symEl) {
       const id = symEl.getAttribute('data-sym')!
@@ -384,7 +418,9 @@ export default function Canvas(p: Props) {
       for (const s of doc.symbols) if (ids.includes(s.id)) orig[s.id] = { x: s.x, y: s.y }
       const vias: Record<string, Pt[]> = {}
       for (const w of doc.wires) if (w.via?.length && orig[w.from.symId] && orig[w.to.symId]) vias[w.id] = w.via
-      inter.current = { kind: 'drag', sx: pt.x, sy: pt.y, orig, vias, moved: false }
+      const so: Record<string, { x: number; y: number }> = {}
+      for (const s of doc.shapes ?? []) if (ids.includes(s.id)) so[s.id] = { x: s.x, y: s.y }
+      inter.current = { kind: 'drag', sx: pt.x, sy: pt.y, orig, so, vias, moved: false }
       return
     }
     const wireEl = (e.target as Element).closest('[data-wire]')
@@ -418,8 +454,20 @@ export default function Canvas(p: Props) {
           ...d,
           symbols: d.symbols.map((s) => (it.orig[s.id] ? { ...s, x: it.orig[s.id].x + dx, y: it.orig[s.id].y + dy } : s)),
           wires: d.wires.map((w) => (it.vias[w.id] ? { ...w, via: it.vias[w.id].map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w)),
+          ...(d.shapes ? { shapes: d.shapes.map((s) => (it.so[s.id] ? { ...s, x: it.so[s.id].x + dx, y: it.so[s.id].y + dy } : s)) } : {}),
         }))
       }
+    } else if (it.kind === 'draw') {
+      const q = { x: snap(pt.x), y: snap(pt.y) }
+      setDrawing((s) => {
+        if (!s) return s
+        if (s.kind === 'line') { const f = straighten(q.x - it.x0, q.y - it.y0); return { ...s, x: it.x0, y: it.y0, w: f.dx, h: f.dy } }
+        return { ...s, x: Math.min(it.x0, q.x), y: Math.min(it.y0, q.y), w: Math.abs(q.x - it.x0), h: Math.abs(q.y - it.y0) }
+      })
+    } else if (it.kind === 'sresize') {
+      const next = resizeShape(it.orig, it.code, { x: snap(pt.x), y: snap(pt.y) })
+      if (!it.moved && (next.x !== it.orig.x || next.y !== it.orig.y || next.w !== it.orig.w || next.h !== it.orig.h)) { it.moved = true; p.checkpoint() }
+      if (it.moved) p.update((d) => ({ ...d, shapes: (d.shapes ?? []).map((s) => (s.id === it.id ? next : s)) }))
     } else if (it.kind === 'note') {
       const nx = snap(it.ox + pt.x - it.sx), ny = snap(it.oy + pt.y - it.sy)
       if (!it.moved && (nx !== it.ox || ny !== it.oy)) {
@@ -482,6 +530,20 @@ export default function Canvas(p: Props) {
       else if (!it.target) p.setSel([])
       p.onContext(e.clientX, e.clientY, it.target)
     }
+    if (it.kind === 'draw' && drawing) {
+      let s = drawing
+      const tiny = s.kind === 'line' ? Math.hypot(s.w, s.h) < 8 : s.w < 8 && s.h < 8
+      if (tiny && s.kind !== 'line') s = { ...s, w: 160, h: 100 } // simple clic : forme de taille usuelle
+      if (!(tiny && s.kind === 'line')) {
+        const made: Shape = { ...s, id: uid() }
+        p.commit((d) => ({ ...d, shapes: [...(d.shapes ?? []), made] }))
+        p.setSel([made.id])
+      }
+      setDrawing(null)
+      p.onToolDone?.()
+      inter.current = { kind: 'none' }
+      return
+    }
     const w = wiringRef.current
     if (w && e.button === 0) {
       const target = portUnder(e.target)
@@ -516,7 +578,9 @@ export default function Canvas(p: Props) {
           return b.x1 >= x1 && b.x2 <= x2 && b.y1 >= y1 && b.y2 <= y2
         })
         .map((s) => s.id)
-      p.setSel(it.add ? Array.from(new Set([...sel, ...hit])) : hit)
+      const hitShapes = (doc.shapes ?? []).filter((s) => { const b = shapeBox(s); return b.x1 >= x1 && b.x2 <= x2 && b.y1 >= y1 && b.y2 <= y2 }).map((s) => s.id)
+      const all = [...hit, ...hitShapes]
+      p.setSel(it.add ? Array.from(new Set([...sel, ...all])) : all)
       setBand(null)
     } else if (it.kind === 'drag' && it.moved) {
       // symboles déplacés sans fil : s'ils tombent sur des fils ou contre d'autres bornes, ils se raccordent
@@ -557,11 +621,11 @@ export default function Canvas(p: Props) {
       ref={svgRef}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('text/x-albert-symbol')) e.preventDefault() }}
       onDrop={onDrop}
-      className={'canvas' + (p.placing ? ' placing' : '') + (wiring ? ' wiring' : '') + (p.sim ? ' simulating' : '')}
+      className={'canvas' + (p.placing || p.tool ? ' placing' : '') + (wiring ? ' wiring' : '') + (p.sim ? ' simulating' : '')}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
-      onMouseLeave={() => { inter.current = { kind: 'none' }; setBand(null); if (held.current) { p.onSimPress(held.current, false); held.current = null } }}
+      onMouseLeave={() => { inter.current = { kind: 'none' }; setBand(null); setDrawing(null); if (held.current) { p.onSimPress(held.current, false); held.current = null } }}
       onContextMenu={(e) => e.preventDefault()}
       onDoubleClick={(e) => {
         if ((e.target as Element).closest('[data-titleblock]')) { p.onEditTitle?.(); return }
@@ -585,6 +649,7 @@ export default function Canvas(p: Props) {
         <rect x={-4} y={-4} width={w + 8} height={h + 8} fill="#000" opacity={0.12} />
         <g ref={p.contentRef} color="#000" stroke="currentColor" fill="none" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" fontFamily="Arial, sans-serif">
           <Sheet paper={doc.paper} title={p.sheetLabel ? { ...doc.title, sheet: p.sheetLabel } : doc.title} lang={p.lang} />
+          {(doc.shapes ?? []).map((s) => <ShapeView key={s.id} s={s} />)}
           {doc.wires.map((wr) => {
             const a = symById(wr.from.symId), b = symById(wr.to.symId)
             if (!a || !b) return null
@@ -702,6 +767,23 @@ export default function Canvas(p: Props) {
               <rect x={MARGIN} y={MARGIN} width={PAPER_SIZE[doc.paper].w - 2 * MARGIN} height={PAPER_SIZE[doc.paper].h - 2 * MARGIN} fill="url(#grid-dots)" pointerEvents="none" />
             </>
           )}
+          {(doc.shapes ?? []).map((s) => {
+            const b = shapeBox(s)
+            const on = sel.includes(s.id)
+            return (
+              <g key={s.id} data-shape={s.id} className="shape-hit">
+                {s.kind === 'line'
+                  ? <line x1={s.x} y1={s.y} x2={s.x + s.w} y2={s.y + s.h} />
+                  : s.kind === 'ellipse'
+                    ? <ellipse cx={(b.x1 + b.x2) / 2} cy={(b.y1 + b.y2) / 2} rx={(b.x2 - b.x1) / 2} ry={(b.y2 - b.y1) / 2} />
+                    : <rect x={b.x1} y={b.y1} width={b.x2 - b.x1} height={b.y2 - b.y1} />}
+                {s.label && s.kind !== 'line' && <rect x={b.x1 + 4} y={b.y1 + 2} width={s.label.length * 6 + 8} height={14} className="shape-label-hit" />}
+                {on && sel.length === 1 && s.kind !== 'line' && <rect x={b.x1} y={b.y1} width={b.x2 - b.x1} height={b.y2 - b.y1} className="shape-sel" />}
+                {on && sel.length === 1 && shapeHandles(s).map((hd) => <rect key={hd.code} data-shandle={s.id + '|' + hd.code} className="shandle" x={hd.x - 4} y={hd.y - 4} width={8} height={8} />)}
+              </g>
+            )
+          })}
+          {drawing && <g pointerEvents="none" opacity={0.75}><ShapeView s={drawing} /></g>}
           {doc.wires.map((wr) => {
             const a = symById(wr.from.symId), b = symById(wr.to.symId)
             if (!a || !b) return null

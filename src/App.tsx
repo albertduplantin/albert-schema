@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Doc, Instrument, Note, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
+import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES } from './shapes'
+import type { Doc, Instrument, Note, Shape, StrokeStyle, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
 import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
 import { PAPER_SIZE, symBBox, uid } from './geometry'
@@ -212,7 +213,7 @@ function Editor() {
     setBlocks(next)
     try { localStorage.setItem('albertschema.blocks', JSON.stringify(next)) } catch { /* stockage plein ou refusé */ }
   }
-  const clip = useRef<{ symbols: PlacedSymbol[]; wires: Wire[] } | null>(null)
+  const clip = useRef<{ symbols: PlacedSymbol[]; wires: Wire[]; shapes?: Shape[] } | null>(null)
   const toastTimer = useRef<number>()
   const doc = h.doc
   const t = (k: Key) => tr(lang, k)
@@ -432,6 +433,7 @@ function Editor() {
         symbols: d.symbols.filter((s) => !gone.has(s.id)),
         wires: d.wires.filter((w) => !gone.has(w.id) && !gone.has(w.from.symId) && !gone.has(w.to.symId)),
         notes: (d.notes ?? []).filter((n) => !gone.has(n.id)),
+        ...(d.shapes ? { shapes: d.shapes.filter((s) => !gone.has(s.id)) } : {}),
       }
     })
     setSel([])
@@ -445,13 +447,14 @@ function Editor() {
   const copySel = useCallback(() => {
     const syms = doc.symbols.filter((s) => sel.includes(s.id))
     const ids = new Set(syms.map((s) => s.id))
-    clip.current = { symbols: syms, wires: doc.wires.filter((w) => ids.has(w.from.symId) && ids.has(w.to.symId)) }
-    if (syms.length) say(tr(lang, 'toastCopied'))
+    const shapes = (doc.shapes ?? []).filter((s) => sel.includes(s.id))
+    clip.current = { symbols: syms, wires: doc.wires.filter((w) => ids.has(w.from.symId) && ids.has(w.to.symId)), shapes }
+    if (syms.length || shapes.length) say(tr(lang, 'toastCopied'))
   }, [doc, sel, say, lang])
 
   const paste = useCallback(() => {
     const c = clip.current
-    if (!c || !c.symbols.length) return
+    if (!c || (!c.symbols.length && !c.shapes?.length)) return
     // identifiants créés avant la mise à jour : la sélection du collage en dépend
     const map = new Map<string, string>(c.symbols.map((s) => [s.id, uid()]))
     commit((d) => {
@@ -469,7 +472,8 @@ function Editor() {
         to: { ...w.to, symId: map.get(w.to.symId)! },
         ...(w.via?.length ? { via: w.via.map((v) => ({ x: v.x + 20, y: v.y + 20 })) } : {}),
       }))
-      return { ...d, symbols: [...d.symbols, ...added], wires: [...d.wires, ...wires] }
+      const shapes = (c.shapes ?? []).map((s) => { const id = uid(); map.set(s.id, id); return { ...s, id, x: s.x + 20, y: s.y + 20 } })
+      return { ...d, symbols: [...d.symbols, ...added], wires: [...d.wires, ...wires], ...(shapes.length ? { shapes: [...(d.shapes ?? []), ...shapes] } : {}) }
     })
     setSel(Array.from(map.values()))
   }, [commit])
@@ -584,7 +588,7 @@ function Editor() {
       const ctrl = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       const step = e.shiftKey ? 50 : 10
-      if (e.key === 'Escape') { setMenu(null); setPlacing(null); setSel([]); setShowKeys(false); setShowBom(false); setShowFeedback(false); setShowCredits(false) }
+      if (e.key === 'Escape') { setMenu(null); setPlacing(null); setTool(null); setSel([]); setShowKeys(false); setShowBom(false); setShowFeedback(false); setShowCredits(false) }
       else if (e.key === 'Delete' || e.key === 'Backspace') deleteSel()
       else if (k === 'r' && !ctrl) { if (!placing) rotateSel() }
       else if (e.key === 'Enter' && !ctrl && sel.length === 1 && doc.symbols.some((x) => x.id === sel[0])) { e.preventDefault(); openProps(sel[0]) }
@@ -683,6 +687,12 @@ function Editor() {
   const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s && !s.legacy && s.domain === domain), [recent, domain])
 
   const selSym = sel.length === 1 ? doc.symbols.find((s) => s.id === sel[0]) : undefined
+  // outils de dessin : cadres, ellipse, lignes, flèches
+  const [tool, setTool] = useState<Shape['kind'] | null>(null)
+  const [toolStyle, setToolStyle] = useState<Partial<Shape>>({})
+  const startTool = (kind: Shape['kind'], style: Partial<Shape> = {}) => { setTool(kind); setToolStyle(style); setPlacing(null); setSel([]) }
+  const selShape = sel.length === 1 ? (doc.shapes ?? []).find((s) => s.id === sel[0]) : undefined
+  const patchShape = (patch: Partial<Shape>) => update((d) => ({ ...d, shapes: (d.shapes ?? []).map((s) => (s.id === sel[0] ? { ...s, ...patch } : s)) }))
   const selNote = sel.length === 1 ? (doc.notes ?? []).find((n) => n.id === sel[0]) : undefined
   const patchNote = (patch: Partial<Note>) => update((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === sel[0] ? { ...n, ...patch } : n)) }))
   const addNote = () => {
@@ -926,13 +936,13 @@ function Editor() {
     return () => document.removeEventListener('mousedown', onDown)
   }, [])
 
-  const hint = simMode ? t('simHint') : wiringOn ? t('hintWiring') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
+  const hint = simMode ? t('simHint') : tool ? t('hintTool') : wiringOn ? t('hintWiring') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
   const symButton = (s: (typeof SYMBOLS)[number]) => (
     <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '')} title={`${s.name[lang]} — ${s.std}`}
       draggable
       onDragStart={(e) => { e.dataTransfer.setData('text/x-albert-symbol', s.id); e.dataTransfer.effectAllowed = 'copy'; setPlacing(null) }}
-      onClick={() => { setPlacing(placing === s.id ? null : s.id); setSel([]) }}>
+      onClick={() => { setPlacing(placing === s.id ? null : s.id); setTool(null); setSel([]) }}>
       <svg viewBox={`-6 -6 ${s.w + 12} ${s.h + 12}`} stroke="currentColor" fill="none" strokeWidth={Math.max(2, Math.max(s.w, s.h) / 28)} strokeLinecap="round" strokeLinejoin="round"
         dangerouslySetInnerHTML={{ __html: s.svg.replace(/var\(--bg\)/g, 'transparent') }} />
       <span>{s.name[lang]}</span>
@@ -1001,6 +1011,13 @@ function Editor() {
                 <button className="keep" title={t('delete')} aria-label={t('delete')} onClick={() => storeBlocks(blocks.filter((x) => x.id !== blk.id))}>×</button>
               </div>
             ))}
+            <p className="menu-title">{t('shapes')}</p>
+            <button onClick={() => startTool('rect', { stroke: 'solid' })}>▭ {t('shapeRect')}</button>
+            <button onClick={() => startTool('rect', { stroke: 'dashed', width: 1.2 })}>▭ {t('shapeRectDashed')}</button>
+            <button onClick={() => startTool('rect', { stroke: 'dashdot', width: 1.2 })}>▭ {t('shapeRectDashDot')}</button>
+            <button onClick={() => startTool('ellipse', { stroke: 'solid' })}>◯ {t('shapeEllipse')}</button>
+            <button onClick={() => startTool('line', { stroke: 'solid' })}>╱ {t('shapeLine')}</button>
+            <button onClick={() => startTool('line', { stroke: 'solid', arrow: 'end' })}>→ {t('shapeArrow')}</button>
             <p className="menu-title">{t('display')}</p>
             <label className="chk keep" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
             {doc.showNames && (
@@ -1104,7 +1121,7 @@ function Editor() {
       </aside>
 
       <main className="stage">
-        <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing}
+        <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} tool={tool} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
           onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
@@ -1199,6 +1216,47 @@ function Editor() {
         <h3>{t('properties')}</h3>
         {selSym ? (
           symForm
+        ) : selShape ? (
+          <div className="form" onFocus={checkpoint}>
+            <div className="kind">{t(selShape.kind === 'rect' ? 'shapeFrame' : selShape.kind === 'ellipse' ? 'shapeEllipse' : 'shapeLine')}</div>
+            <label data-tip={t('helpStroke')}>{t('strokeStyle')}{tip('helpStroke')}
+              <select value={selShape.stroke} onChange={(e) => patchShape({ stroke: e.target.value as StrokeStyle })}>
+                {STROKES.map((k) => <option key={k} value={k}>{t(k === 'solid' ? 'strokeSolid' : k === 'dashed' ? 'strokeDashed' : k === 'dotted' ? 'strokeDotted' : 'strokeDashDot')}</option>)}
+              </select>
+            </label>
+            <label data-tip={t('helpStrokeWidth')}>{t('strokeWidth')}{tip('helpStrokeWidth')}
+              <select value={selShape.width} onChange={(e) => patchShape({ width: Number(e.target.value) })}>
+                {[...new Set([...SHAPE_WIDTHS, selShape.width])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <div className="colors" data-tip={t('helpShapeColor')}>
+              <span className="colors-title">{t('shapeColor')}</span>
+              {SHAPE_COLORS.map((c) => <button key={c} className={'swatch' + (selShape.color === c ? ' on' : '')} style={{ background: c }} aria-label={c} onClick={() => patchShape({ color: c })} />)}
+            </div>
+            {selShape.kind !== 'line' && (
+              <div className="colors" data-tip={t('helpShapeFill')}>
+                <span className="colors-title">{t('shapeFill')}</span>
+                <button className={'swatch' + (!selShape.fill ? ' on' : '')} style={{ background: 'repeating-linear-gradient(45deg,#fff 0 3px,#ccc 3px 6px)' }} aria-label={t('shapeFillNone')} title={t('shapeFillNone')} onClick={() => patchShape({ fill: undefined })} />
+                {SHAPE_FILLS.map((c) => <button key={c} className={'swatch' + (selShape.fill === c ? ' on' : '')} style={{ background: c + '40' }} aria-label={c} onClick={() => patchShape({ fill: c })} />)}
+              </div>
+            )}
+            {selShape.kind !== 'line' && (
+              <label data-tip={t('helpShapeLabel')}>{t('shapeLabel')}{tip('helpShapeLabel')}<input value={selShape.label ?? ''} onChange={(e) => patchShape({ label: e.target.value || undefined })} /></label>
+            )}
+            {selShape.kind === 'rect' && (
+              <label className="chk row-chk"><input type="checkbox" checked={!!selShape.rounded} onChange={(e) => patchShape({ rounded: e.target.checked || undefined })} /> {t('shapeRounded')}</label>
+            )}
+            {selShape.kind === 'line' && (
+              <label>{t('shapeArrowHead')}
+                <select value={selShape.arrow ?? ''} onChange={(e) => patchShape({ arrow: (e.target.value || undefined) as Shape['arrow'] })}>
+                  <option value="">{t('arrowNone')}</option>
+                  <option value="end">{t('arrowEnd')}</option>
+                  <option value="both">{t('arrowBoth')}</option>
+                </select>
+              </label>
+            )}
+            <p className="muted small">{t('shapeHelp')}</p>
+          </div>
         ) : selNote ? (
           <div className="form" onFocus={checkpoint}>
             <h3>{t('note')}</h3>
