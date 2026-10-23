@@ -391,3 +391,5 @@ textarea.inlineedit { resize: both; }
 
 .form label { position: relative; }
 .form label > .tip { position: absolute; right: 0; top: 0; margin: 0; }
+
+.tooltip { position: fixed; z-index: 80; width: max-content; max-width: 340px; padding: 9px 12px; background: var(--nuit); color: #f1f4ee; border-top: 3px solid var(--clair); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; box-shadow: 0 10px 30px #00000066; pointer-events: none; }
