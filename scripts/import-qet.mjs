@@ -254,78 +254,167 @@ for (const r of roots) {
       if (anim.blades.length) sim.blades = anim.blades.map((b) => ({ rot: b.rot, closed: b.closed }))
       if (anim.spin) sim.spin = { cx: n1(anim.spin.cx - ox), cy: n1(anim.spin.cy - oy), r: n1(anim.spin.r) }
     }
-    // bornes ramenées sur la grille de 10 : les fils des appareils voisins (disjoncteur, transformateur, contacteur…) s'alignent.
-    // Un petit segment relie l'ancien point de raccordement du dessin à la borne ramenée sur la grille.
+    // ── bornes : raccord sur la grille de 10, puis pas de 20 entre bornes voisines d'une même rangée.
+    //  1. chaque borne est ramenée sur la grille en déformant son fil de raccordement (segment droit du dessin) ;
+    //  2. si toutes les rangées de bornes sont à 10 d'écart, le symbole est agrandi ×2 : les fils restent droits et parallèles ;
+    //  3. sinon, les rangées trop serrées sont écartées en inclinant légèrement leurs fils de raccordement.
+    // Électrique seulement pour 2 et 3 (le pneumatique garde ses dessins normalisés).
     {
-      const snapped = ports.map((p) => ({ x: Math.round(p.x / 10) * 10, y: Math.round(p.y / 10) * 10 }))
-      if (new Set(snapped.map((q) => q.x + ',' + q.y)).size === ports.length) {
-        ports.forEach((p, i) => {
-          const q = snapped[i]
-          if (q.x === p.x && q.y === p.y) return
-          const inw = { up: [0, 2], down: [0, -2], left: [2, 0], right: [-2, 0] }[p.dir] ?? [0, 0] // léger recouvrement du fil du dessin
-          const pts = [[p.x + inw[0], p.y + inw[1]], [p.x, p.y]]
-          if (q.x !== p.x && q.y !== p.y) pts.push([q.x, p.y])
-          pts.push([q.x, q.y])
-          shapes.push('<path d="M' + pts.map(([a, b]) => n1(a + ox) + ' ' + n1(b + oy)).join(' L') + '"/>')
-          p.x = q.x
-          p.y = q.y
+      const AXIS = { up: [0, 1], down: [0, -1], left: [1, 0], right: [-1, 0] } // sens « vers l'intérieur »
+      const E = terminals.map((t) => ({ x: t.x, y: t.y, dir: t.dir }))
+      const ox0 = ox
+      const oy0 = oy
+      // un fil de raccordement : suite de segments alignés avec l'axe de la borne, qui se touchent, en partant de la borne
+      const findLead = (p) => {
+        const inw = AXIS[p.dir]
+        if (!inw) return null
+        const lat = (q) => (inw[0] === 0 ? q[0] - p.x : q[1] - p.y)
+        const u = (q) => (inw[0] === 0 ? (q[1] - p.y) * inw[1] : (q[0] - p.x) * inw[0])
+        const items = []
+        segs.forEach((sg) => {
+          if (/class="blade"/.test(shapes[sg.i])) return
+          for (let k = 0; k + 1 < sg.pts.length; k++) {
+            const a = sg.pts[k]
+            const b = sg.pts[k + 1]
+            if (Math.abs(lat(a)) <= 0.6 && Math.abs(lat(b)) <= 0.6 && Math.abs(u(a) - u(b)) > 0.1) items.push({ sg, a, b, lo: Math.min(u(a), u(b)), hi: Math.max(u(a), u(b)) })
+          }
         })
+        const chain = []
+        let cur = 0
+        for (;;) {
+          const next = items.filter((it) => !chain.includes(it) && it.lo <= cur + 2.5 && it.hi > cur + 0.1).sort((x, y) => y.hi - x.hi)[0]
+          if (!next) break
+          chain.push(next)
+          cur = Math.max(cur, next.hi)
+        }
+        return cur >= 8 ? { chain, len: cur, u } : null
       }
-    }
-    // pas standard des bornes : dans une même rangée (haut, bas, gauche ou droite), des bornes à moins de 20 d'écart sont écartées à 20,
-    // comme les pôles d'un disjoncteur ou d'un contacteur, pour que les fils de deux appareils voisins s'alignent. Chaque borne
-    // est prolongée de 10 vers l'extérieur par un petit coude. Électrique seulement (le pneumatique garde ses dessins normalisés).
-    if (r.domain === 'electrical') {
-      const OUT = { up: [0, -10], down: [0, 10], left: [-10, 0], right: [10, 0] }
-      const moved = ports.map((p) => ({ ...p }))
-      const taken = new Set(ports.map((p) => p.x + ',' + p.y))
-      let any = false
-      for (const dir of ['up', 'down', 'left', 'right']) {
-        const horiz = dir === 'up' || dir === 'down'
-        const rows = new Map()
-        moved.forEach((p, i) => {
-          if (p.dir !== dir) return
-          const k = horiz ? p.y : p.x
-          if (!rows.has(k)) rows.set(k, [])
-          rows.get(k).push(i)
-        })
-        for (const idx of rows.values()) {
-          if (idx.length < 2) continue
-          const pos = (i) => (horiz ? ports[i].x : ports[i].y)
-          const sorted = [...idx].sort((a, b) => pos(a) - pos(b))
-          const gaps = sorted.slice(1).map((v, j) => pos(v) - pos(sorted[j]))
-          if (gaps.every((g) => g >= 20) || gaps.some((g) => g < 10)) continue
-          const c = Math.round((pos(sorted[0]) + pos(sorted[sorted.length - 1])) / 2 / 10) * 10
-          sorted.forEach((i, j) => {
-            const v = c + (j - (sorted.length - 1) / 2) * 20
-            moved[i] = horiz ? { ...ports[i], x: v, y: ports[i].y + OUT[dir][1] } : { ...ports[i], x: ports[i].x + OUT[dir][0], y: v }
+      const shear = (lead, d) => {
+        const touched = new Set() // un point commun à deux segments d'un même fil n'est déplacé qu'une fois
+        const L = Math.min(lead.len, 20) // un fil très long (conducteur qui traverse le symbole) ne se déforme que sur ses 20 derniers
+        for (const it of lead.chain) {
+          for (const q of [it.a, it.b]) {
+            if (touched.has(q)) continue
+            touched.add(q)
+            const t = Math.min(1, Math.max(0, 1 - lead.u(q) / L))
+            q[0] += d[0] * t
+            q[1] += d[1] * t
+          }
+          const sg = it.sg
+          shapes[sg.i] = shapes[sg.i].replace(/ d="[^"]*"/, ' d="M' + sg.pts.map(([x, y]) => n1(x) + ' ' + n1(y)).join(' L') + '"')
+        }
+      }
+      // déplace une borne vers `to` : déformation du fil de raccordement, ou à défaut petit coude
+      const movePort = (p, to, lead) => {
+        if (to.x === p.x && to.y === p.y) return
+        lead = lead ?? findLead(p)
+        if (lead) return shear(lead, [to.x - p.x, to.y - p.y])
+        const inw = { up: [0, 2], down: [0, -2], left: [2, 0], right: [-2, 0] }[p.dir] ?? [0, 0]
+        const pts = [[p.x + inw[0], p.y + inw[1]], [p.x, p.y]]
+        if (to.x !== p.x && to.y !== p.y) pts.push([to.x, p.y])
+        pts.push([to.x, to.y])
+        shapes.push('<path d="M' + pts.map(([a, b]) => n1(a) + ' ' + n1(b)).join(' L') + '"/>')
+      }
+      const rowsOf = (P) => {
+        const rows = []
+        for (const dir of ['up', 'down', 'left', 'right']) {
+          const horiz = dir === 'up' || dir === 'down'
+          const m = new Map()
+          P.forEach((p, i) => {
+            if (p.dir !== dir) return
+            const k = horiz ? p.y : p.x
+            if (!m.has(k)) m.set(k, [])
+            m.get(k).push(i)
           })
-          any = true
+          for (const idx of m.values()) if (idx.length >= 2) rows.push({ horiz, idx: [...idx].sort((x, y) => (horiz ? P[x].x - P[y].x : P[x].y - P[y].y)) })
+        }
+        return rows
+      }
+
+      // 1. sur la grille
+      // vers l'extérieur : un fil de raccordement ne raccourcit jamais, il s'allonge jusqu'à la grille ; latéralement, au plus près
+      const snapOut = (v, outSign) => (outSign < 0 ? Math.floor(v / 10 + 1e-9) * 10 : outSign > 0 ? Math.ceil(v / 10 - 1e-9) * 10 : Math.round(v / 10) * 10)
+      let P = E.map((p) => ({
+        ...p,
+        x: snapOut(p.x, p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0),
+        y: snapOut(p.y, p.dir === 'up' ? -1 : p.dir === 'down' ? 1 : 0),
+      }))
+      if (new Set(P.map((q) => q.x + ',' + q.y)).size !== P.length) P = E.map((p) => ({ ...p }))
+      else E.forEach((p, i) => movePort(p, P[i]))
+      let k = 1
+
+      if (r.domain === 'electrical') {
+        const rows = rowsOf(P)
+        const pitch = (row) => row.idx.slice(1).map((v, j) => (row.horiz ? P[v].x - P[row.idx[j]].x : P[v].y - P[row.idx[j]].y))
+        if (rows.length && rows.every((row) => pitch(row).every((g) => g === 10))) {
+          // 2. agrandissement ×2 : tout le dessin (traits, arcs, ellipses, rectangles, positions des textes), pas l'épaisseur des traits
+          k = 2
+          const NUM = '-?\\d*\\.?\\d+(?:e-?\\d+)?'
+          const scalePath = (d) => {
+            const SIZE = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 }
+            let cmd = 'M'
+            let idx = 0
+            return d.replace(new RegExp('([A-Za-z])|(' + NUM + ')', 'g'), (m, c, num) => {
+              if (c) {
+                cmd = c.toUpperCase()
+                idx = 0
+                return c
+              }
+              const i = idx++ % (SIZE[cmd] || 1)
+              const skip = cmd === 'A' && (i === 2 || i === 3 || i === 4)
+              return skip ? num : String(n1(Number(num) * k))
+            })
+          }
+          for (let i = 0; i < shapes.length; i++) {
+            if (!shapes[i]) continue
+            let t = shapes[i].replace(/ d="([^"]*)"/, (m, d) => ' d="' + scalePath(d) + '"')
+            for (const at of ['x', 'y', 'width', 'height', 'cx', 'cy', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2', 'r']) {
+              t = t.replace(new RegExp(' ' + at + '="(' + NUM + ')"'), (m, v) => ' ' + at + '="' + n1(Number(v) * k) + '"')
+            }
+            shapes[i] = t
+          }
+          P = P.map((p) => ({ ...p, x: p.x * k, y: p.y * k }))
+        } else {
+          // 3. rangées trop serrées : bornes écartées à 20, fils de raccordement légèrement inclinés
+          const target = P.map((p) => ({ ...p }))
+          const leads = new Map()
+          for (const row of rows) {
+            const g = pitch(row)
+            if (g.every((v) => v >= 20) || g.some((v) => v < 10) || row.idx.length > 4) continue // connecteurs à nombreuses broches : inchangés
+            const ls = row.idx.map((i) => findLead(P[i]))
+            if (ls.some((l) => !l)) continue
+            const pos = (i) => (row.horiz ? P[i].x : P[i].y)
+            const c = Math.round((pos(row.idx[0]) + pos(row.idx[row.idx.length - 1])) / 2 / 10) * 10
+            const moves = row.idx.map((i, j) => ({ i, v: c + (j - (row.idx.length - 1) / 2) * 20 }))
+            if (moves.some((m, j) => Math.abs(m.v - pos(m.i)) > Math.min(10, ls[j].len))) continue
+            moves.forEach((m, j) => {
+              if (row.horiz) target[m.i].x = m.v
+              else target[m.i].y = m.v
+              leads.set(m.i, ls[j])
+            })
+          }
+          if (new Set(target.map((q) => q.x + ',' + q.y)).size === target.length) {
+            P.forEach((p, i) => movePort(p, target[i], leads.get(i)))
+            P = target
+          }
         }
       }
-      if (any && new Set(moved.map((p) => p.x + ',' + p.y)).size === moved.length) {
-        ports.forEach((p, i) => {
-          const q = moved[i]
-          if (q.x === p.x && q.y === p.y) return
-          const o = OUT[p.dir]
-          const pts = [[p.x - o[0] / 5, p.y - o[1] / 5], [p.x, p.y], [p.x + o[0], p.y + o[1]], [q.x, q.y]]
-          shapes.push('<path d="M' + pts.map(([a, b]) => n1(a + ox) + ' ' + n1(b + oy)).join(' L') + '"/>')
-        })
-        // le symbole peut avoir grandi vers le haut ou la gauche : on décale l'origine et on agrandit le cadre
-        const sx = Math.max(0, -Math.min(...moved.map((p) => p.x)))
-        const sy = Math.max(0, -Math.min(...moved.map((p) => p.y)))
-        ox -= sx
-        oy -= sy
-        moved.forEach((p, i) => {
-          ports[i].x = p.x + sx
-          ports[i].y = p.y + sy
-        })
-        if (sim?.spin) {
-          sim.spin.cx += sx
-          sim.spin.cy += sy
-        }
-        w = Math.max(w + sx, Math.ceil(Math.max(...ports.map((p) => p.x)) / 10) * 10)
-        h = Math.max(h + sy, Math.ceil(Math.max(...ports.map((p) => p.y)) / 10) * 10)
+
+      // le cadre s'adapte : nouvelle origine et nouvelles dimensions, bornes comprises
+      const minX = Math.min(box.x1 * k, ...P.map((p) => p.x))
+      const minY = Math.min(box.y1 * k, ...P.map((p) => p.y))
+      const maxX = Math.max(box.x2 * k, ...P.map((p) => p.x))
+      const maxY = Math.max(box.y2 * k, ...P.map((p) => p.y))
+      ox = Math.floor(minX / 10) * 10
+      oy = Math.floor(minY / 10) * 10
+      w = Math.max(10, Math.ceil((maxX - ox) / 10) * 10)
+      h = Math.max(10, Math.ceil((maxY - oy) / 10) * 10)
+      P.forEach((p, i) => {
+        ports[i].x = p.x - ox
+        ports[i].y = p.y - oy
+      })
+      if (sim?.spin) {
+        sim.spin = { cx: n1((sim.spin.cx + ox0) * k - ox), cy: n1((sim.spin.cy + oy0) * k - oy), r: n1(sim.spin.r * k) }
       }
     }
     const svg = shapes.join('')
