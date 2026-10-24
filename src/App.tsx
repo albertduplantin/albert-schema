@@ -284,6 +284,8 @@ function Editor() {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number; above: boolean } | null>(null)
   useEffect(() => {
     const show = (e: Event) => {
+      // sur un champ à liste de valeurs (ou sa liste ouverte), pas d'infobulle : elle cacherait les choix
+      if ((e.target as Element | null)?.closest?.('.combo')) { setTooltip(null); return }
       const el = (e.target as Element | null)?.closest?.('[data-tip]') as HTMLElement | null
       if (!el) return
       const r = el.getBoundingClientRect()
