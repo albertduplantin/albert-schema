@@ -13,10 +13,11 @@ interface PanelProps {
   onSolution: () => void
   onRestart: () => void
   onList: () => void
+  onLink: () => void
 }
 
 /** Panneau d'un exercice guidé : cahier des charges, étapes cochées automatiquement, indice de l'étape en cours. */
-export function GuidedPanel({ ex, done, missing, lang, onClose, onSolution, onRestart, onList }: PanelProps) {
+export function GuidedPanel({ ex, done, missing, lang, onClose, onSolution, onRestart, onList, onLink }: PanelProps) {
   const [brief, setBrief] = useState(true)
   const [hint, setHint] = useState<string | null>(null)
   const t = (k: Key) => tr(lang, k)
@@ -66,6 +67,7 @@ export function GuidedPanel({ ex, done, missing, lang, onClose, onSolution, onRe
         <button className="link" onClick={onSolution}>{t('guidedSolution')}</button>
         <button className="link" onClick={onRestart}>{t('guidedRestart')}</button>
         <button className="link" onClick={onList}>{t('guidedOthers')}</button>
+        <button className="link" onClick={onLink}>🔗 {lang === 'fr' ? 'Copier le lien de l’exercice' : 'Copy exercise link'}</button>
       </div>
     </section>
   )
@@ -77,12 +79,59 @@ interface ListProps {
   lang: Lang
   onStart: (ex: GExercise) => void
   onClose: () => void
+  classCode: string
+  pseudo: string
+  onClass: (code: string, pseudo: string) => void
 }
 
 const DOMAINS: Domain[] = ['electrical', 'pneumatic', 'hydraulic']
 
 /** Liste des exercices guidés, filtrable par domaine et par niveau. */
-export function GuidedList({ list, completed, lang, onStart, onClose }: ListProps) {
+/** Suivi de classe : code partagé par l'enseignant et pseudonyme de l'élève ; tableau des exercices terminés par élève. */
+function ClassBox({ lang, classCode, pseudo, onClass, list }: Pick<ListProps, 'lang' | 'classCode' | 'pseudo' | 'onClass' | 'list'>) {
+  const fr = lang === 'fr'
+  const [code, setCode] = useState(classCode)
+  const [name, setName] = useState(pseudo)
+  const [rows, setRows] = useState<Record<string, Record<string, number>> | null>(null)
+  const [err, setErr] = useState(false)
+  const load = async () => {
+    setErr(false)
+    try {
+      const r = await fetch('/api/classroom?code=' + encodeURIComponent(code.trim()))
+      if (!r.ok) throw new Error('x')
+      setRows((await r.json()).students)
+    } catch { setRows(null); setErr(true) }
+  }
+  const valid = /^[A-Za-z0-9-]{3,24}$/.test(code.trim())
+  return (
+    <details className="class-box">
+      <summary>{fr ? 'Suivi de classe (optionnel)' : 'Class tracking (optional)'}{classCode ? ` — ${classCode}` : ''}</summary>
+      <p className="muted small">{fr ? 'L’enseignant choisit un code (3 à 24 lettres, chiffres ou tirets) et le donne à la classe. Chaque élève saisit le code et un pseudonyme (pas de nom réel) : ses exercices terminés apparaissent dans le tableau. Aucun compte.' : 'The teacher picks a code (3 to 24 letters, digits or dashes) and gives it to the class. Each student enters the code and a nickname (no real name): completed exercises appear in the table. No account.'}</p>
+      <div className="class-fields">
+        <label>{fr ? 'Code de classe' : 'Class code'}<input value={code} maxLength={24} onChange={(e) => setCode(e.target.value)} /></label>
+        <label>{fr ? 'Pseudonyme' : 'Nickname'}<input value={name} maxLength={30} onChange={(e) => setName(e.target.value)} /></label>
+        <button disabled={!valid} onClick={() => { onClass(code.trim(), name.trim()); void load() }}>{fr ? 'Enregistrer et voir la classe' : 'Save and view class'}</button>
+        {classCode && <button className="link" onClick={() => { setCode(''); onClass('', name.trim()); setRows(null) }}>{fr ? 'Quitter la classe' : 'Leave class'}</button>}
+      </div>
+      {err && <p className="muted small">{fr ? 'Suivi indisponible pour le moment.' : 'Tracking is unavailable right now.'}</p>}
+      {rows && (
+        <div className="class-table">
+          <table>
+            <thead><tr><th>{fr ? 'Élève' : 'Student'}</th><th>{fr ? 'Terminés' : 'Done'}</th><th>{fr ? 'Exercices' : 'Exercises'}</th></tr></thead>
+            <tbody>
+              {Object.entries(rows).sort((a, b) => a[0].localeCompare(b[0])).map(([who, ex]) => (
+                <tr key={who}><td>{who}</td><td>{Object.keys(ex).length}/{list.length}</td><td>{Object.keys(ex).map((id) => list.find((l) => l.id === id)?.title[lang] ?? id).join(' · ')}</td></tr>
+              ))}
+              {Object.keys(rows).length === 0 && <tr><td colSpan={3}>{fr ? 'Aucun exercice terminé pour l’instant.' : 'No exercise completed yet.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </details>
+  )
+}
+
+export function GuidedList({ list, completed, lang, onStart, onClose, classCode, pseudo, onClass }: ListProps) {
   const [domain, setDomain] = useState<Domain | 'all'>('all')
   const [level, setLevel] = useState<0 | 1 | 2 | 3>(0)
   const t = (k: Key) => tr(lang, k)
@@ -104,6 +153,7 @@ export function GuidedList({ list, completed, lang, onStart, onClose }: ListProp
             ))}
           </div>
         </div>
+        <ClassBox lang={lang} classCode={classCode} pseudo={pseudo} onClass={onClass} list={list} />
         <div className="cards">
           {shown.map((ex) => (
             <div key={ex.id} className="card wide">

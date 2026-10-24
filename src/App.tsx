@@ -357,6 +357,21 @@ function Editor() {
     setGuidedDone(next)
     try { localStorage.setItem('albertschema.guidedDone', JSON.stringify(next)) } catch { /* ignoré */ }
   }, [stepsDone, guidedEx, guidedDone])
+  // suivi de classe : un code partagé et un pseudonyme ; chaque exercice terminé est signalé au serveur
+  const [classInfo, setClassInfo] = useState<{ code: string; pseudo: string }>(() => { try { return JSON.parse(localStorage.getItem('albertschema.class') || '{"code":"","pseudo":""}') } catch { return { code: '', pseudo: '' } } })
+  const setClass = (code: string, pseudo: string) => { setClassInfo({ code, pseudo }); try { localStorage.setItem('albertschema.class', JSON.stringify({ code, pseudo })) } catch { /* ignoré */ } }
+  const reported = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!guidedEx || !stepsDone.length || !stepsDone.every(Boolean) || !classInfo.code || !classInfo.pseudo || reported.current.has(guidedEx.id)) return
+    reported.current.add(guidedEx.id)
+    fetch('/api/classroom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: classInfo.code, pseudo: classInfo.pseudo, exercise: guidedEx.id }) }).catch(() => { /* hors ligne : ignoré */ })
+  }, [stepsDone, guidedEx, classInfo])
+  const copyExerciseLink = async () => {
+    if (!guidedEx) return
+    const q = new URLSearchParams({ exo: guidedEx.id })
+    if (classInfo.code) q.set('classe', classInfo.code)
+    try { await navigator.clipboard.writeText(`${location.origin}${location.pathname}?${q}`); say(lang === 'fr' ? 'Lien de l’exercice copié.' : 'Exercise link copied.') } catch { say(tr(lang, 'shareFailed')) }
+  }
   const startGuided = (ex: (typeof GUIDED)[number]) => {
     if (doc.symbols.length && !window.confirm(tr(lang, 'guidedReplace'))) return
     if (simMode) setSimMode(false)
@@ -376,6 +391,18 @@ function Editor() {
     commit(() => (guidedEx.start ?? ((b: Doc) => b))(emptyDoc()))
     setSel([])
   }
+
+  // lien d'exercice (?exo=… et éventuellement &classe=…) : ouvre l'exercice et rejoint la classe
+  useEffect(() => {
+    const q = new URLSearchParams(location.search)
+    const exo = q.get('exo'), code = q.get('classe')
+    if (!exo && !code) return
+    if (code && /^[A-Za-z0-9-]{3,24}$/.test(code)) setClass(code, classInfo.pseudo)
+    const ex = exo ? guidedById(exo) : undefined
+    history.replaceState(null, '', location.pathname + location.hash)
+    if (ex) startGuided(ex)
+    else if (code) setShowGuided(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // chronogramme : on note chaque changement d'état des appareils repérés
   const trace = useRef<{ t0: number; rows: TraceRow[] }>({ t0: 0, rows: [] })
@@ -1533,7 +1560,7 @@ function Editor() {
       </main>
 
       <aside className="props">
-        {guidedEx && <GuidedPanel ex={guidedEx} done={guidedEx.steps.map((_, i) => !!stepsDone[i])} missing={guidedEx.steps.map((_, i) => stepsMissing[i] ?? [])} lang={lang} onClose={() => chooseGuided(null)} onSolution={guidedSolution} onRestart={guidedRestart} onList={() => setShowGuided(true)} />}
+        {guidedEx && <GuidedPanel ex={guidedEx} done={guidedEx.steps.map((_, i) => !!stepsDone[i])} missing={guidedEx.steps.map((_, i) => stepsMissing[i] ?? [])} lang={lang} onClose={() => chooseGuided(null)} onSolution={guidedSolution} onRestart={guidedRestart} onList={() => setShowGuided(true)} onLink={copyExerciseLink} />}
         {sim && !sel.length ? (
           <>
             <h3>{t('simTitle')}</h3>
@@ -1910,7 +1937,7 @@ function Editor() {
         </div>
       )}
 
-      {showGuided && <GuidedList list={GUIDED} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} />}
+      {showGuided && <GuidedList list={GUIDED} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} classCode={classInfo.code} pseudo={classInfo.pseudo} onClass={setClass} />}
 
       {tourStep !== null && (
         <div className="modal" onClick={endTour}>

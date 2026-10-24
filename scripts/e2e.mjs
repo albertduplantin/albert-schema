@@ -104,6 +104,15 @@ try {
   // ── simulation : marche, voyants
   await click(/Simuler/); await sleep(400)
   check('simulation démarrée', await page.evaluate(() => !!document.querySelector('.toolbar .simbtn.on')))
+  // ── lien d'exercice : ?exo=… ouvre directement l'exercice
+  const p2 = await browser.newPage()
+  await p2.setViewport({ width: 1500, height: 900 })
+  await p2.evaluateOnNewDocument(() => { try { localStorage.clear(); localStorage.setItem('albertschema.tour', '1') } catch {} })
+  await p2.goto(URL + '?exo=d-latch&classe=TEST-1', { waitUntil: 'networkidle0' })
+  await sleep(500)
+  check('lien d’exercice : le dépannage s’ouvre avec son schéma en panne', await p2.evaluate(() => /Dépannage/.test(document.querySelector('.guided')?.textContent ?? '') && !location.search), await p2.evaluate(() => document.querySelector('.guided')?.textContent?.slice(0, 80)))
+  check('lien d’exercice : le code de classe est mémorisé', await p2.evaluate(() => JSON.parse(localStorage.getItem('albertschema.class') || '{}').code === 'TEST-1'))
+  await p2.close()
   check('aucune erreur de console', errors.length === 0, errors.join(' | '))
   await browser.close()
 } catch (e) {
