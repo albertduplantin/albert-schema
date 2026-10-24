@@ -147,5 +147,17 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   check('tensions entre potentiels : 230, 400, 24, 690/√3, 0 vers le neutre-terre', [voltageBetween('L', 'N', fake, SYMBOL_MAP), voltageBetween('L1', 'L2', fake, SYMBOL_MAP), voltageBetween('L@24', 'N@24', fake, SYMBOL_MAP), voltageBetween('L1@690', 'N@690', fake, SYMBOL_MAP), voltageBetween('N@24', 'PE', fake, SYMBOL_MAP)].join(',') === '230,400,24,398.4,0')
   check('tensions de sources différentes : indéterminées', voltageBetween('L@24', 'N', fake, SYMBOL_MAP) === undefined)
 }
+// ── source monophasée isolée (sans terre) : banc d'essai
+{
+  const { simulate, voltageBetween } = await import(ROOT + '/src/sim/engine.ts')
+  const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  const d = T.build(base, [['src', 'sim-src1i', 400, 30], ['s', Q('380_signaling_operating/20_push_buttons/poussoir'), 400, 110, 'S2'], ['c', Q('310_relays_contactors_contacts/01_coils/bobine3'), 390, 210, 'KA1']], [['src', 'a', 's', 't0'], ['s', 't1', 'c', 't0'], ['c', 't1', 'src', 'b']])
+  const coil = d.symbols.find((x: any) => x.label === 'KA1').id
+  const r = simulate(d, SYMBOL_MAP, {}, { pressed: new Set([d.symbols.find((x: any) => x.label === 'S2').id]), toggled: new Set() }, 1_000_000)
+  check('source isolée : bobine 230 V alimentée, 230 V mesurés', r.energized.has(coil) && r.volts[coil] === 230 && !r.badVoltage[coil], JSON.stringify(r.volts))
+  const fake: any = { symbols: [] }
+  check('source isolée : LI–NI = 230 V, mais phase–terre et neutre–terre indéterminés', voltageBetween('LI', 'NI', fake, SYMBOL_MAP) === 230 && voltageBetween('LI', 'PE', fake, SYMBOL_MAP) === undefined && voltageBetween('NI', 'PE', fake, SYMBOL_MAP) === undefined)
+  check('source de terre classique : neutre–terre toujours 0 V', voltageBetween('N', 'PE', fake, SYMBOL_MAP) === 0)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

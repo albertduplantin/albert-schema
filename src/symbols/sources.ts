@@ -10,7 +10,7 @@ export const SOURCES_NAME = { fr: 'Sources et alimentations', en: 'Sources and p
 
 const G = (fr: string, en: string) => ({ fr, en })
 const GROUPS: { group: { fr: string; en: string }; ids: string[] }[] = [
-  { group: G('Sources de simulation (tension réglable)', 'Simulation sources (adjustable voltage)'), ids: ['sim-src1', 'sim-src3', 'sim-l', 'sim-n', 'sim-24v', 'sim-0v'] },
+  { group: G('Sources de simulation (tension réglable)', 'Simulation sources (adjustable voltage)'), ids: ['sim-src1', 'sim-src1i', 'sim-src3', 'sim-l', 'sim-n', 'sim-24v', 'sim-0v'] },
   { group: G('Terres et masses', 'Earth and frame'), ids: ['110_network_supplies/terre', '110_network_supplies/masse'] },
   { group: G('Alimentations continues', 'DC power supplies'), ids: ['30_power_supplies/ac2_dc', '30_power_supplies/power_supply_acdc_3_pole', '40_uninterruptible_power_supply/ups'] },
   { group: G('Générateurs', 'Generators'), ids: ['10_generators/gene_tri', '10_generators/generatrice_dc', '10_generators/dynamotachymtrique', '10_generators/windmill', '10_generators/photovoltaic_solar_module', '10_generators/pvcell', '20_power_units/engine_generator', '20_power_units/micro_turbine_generator'] },

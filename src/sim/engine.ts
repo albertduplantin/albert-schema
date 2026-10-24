@@ -370,6 +370,7 @@ function voltBetween(a: string | null, b: string | null, doc: Doc, defs: Record<
   const va = potVolts(a), vb = potVolts(b)
   if (va !== vb) return undefined
   const A = basePot(a), B = basePot(b)
+  if ((A === 'LI' && B === 'NI') || (A === 'NI' && B === 'LI')) return va ?? 230 // source monophasée isolée de la terre
   if (PHASES.has(A) && PHASES.has(B)) return va ?? 400
   if (PHASES3.has(A) && B === 'N') return phaseToNeutral(va)
   if (PHASES3.has(B) && A === 'N') return phaseToNeutral(va)
@@ -378,7 +379,7 @@ function voltBetween(a: string | null, b: string | null, doc: Doc, defs: Record<
   return undefined
 }
 
-const HOT = new Set(['L', 'L1', 'L2', 'L3', '+'])
+const HOT = new Set(['L', 'L1', 'L2', 'L3', 'LI', '+'])
 /** Potentiel « chaud » : phase, +, ou première borne d'un secondaire de transformateur. */
 const isHot = (pot: string) => HOT.has(basePot(pot)) || pot.endsWith(':0')
 

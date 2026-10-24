@@ -15,13 +15,18 @@ export const potVolts = (p: string): number | undefined => {
 export function defaultVolts(pots: string[]): number | undefined {
   const b = pots.map(basePot)
   if (b.some((p) => /^L[123]$/.test(p))) return 400
-  if (b.includes('L')) return 230
+  if (b.includes('L') || b.includes('LI')) return 230
   if (b.includes('+')) return 24
   return undefined
 }
 
+/**
+ * Source monophasée isolée (banc d'essai, transformateur d'isolement) : potentiels LI et NI, sans référence à la terre —
+ * ni phase ni neutre n'est relié à la terre, le voltmètre ne peut donc rien lire entre eux et la terre.
+ */
+
 /** Blocs « source » configurables : monophasé / continu (nature au choix) et triphasé. */
-export const isSourceBlock = (defId: string) => defId === 'sim-src1' || defId === 'sim-src3'
+export const isSourceBlock = (defId: string) => defId === 'sim-src1' || defId === 'sim-src1i' || defId === 'sim-src3'
 
 /** Potentiels effectifs d'une source posée (sans la tension) : un bloc monophasé réglé en continu fournit + et −. */
 export function sourcePots(s: PlacedSymbol, def: SymbolDef): Record<string, string> {

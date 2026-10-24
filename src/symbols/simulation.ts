@@ -42,11 +42,14 @@ const block = (id: string, fr: string, en: string, w: number, ports: { id: strin
 })
 const source1 = block('sim-src1', 'Source monophasée ou continue (réglable)', 'Single-phase or DC source (adjustable)', 60, [{ id: 'a', x: 10 }, { id: 'b', x: 30 }, { id: 'c', x: 50 }])
 ;(source1.sim as { pot: Record<string, string> }).pot = { a: 'L', b: 'N', c: 'PE' }
+const source1i = block('sim-src1i', 'Source monophasée sans terre (isolée)', 'Single-phase source without earth (isolated)', 40, [{ id: 'a', x: 10 }, { id: 'b', x: 30 }])
+;(source1i.sim as { pot: Record<string, string> }).pot = { a: 'LI', b: 'NI' }
 const source3 = block('sim-src3', 'Source triphasée (réglable)', 'Three-phase source (adjustable)', 100, [{ id: 'a', x: 10 }, { id: 'b', x: 30 }, { id: 'c', x: 50 }, { id: 'd', x: 70 }, { id: 'e', x: 90 }])
 ;(source3.sim as { pot: Record<string, string> }).pot = { a: 'L1', b: 'L2', c: 'L3', d: 'N', e: 'PE' }
 
 export const simSources: SymbolDef[] = [
   source1,
+  source1i,
   source3,
   source24vac,
   sheetLink,

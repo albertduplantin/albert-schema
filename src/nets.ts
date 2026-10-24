@@ -27,7 +27,7 @@ export function netLabels(doc: Doc, defs: Record<string, SymbolDef>): Record<str
     const root = find(k(w.from))
     if (!byNet.has(root)) {
       const pot = pots[k(w.from)] ?? pots[k(w.to)]
-      byNet.set(root, pot && !pot.startsWith('~') ? pot.split('@')[0] : String(++n))
+      byNet.set(root, pot && !pot.startsWith('~') ? pot.split('@')[0].replace(/^([LN])I$/, '$1') : String(++n))
     }
     out[w.id] = byNet.get(root)!
   }

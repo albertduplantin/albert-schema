@@ -46,7 +46,7 @@ function Rotor({ cx, cy, r }: { cx: number; cy: number; r: number }) {
 }
 
 const POT_COLOR: Record<string, string> = {
-  L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
+  L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', LI: '#d62728', NI: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
   // fluide : pression (P), échappement (R), fuite (X)
   P: '#1e88e5', R: '#90a4ae', X: '#e53935',
 }
@@ -813,7 +813,7 @@ export default function Canvas(p: Props) {
                       <text x={def.w / 2} y={11} fontSize={8} textAnchor="middle" fontWeight={700}>{sourceCaption(s, def)}</text>
                       {Object.entries(sourcePots(s, def)).map(([pid, pot]) => {
                         const port = def.ports.find((q) => q.id === pid)
-                        return port ? <text key={pid} x={port.x} y={21} fontSize={5.5} textAnchor="middle">{pot === '-' ? '−' : pot}</text> : null
+                        return port ? <text key={pid} x={port.x} y={21} fontSize={5.5} textAnchor="middle">{pot === '-' ? '−' : pot === 'LI' ? 'L' : pot === 'NI' ? 'N' : pot}</text> : null
                       })}
                     </g>
                   )}
