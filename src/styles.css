@@ -465,3 +465,14 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 .exercisecard { position: fixed; left: 270px; bottom: 56px; z-index: 30; width: 320px; max-height: 60vh; overflow-y: auto; padding: 10px 12px; background: var(--ui-panel); border: 1px solid var(--ui-line); border-top: 3px solid var(--accent-olive); box-shadow: 0 8px 28px #0004; font-size: 12.5px; }
 .exercisecard p { margin: 6px 0; }
 .exercisecard .exhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+/* champ avec liste de valeurs usuelles : toujours tous les choix, même quand une valeur est déjà saisie */
+.combo { position: relative; display: flex; align-items: stretch; }
+.combo > input { flex: 1; min-width: 0; padding-right: 26px; -moz-appearance: textfield; appearance: textfield; }
+.combo > input::-webkit-inner-spin-button, .combo > input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.combo-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 24px; padding: 0; border: 0; border-left: 1px solid var(--ui-line); background: transparent; color: var(--ui-text); cursor: pointer; font-size: 11px; }
+.combo-btn:hover { background: var(--ui-bg); }
+.combo-list { position: absolute; z-index: 40; left: 0; right: 0; top: 100%; margin: 2px 0 0; padding: 2px 0; list-style: none; max-height: 220px; overflow-y: auto; background: var(--ui-panel); border: 1px solid var(--ui-line); border-top: 2px solid var(--accent-olive); box-shadow: 0 8px 22px #0003; }
+.combo-list li { padding: 6px 10px; font-size: 13px; cursor: pointer; color: var(--ui-text); }
+.combo-list li:hover { background: var(--ui-bg); }
+.combo-list li.on { font-weight: 700; background: #93a41522; }

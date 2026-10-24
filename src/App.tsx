@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addVersion, loadVersions, removeVersion, type Version } from './versions'
+import Combo from './Combo'
 import { defaultVolts, sourcePots } from './sim/potentials'
 import { isTerminal, stripOf, terminalRows } from './strips'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
@@ -925,15 +926,13 @@ function Editor() {
               return (
                 <>
                   <label data-tip={t('helpVoltsPrimary')}>{t('voltsPrimary')}{tip('helpVoltsPrimary')}
-                    <input type="number" min={0} list="volts-list-p" placeholder="230" value={selSym.voltsPrimary ?? ''}
+                    <Combo options={[230, 400, 690]} type="number" min={0} placeholder="230" value={selSym.voltsPrimary ?? ''}
                       onChange={(e) => patchSym({ voltsPrimary: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
-                    <datalist id="volts-list-p">{[230, 400, 690].map((v) => <option key={v} value={v} />)}</datalist>
                     {advLine('voltsPrimary', selSym.voltsPrimary)}
                   </label>
                   <label data-tip={t('helpPower')}>{t('power')}{tip('helpPower')}
-                    <input type="number" min={0} list="power-list" placeholder="100" value={selSym.power ?? ''}
+                    <Combo options={[40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500]} type="number" min={0} placeholder="100" value={selSym.power ?? ''}
                       onChange={(e) => patchSym({ power: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
-                    <datalist id="power-list">{[40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500].map((v) => <option key={v} value={v} />)}</datalist>
                     {advLine('power', selSym.power)}
                   </label>
                   {describeInfo(info, lang).map((line, i) => <p key={i} className="muted small">⚡ {line}</p>)}
@@ -967,10 +966,9 @@ function Editor() {
                   })()}
                   {fieldsFor(def).map((f) => (
                     <label key={f.key} data-tip={f.help[lang]}>{fieldLabel(f, lang)}<span className="tip" data-tip={f.help[lang]} aria-label={f.help[lang]}>?</span>
-                      <input type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} list={f.list ? `rl-${kind}-${f.key}` : undefined}
+                      <Combo options={f.list ?? []} type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'}
                         placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
                         value={String(selSym.rated?.[f.key] ?? '')} onChange={(e) => setR(f.key, e.target.value, f.text)} />
-                      {f.list && <datalist id={`rl-${kind}-${f.key}`}>{f.list.map((v) => <option key={String(v)} value={v} />)}</datalist>}
                       {advLine(f.key, selSym.rated?.[f.key])}
                     </label>
                   ))}
@@ -995,17 +993,15 @@ function Editor() {
                     </label>
                   )}
                   <label data-tip={t('helpSourceVolts')}>{t(pots.some((p) => /^L[123]$/.test(p)) ? 'sourceVoltsTri' : 'sourceVolts')}{tip('helpSourceVolts')}
-                    <input type="number" min={0} list="src-volts" placeholder={String(dv)} value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
-                    <datalist id="src-volts">{list.map((v) => <option key={v} value={v} />)}</datalist>
+                    <Combo options={list} type="number" min={0} placeholder={String(dv)} value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                   </label>
                 </>
               )
             })()}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return m?.k === 'transformer' || m?.k === 'coil' || m?.k === 'load' })() && (
               <label data-tip={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('helpVoltsSecondary') : t('helpVoltsRated')}>{SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? t('voltsSecondary') : t('voltsRated')}{tip(SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? 'helpVoltsSecondary' : 'helpVoltsRated')}
-                <input type="number" min={0} list="volts-list" placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
+                <Combo options={[12, 24, 48, 110, 230, 400]} type="number" min={0} placeholder={SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' ? '24' : '—'}
                   value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
-                <datalist id="volts-list">{[12, 24, 48, 110, 230, 400].map((v) => <option key={v} value={v} />)}</datalist>
                 {advLine('volts', selSym.volts)}
               </label>
             )}
