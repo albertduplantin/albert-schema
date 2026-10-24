@@ -93,5 +93,35 @@ check('suppression', r.body.items.length, 0)
 r = await call(pub, 'POST')
 check('API publique : POST refusé', r.code, 405)
 
+
+// ── exercices guidés publiés
+{
+  const { default: exos } = await import(new URL('../api/exos.js', import.meta.url).href)
+  const xo = (extra = {}) => ({ action: 'xo-save', domain: 'electrical', level: 2, minutes: 30, order: 1, title: { fr: 'Mon exercice', en: '' }, summary: { fr: 'Résumé', en: '' }, brief: { fr: ['Cahier des charges'], en: [] }, expect: { fr: ['Au repos, tout est éteint.'], en: [] }, doc, ...extra })
+  let q = await call(exos, 'GET')
+  check('exercices publics vides au départ', [q.code, q.body.items.length], [200, 0])
+  q = await call(admin, 'POST', { body: xo() })
+  check('exercice : création sans mot de passe refusée', q.code, 401)
+  q = await call(admin, 'POST', { auth: SECRET, body: xo() })
+  check('exercice : création', [q.code, q.body.ok], [200, true])
+  const xid = q.body.id
+  q = await call(exos, 'GET')
+  check('exercice public : texte anglais par défaut = français, schéma inclus', [q.body.items.length, q.body.items[0].title.en, q.body.items[0].brief.en[0], q.body.items[0].doc.symbols.length], [1, 'Mon exercice', 'Cahier des charges', 2])
+  q = await call(admin, 'POST', { auth: SECRET, body: xo({ id: xid, doc: undefined, title: { fr: 'Renommé', en: 'Renamed' } }) })
+  q = await call(admin, 'GET', { auth: SECRET, query: { action: 'exos' } })
+  check('exercice : modification conserve le schéma, la liste d’administration n’en contient pas', [q.body.items[0].title.en, 'doc' in q.body.items[0]], ['Renamed', false])
+  q = await call(admin, 'POST', { auth: SECRET, body: xo({ brief: { fr: [], en: [] } }) })
+  check('exercice sans cahier des charges refusé', q.code, 400)
+  q = await call(admin, 'POST', { auth: SECRET, body: xo({ expect: { fr: [], en: [] } }) })
+  check('exercice sans fonctionnement attendu refusé', q.code, 400)
+  q = await call(admin, 'POST', { auth: SECRET, body: xo({ doc: undefined }) })
+  check('nouvel exercice sans schéma refusé', q.code, 400)
+  q = await call(admin, 'POST', { auth: SECRET, body: { action: 'xo-delete', id: xid } })
+  q = await call(exos, 'GET')
+  check('exercice supprimé', q.body.items.length, 0)
+  q = await call(exos, 'POST')
+  check('API des exercices : POST refusé', q.code, 405)
+}
+
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests de la galerie passent')
 process.exit(fails ? 1 : 0)

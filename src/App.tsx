@@ -4,6 +4,8 @@ import { addVersion, loadVersions, removeVersion, type Version } from './version
 import Combo from './Combo'
 import { GuidedList, GuidedPanel } from './GuidedPanel'
 import { GUIDED, guidedById } from './guidedData'
+import { customExercise, type CustomExo } from './customEx'
+import type { GExercise } from './guided'
 import { defaultVolts, sourcePots } from './sim/potentials'
 import { isTerminal, stripOf, terminalRows } from './strips'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
@@ -207,7 +209,14 @@ function Editor() {
   const [showGuided, setShowGuided] = useState(false)
   const [guidedId, setGuidedId] = useState<string | null>(() => { try { return localStorage.getItem('albertschema.guided') } catch { return null } })
   const [guidedDone, setGuidedDone] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('albertschema.guidedDone') || '[]') } catch { return [] } })
-  const guidedEx = guidedId ? guidedById(guidedId) : undefined
+  // exercices publiés par l'administrateur : récupérés une fois, convertis en exercices guidés
+  const [customRaw, setCustomRaw] = useState<CustomExo[]>([])
+  useEffect(() => {
+    fetch('/api/exos').then((r) => (r.ok ? r.json() : { items: [] })).then((d: { items?: CustomExo[] }) => setCustomRaw(Array.isArray(d.items) ? d.items : [])).catch(() => { /* hors ligne ou développement : aucun exercice publié */ })
+  }, [])
+  const customs = useMemo(() => customRaw.flatMap((x) => { try { return [customExercise(x)] } catch { return [] } }), [customRaw])
+  const allGuided = useMemo(() => [...GUIDED, ...customs], [customs])
+  const guidedEx = guidedId ? allGuided.find((g) => g.id === guidedId) : undefined
   const chooseGuided = (id: string | null) => { setGuidedId(id); try { if (id) localStorage.setItem('albertschema.guided', id); else localStorage.removeItem('albertschema.guided') } catch { /* ignoré */ } }
   // visite guidée : proposée une seule fois, sur une feuille vierge, et relançable depuis l'aide (?)
   const [tourStep, setTourStep] = useState<number | null>(() => {
@@ -361,6 +370,7 @@ function Editor() {
   const [classInfo, setClassInfo] = useState<{ code: string; pseudo: string }>(() => { try { return JSON.parse(localStorage.getItem('albertschema.class') || '{"code":"","pseudo":""}') } catch { return { code: '', pseudo: '' } } })
   const setClass = (code: string, pseudo: string) => { setClassInfo({ code, pseudo }); try { localStorage.setItem('albertschema.class', JSON.stringify({ code, pseudo })) } catch { /* ignoré */ } }
   const reported = useRef<Set<string>>(new Set())
+  const pendingExo = useRef<string | null>(null)
   useEffect(() => {
     if (!guidedEx || !stepsDone.length || !stepsDone.every(Boolean) || !classInfo.code || !classInfo.pseudo || reported.current.has(guidedEx.id)) return
     reported.current.add(guidedEx.id)
@@ -372,7 +382,7 @@ function Editor() {
     if (classInfo.code) q.set('classe', classInfo.code)
     try { await navigator.clipboard.writeText(`${location.origin}${location.pathname}?${q}`); say(lang === 'fr' ? 'Lien de l’exercice copié.' : 'Exercise link copied.') } catch { say(tr(lang, 'shareFailed')) }
   }
-  const startGuided = (ex: (typeof GUIDED)[number]) => {
+  const startGuided = (ex: GExercise) => {
     if (doc.symbols.length && !window.confirm(tr(lang, 'guidedReplace'))) return
     if (simMode) setSimMode(false)
     commit(() => (ex.start ?? ((b: Doc) => b))(emptyDoc()))
@@ -401,8 +411,14 @@ function Editor() {
     const ex = exo ? guidedById(exo) : undefined
     history.replaceState(null, '', location.pathname + location.hash)
     if (ex) startGuided(ex)
+    else if (exo?.startsWith('u-')) pendingExo.current = exo // exercice publié : on attend sa réception
     else if (code) setShowGuided(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const id = pendingExo.current
+    const ex = id ? customs.find((g) => g.id === id) : undefined
+    if (ex) { pendingExo.current = null; startGuided(ex) }
+  }, [customs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // chronogramme : on note chaque changement d'état des appareils repérés
   const trace = useRef<{ t0: number; rows: TraceRow[] }>({ t0: 0, rows: [] })
@@ -1937,7 +1953,7 @@ function Editor() {
         </div>
       )}
 
-      {showGuided && <GuidedList list={GUIDED} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} classCode={classInfo.code} pseudo={classInfo.pseudo} onClass={setClass} />}
+      {showGuided && <GuidedList list={allGuided} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} classCode={classInfo.code} pseudo={classInfo.pseudo} onClass={setClass} />}
 
       {tourStep !== null && (
         <div className="modal" onClick={endTour}>

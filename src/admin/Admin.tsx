@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Examples from './Examples'
+import Exos from './Exos'
 
 type Kind = 'bug' | 'idea' | 'question'
 type Status = 'new' | 'read' | 'done' | 'spam'
@@ -82,7 +83,7 @@ export default function Admin() {
   const [kind, setKind] = useState<Kind | ''>('')
   const [status, setStatus] = useState<Status | 'todo' | ''>('todo')
   const [q, setQ] = useState('')
-  const [view, setView] = useState<'feedback' | 'examples'>('feedback')
+  const [view, setView] = useState<'feedback' | 'examples' | 'exos'>('feedback')
   const callApi = useCallback((query: string, body?: unknown) => api(token, query, body), [token])
 
   const logout = useCallback(() => {
@@ -173,11 +174,12 @@ export default function Admin() {
       <nav className="tabs" role="tablist">
         <button role="tab" aria-selected={view === 'feedback'} className={view === 'feedback' ? 'on' : ''} onClick={() => setView('feedback')}>Retours{counts.new ? ` (${counts.new})` : ''}</button>
         <button role="tab" aria-selected={view === 'examples'} className={view === 'examples' ? 'on' : ''} onClick={() => setView('examples')}>Exemples</button>
+        <button role="tab" aria-selected={view === 'exos'} className={view === 'exos' ? 'on' : ''} onClick={() => setView('exos')}>Exercices</button>
         <span className="grow" />
         <button onClick={logout}>Se déconnecter</button>
       </nav>
       {error && <p className="err" role="alert">{error}</p>}
-      {view === 'examples' ? <Examples call={callApi} onError={setError} /> : (<>
+      {view === 'exos' ? <Exos call={callApi} onError={setError} /> : view === 'examples' ? <Examples call={callApi} onError={setError} /> : (<>
       <header className="bar">
         <h1>Retours <small>{total} au total</small></h1>
         <div className="stats">

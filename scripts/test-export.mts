@@ -320,5 +320,22 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   const sum = wireSummary(d)
   check('liste de câblage : le récapitulatif compte tous les conducteurs', sum.reduce((a: number, r: any) => a + r.count, 0) === rows.length, JSON.stringify(sum))
 }
+// ── exercices publiés par l'administrateur : étapes déduites du schéma de référence
+{
+  const { customExercise } = await import(ROOT + '/src/customEx.ts')
+  const { guidedById } = await import(ROOT + '/src/guidedData.ts')
+  const ref = guidedById('e-startstop').solution(base)
+  const ex = customExercise({ id: 'abc', domain: 'electrical', level: 1, minutes: 15, title: { fr: 'Test', en: 'Test' }, summary: { fr: 's', en: 's' }, brief: { fr: ['Cahier'], en: [] }, expect: { fr: ['Attendu'], en: [] }, doc: ref })
+  const c = (doc: any, simMode = true) => ({ doc, defs: SYMBOL_MAP, lang: 'fr', simMode })
+  const state = (doc: any, simMode = true) => ex.steps.map((st: any) => st.done(c(doc, simMode)))
+  check('exercice publié : la solution coche toutes les étapes', state(ref).every(Boolean), JSON.stringify(state(ref)))
+  check('exercice publié : une feuille vide ne coche rien', state(base, false).every((x: boolean) => !x), JSON.stringify(state(base, false)))
+  const broken = guidedById('d-latch').start(base) // contact d'auto-maintien non relié
+  const sb = state(broken)
+  check('exercice publié : montage en panne = matériel et repères validés, comportement refusé', [sb[0], sb[1], sb[sb.length - 1]], [true, true, false])
+  const runStep = ex.steps[ex.steps.length - 1]
+  check('exercice publié : les écarts de comportement sont détaillés', runStep.missing(c(broken)).some((l: string) => /relâche S2/.test(l)), JSON.stringify(runStep.missing(c(broken))))
+  check('exercice publié : titre, brief et attendu repris', [ex.id, ex.brief[0].en, ex.expect[0].fr], ['u-abc', 'Cahier', 'Attendu'])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

@@ -4,6 +4,8 @@
 //   GET  /api/admin?action=doc&id=<id>     -> schéma joint (JSON brut)
 //   POST /api/admin { action: 'status' | 'note' | 'delete', id, status?, note? }
 //   GET  /api/admin?action=examples        -> { items: [exemples enregistrés, sans le schéma], hidden: [clés d'exemples intégrés masqués] }
+//   GET  /api/admin?action=exos            -> { items: [exercices guidés publiés, sans le schéma] }
+//   POST /api/admin { action: 'xo-save', id?, domain, level, minutes, order, title, summary, brief:[…], expect:[…], doc } | { action: 'xo-delete', id }
 //   POST /api/admin { action: 'ex-save', id?, title:{fr,en}, about:{fr,en}, level, order, doc }   -> { ok, id }
 //   POST /api/admin { action: 'ex-delete', id }   |   { action: 'ex-hide', key, hidden }
 //
@@ -20,6 +22,9 @@ const LIMIT = 300
 const EXAMPLES = 'albertschema:examples'
 const HIDDEN = 'albertschema:examples:hidden'
 const MAX_EXAMPLES = 100
+const EXOS = 'albertschema:exos'
+const MAX_EXOS = 60
+const lines = (v, n, max) => (Array.isArray(v) ? v.map((x) => text(x, max)).filter(Boolean).slice(0, n) : [])
 const MAX_EXAMPLE_DOC = 400_000
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 
@@ -80,6 +85,16 @@ export default async function handler(req, res) {
         }
         items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.ts).localeCompare(String(b.ts)))
         res.status(200).json({ items, hidden: hidden ?? [] })
+        return
+      }
+      if (action === 'exos') {
+        const [{ result: rows }] = await redis([['HGETALL', EXOS]])
+        const items = []
+        for (let i = 1; i < (rows?.length ?? 0); i += 2) {
+          try { const { doc, ...meta } = JSON.parse(rows[i]); items.push(meta) } catch { /* entrée illisible ignorée */ }
+        }
+        items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.ts).localeCompare(String(b.ts)))
+        res.status(200).json({ items })
         return
       }
       if (action === 'doc') {
@@ -165,6 +180,58 @@ export default async function handler(req, res) {
       if (body && body.action === 'ex-hide' && typeof body.key === 'string' && /^[A-Za-z0-9]{2,40}$/.test(body.key)) {
         await redis([[body.hidden ? 'SADD' : 'SREM', HIDDEN, body.key]])
         res.status(200).json({ ok: true })
+        return
+      }
+      if (body && body.action === 'xo-save') {
+        const title = { fr: text(body.title?.fr, 120), en: text(body.title?.en, 120) }
+        const summary = { fr: text(body.summary?.fr, 300), en: text(body.summary?.en, 300) }
+        const brief = { fr: lines(body.brief?.fr, 8, 700), en: lines(body.brief?.en, 8, 700) }
+        const expect = { fr: lines(body.expect?.fr, 12, 300), en: lines(body.expect?.en, 12, 300) }
+        const domain = ['electrical', 'pneumatic', 'hydraulic'].includes(body.domain) ? body.domain : 'electrical'
+        const level = [1, 2, 3].includes(Number(body.level)) ? Number(body.level) : 1
+        const minutes = Math.max(5, Math.min(180, Math.round(Number(body.minutes) || 20)))
+        const order = Number.isFinite(Number(body.order)) ? Math.max(-999, Math.min(999, Math.round(Number(body.order)))) : 0
+        const id = body.id ? String(body.id) : randomUUID().slice(0, 8)
+        if (!validId(id) || !title.fr || !brief.fr.length || !expect.fr.length) {
+          res.status(400).json({ error: 'invalid exercise' })
+          return
+        }
+        let doc = body.doc
+        if (doc !== undefined) {
+          const raw = typeof doc === 'string' ? doc : JSON.stringify(doc)
+          let parsed
+          try { parsed = JSON.parse(raw) } catch { parsed = null }
+          if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.symbols) || !Array.isArray(parsed.wires) || parsed.symbols.length > 2000 || raw.length > MAX_EXAMPLE_DOC) {
+            res.status(400).json({ error: 'invalid document' })
+            return
+          }
+          doc = parsed
+        }
+        const [{ result: existing }, { result: count }] = await redis([['HGET', EXOS, id], ['HLEN', EXOS]])
+        if (!existing && Number(count ?? 0) >= MAX_EXOS) {
+          res.status(400).json({ error: 'too many exercises' })
+          return
+        }
+        let prev = {}
+        try { prev = existing ? JSON.parse(existing) : {} } catch { prev = {} }
+        if (!doc && !prev.doc) {
+          res.status(400).json({ error: 'document required' })
+          return
+        }
+        const entry = { id, domain, level, minutes, order, title: { fr: title.fr, en: title.en || title.fr }, summary: { fr: summary.fr, en: summary.en || summary.fr },
+          brief: { fr: brief.fr, en: brief.en.length ? brief.en : brief.fr }, expect: { fr: expect.fr, en: expect.en.length ? expect.en : expect.fr },
+          ts: prev.ts ?? new Date().toISOString(), n: (doc ?? prev.doc).symbols.length, doc: doc ?? prev.doc }
+        await redis([['HSET', EXOS, id, JSON.stringify(entry)]])
+        res.status(200).json({ ok: true, id })
+        return
+      }
+      if (body && body.action === 'xo-delete' && validId(body.id)) {
+        await redis([['HDEL', EXOS, body.id]])
+        res.status(200).json({ ok: true })
+        return
+      }
+      if (body && String(body.action).startsWith('xo-')) {
+        res.status(400).json({ error: 'invalid request' })
         return
       }
       if (body && String(body.action).startsWith('ex-')) {
