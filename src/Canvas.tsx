@@ -831,6 +831,18 @@ export default function Canvas(p: Props) {
                 {p.sim && model === undefined && def.fluid?.k === 'valve' && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={p.sim.valveA[s.id] ? '#35c759' : '#fff'} stroke={p.sim.valveA[s.id] ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
+                {p.sim && def.fluid?.k === 'valve' && def.fluid.three && p.sim.valveB[s.id] && (
+                  <circle cx={b.x1 - 4} cy={b.y1 + 4} r={3} fill="#ff9800" stroke="#e65100" strokeWidth={0.8} />
+                )}
+                {p.sim && (def.fluid?.k === 'fgauge' || def.fluid?.k === 'fpress') && (() => {
+                  const port = def.fluid.k === 'fpress' ? def.fluid.port : def.fluid.ports[0]
+                  const pot = p.sim.potentialOf[`${s.id}:${port}`]
+                  if (pot !== 'P' && pot !== 'R') return null
+                  return <text x={b.x2 + 3} y={b.y1 + 9} fontSize={8} stroke="none" fill={pot === 'P' ? '#1565c0' : '#777'} fontWeight={700} pointerEvents="none">{pot === 'P' ? '6 bar' : '0 bar'}</text>
+                })()}
+                {p.sim && def.fluid?.k === 'fmotor' && (p.sim.fluidMotor[s.id] ?? 0) !== 0 && (
+                  <text x={b.x2 + 3} y={b.y1 + 9} fontSize={11} stroke="none" fill="#1565c0" fontWeight={700} pointerEvents="none">{p.sim.fluidMotor[s.id] === 1 ? '↻' : '↺'}</text>
+                )}
                 {p.sim && def.fluid?.k === 'cyl' && p.sim.cylPos[s.id] !== undefined && (() => {
                   const f = def.fluid
                   const c = portPos(s, f.cap)

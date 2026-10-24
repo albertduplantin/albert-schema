@@ -20,12 +20,12 @@ export function classifyFluid({ id, nameFr, ports }) {
   if (has(/501010_air_generation\//) || has(/50101545_source_energie_pneumatique/)) {
     return ports.length === 1 ? { k: 'fsource', ports: ids(ports) } : null
   }
-  if (has(/5010161060_silencer|5010161061_silencer/)) return { k: 'fsink', ports: ids(ports) }
+  if (has(/5010161060_silencer|5010161061_silencer|502070_relief\/\d+_silencer|50101820_sil_vacuum/)) return { k: 'fsink', ports: ids(ports) }
 
   // ── traversées : traitement d'air et restricteurs de débit à deux orifices
   if (has(/501012_treatment\//) || has(/501014_filter_regulator_lubricator\//) || has(/50101610_flow\/50101610(5\d)_/)) {
     const through = ports.filter((p) => p.dir === 'left' || p.dir === 'right')
-    if (has(/501012_treatment\//) && /sécheur|filtre|refroidissement|chauffage|lubrificateur|Contrôle/i.test(nameFr) && through.length === 2) return { k: 'flink', ports: ids(through) }
+    if (has(/501012_treatment\//) && /sécheur|filtre|refroidissement|chauffage|lubrificateur|Contrôle|séparation|eau/i.test(nameFr) && through.length === 2) return { k: 'flink', ports: ids(through) }
     if (has(/501014_filter_regulator_lubricator\//) && through.length === 2) return { k: 'flink', ports: ids(through) }
     if (has(/50101610_flow/) && through.length === 2) return { k: 'flink', ports: ids(through) }
     return null
@@ -40,6 +40,100 @@ export function classifyFluid({ id, nameFr, ports }) {
       return { k: 'cyl', cap: down[0].id, single: down[0].x < 35 ? 'push' : 'pull' }
     }
     return null
+  }
+
+
+  // ── réservoirs : tous les orifices sont reliés au même volume
+  if (has(/501011_tank\//)) return ports.length >= 1 ? { k: 'flink', ports: ids(ports) } : null
+
+  // ── raccords, tuyaux souples, répartiteurs, broches rotatives à un passage : liaison directe
+  if (has(/501015_pipes_connections\/(50101511|50101512|50101530|50101531|50101533|50101535|50101544|50101542|50101501)_/)) return { k: 'flink', ports: ids(ports) }
+  // bouchon : orifice obturé, sa pression est seulement affichée
+  if (has(/501015_pipes_connections\/50101520_/)) return { k: 'fgauge', ports: ids(ports) }
+  // vanne d'arrêt manuelle : ouverte au repos, un clic la ferme
+  if (has(/501015_pipes_connections\/(50101550|50101551)_/) && ports.length === 2) return { k: 'valve', rest: [[ports[0].id, ports[1].id]], act: [], a: 'man', b: 'none', manual: 'toggle' }
+
+  // ── indicateurs de pression et régulateurs
+  if (has(/501017_indicator\//) || has(/501013_control\/50101301_/)) return { k: 'fgauge', ports: ids(ports) }
+  if (has(/501013_control\//) && ports.length === 2 && ports.every((p) => p.dir === 'up' || p.dir === 'down')) return { k: 'flink', ports: ids(ports) }
+
+  // ── clapet anti-retour : l'air passe de l'orifice de droite vers celui de gauche (bille côté gauche)
+  if (has(/50101610_flow\/(5010161010|5010161011)_/) && ports.length === 2) {
+    const r = ports.find((p) => p.dir === 'right')
+    const l = ports.find((p) => p.dir === 'left')
+    return r && l ? { k: 'check', from: r.id, to: l.id } : null
+  }
+  // ── sélecteur de circuit (OU) et soupape à deux pressions (ET) : sortie en haut, entrées à gauche et à droite
+  if (has(/(50101620_logic\/5010162011_|502020_logic\/50202010_)/) || has(/(50101620_logic\/5010162012_|502020_logic\/50202020_)/)) {
+    const out = ports.find((p) => p.dir === 'up')
+    const l = ports.find((p) => p.dir === 'left')
+    const r = ports.find((p) => p.dir === 'right')
+    if (!out || !l || !r) return null
+    return { k: 'logic', op: has(/5010162011_|50202010_/) ? 'or' : 'and', ins: [l.id, r.id], out: out.id }
+  }
+
+  // ── pressostats et capteurs de pression : le contact électrique de même repère suit la pression
+  if (has(/5040_sensors\/(504010_pressure_switch|504020_pressure_sensors)\//) && ports.length === 1) return { k: 'fpress', port: ports[0].id }
+
+  // ── moteurs pneumatiques : un orifice (échappement libre) ou deux (sens selon l'orifice alimenté)
+  if (has(/503030_cylinder_motor\//)) {
+    const anti = /anti|inverse|contraire/i.test(nameFr)
+    if (ports.length === 1) return { k: 'fmotor', a: ports[0].id, ...(anti ? { rev: true } : {}) }
+    if (ports.length === 2) {
+      const [a, b] = [...ports].sort((x, y) => x.y - y.y)
+      return { k: 'fmotor', a: a.id, b: b.id }
+    }
+    return null
+  }
+  // ── pinces, vérins rotatifs, vérins spéciaux et à double tige : vérins simple ou double effet
+  if (has(/503040_cylinder_gripper\/(50304010|50304011|50304020|50304021|50304030)_|503020_cylinder_rot\/|503070_cylinder_special\/(50307012|50307014|50307016)_|50301014_cylinder_tandem_double\/(5030101410|5030101411|5030101421|5030101422)_/)) {
+    if (ports.length === 1) return { k: 'cyl', cap: ports[0].id, single: 'push' }
+    if (ports.length === 2) {
+      const [a, b] = ports.every((p) => p.dir === 'left' || p.dir === 'right') ? [...ports].sort((x, y) => x.y - y.y) : [...ports].sort(byX)
+      return { k: 'cyl', cap: a.id, rod: b.id }
+    }
+    return null
+  }
+
+  // ── distributeurs à trois positions centrées par ressorts (5/3 et 3/3) : case de gauche = commande A, de droite = commande B
+  if (has(/5020_velves\/502010_control\/(50201070_5_3_way|50201030_3_3_way)/)) {
+    const m = /^(\d)\/3([a-z]*)\s*\[([a-z_]*)\]-\[([a-z_]*)\]/i.exec(nameFr.trim())
+    if (!m) return null
+    const ways = Number(m[1])
+    const up = fluid.filter((p) => p.dir === 'up').sort(byX)
+    const down = fluid.filter((p) => p.dir === 'down').sort(byX)
+    let center = []
+    let act
+    let actB
+    if (ways === 5 && up.length === 2 && down.length === 3 && fluid.length === 5) {
+      const [B, A] = [up[0].id, up[1].id]
+      const [R1, P, R2] = [down[0].id, down[1].id, down[2].id]
+      act = [[P, B], [A, R2]]
+      actB = [[P, A], [B, R1]]
+      // position centrale d'après le dernier chiffre de la référence : 0 fermée, 1 échappement, 2 pression
+      const d = /(\d)_5_3_way$/.exec(id.replace(/\.elmt$/, ''))?.[1]
+      center = d === '1' ? [[A, R2], [B, R1]] : d === '2' ? [[P, A], [P, B]] : []
+    } else if (ways === 3 && up.length === 1 && down.length === 2 && fluid.length === 3) {
+      const [A, P, R] = [up[0].id, down[0].id, down[1].id]
+      act = [[P, A]]
+      actB = [[A, R]]
+    } else return null
+    const kind = (s) => {
+      const t = s.split('_')
+      return t.includes('elec') ? 'elec' : t.includes('man') ? 'man' : t.includes('pneu') ? 'pneu' : t.includes('spring') ? 'spring' : 'none'
+    }
+    const a = kind(m[3])
+    const b = kind(m[4])
+    if (!['elec', 'pneu', 'man'].includes(a)) return null
+    const pilots = ports.filter((p) => p.dir === 'left' || p.dir === 'right')
+    const v = { k: 'valve', rest: center, act, actB: ['elec', 'pneu'].includes(b) ? actB : [], a, b: ['elec', 'pneu', 'spring', 'none'].includes(b) ? b : 'none', three: true }
+    const left = pilots.find((p) => p.dir === 'left')
+    const right = pilots.find((p) => p.dir === 'right')
+    if (a === 'pneu') v.pilotA = (left ?? pilots[0])?.id
+    if (b === 'pneu') v.pilotB = (right ?? pilots[pilots.length - 1])?.id
+    if ((a === 'pneu' && !v.pilotA) || (b === 'pneu' && !v.pilotB)) return null
+    if (a === 'man') v.manual = 'momentary'
+    return v
   }
 
   // ── distributeurs à deux positions (2/2, 3/2, 4/2, 5/2)

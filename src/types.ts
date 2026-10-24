@@ -52,6 +52,16 @@ export type FluidModel =
   | { k: 'fsink'; ports: string[] }
   | { k: 'flink'; ports: string[] }
   | { k: 'cyl'; cap: string; rod?: string; single?: 'push' | 'pull' }
+  /** clapet anti-retour : l'air passe de `from` vers `to`, jamais en sens inverse */
+  | { k: 'check'; from: string; to: string }
+  /** fonction logique : sélecteur de circuit (OU) ou soupape à deux pressions (ET) ; `out` n'est sous pression que si la condition est remplie */
+  | { k: 'logic'; op: 'or' | 'and'; ins: [string, string]; out: string }
+  /** appareil de mesure ou bouchon : n'établit aucune liaison, sa pression est seulement affichée */
+  | { k: 'fgauge'; ports: string[] }
+  /** pressostat : un contact électrique de même repère se ferme quand l'orifice est sous pression */
+  | { k: 'fpress'; port: string }
+  /** moteur pneumatique : sens de rotation selon l'orifice alimenté (un seul orifice : un sens, échappement libre) */
+  | { k: 'fmotor'; a: string; b?: string; rev?: boolean }
   | {
       k: 'valve'
       /** liaisons entre orifices : case de repos / case actionnée (côté commande A) */
@@ -62,6 +72,9 @@ export type FluidModel =
       b: 'elec' | 'pneu' | 'spring' | 'none'
       pilotA?: string
       pilotB?: string
+      /** distributeur à trois positions : `rest` = position centrale (ressorts), `act` = case de gauche (commande A), `actB` = case de droite (commande B) */
+      three?: boolean
+      actB?: [string, string][]
       manual?: 'momentary' | 'toggle'
     }
 

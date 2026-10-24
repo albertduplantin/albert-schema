@@ -70,6 +70,10 @@ export interface SimResult {
   cylPos: Record<string, number>
   /** distributeurs : vrai = case actionnée */
   valveA: Record<string, boolean>
+  /** distributeurs à trois positions : case de droite (commande B) */
+  valveB: Record<string, boolean>
+  /** moteurs pneumatiques : sens de rotation */
+  fluidMotor: Record<string, -1 | 0 | 1>
 }
 
 export const DEFAULT_DELAY_S = 3
@@ -170,6 +174,11 @@ function actuated(s: PlacedSymbol, m: Extract<SimModel, { k: 'switch' }>, x: Ctx
           const p = cylPos(x.memory['§C:' + cyl.id], x.now, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0)
           return lm[2] === '+' ? p >= 0.98 : p <= 0.02
         }
+      }
+      if (s.label) {
+        // pressostat pneumatique de même repère : le contact suit la pression
+        const ps = x.memory['§PS:' + devKey(s.label)]
+        if (ps) return ps.on
       }
       if (isThermalSlave(s) && applyDelay(x.memory[THERMAL], 'on', THERMAL_S, x.now, x.pending)) return true // relais thermique déclenché
       return x.inp.toggled.has(s.id)
@@ -656,7 +665,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     let changed = false
     const labels = new Set([...Object.keys(memory), ...Object.keys(out.coilOn)])
     for (const l of labels) {
-      if (l.startsWith('§C:') || l.startsWith('§V:') || l.startsWith('§TRIP:') || l.startsWith('§OVL:')) continue // mémoire des circuits de fluide : gérée plus bas
+      if (l.startsWith('§C:') || l.startsWith('§V:') || l.startsWith('§TRIP:') || l.startsWith('§OVL:') || l.startsWith('§PS:')) continue // mémoire des circuits de fluide : gérée plus bas
       const on = !!out.coilOn[l]
       if (on !== (memory[l]?.on ?? false)) {
         memory[l] = { on, since: now }
@@ -668,6 +677,13 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     for (const [id, a] of Object.entries(fl.valveA)) {
       if (a !== (memory['§V:' + id]?.on ?? false)) {
         memory['§V:' + id] = { on: a, since: now }
+        changed = true
+      }
+    }
+    for (const [lab, on] of Object.entries(fl.pswitch)) {
+      const m = memory['§PS:' + lab]
+      if (!m || m.on !== on) {
+        memory['§PS:' + lab] = { on, since: now }
         changed = true
       }
     }
@@ -761,5 +777,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     thermalTrip: applyDelay(memory[THERMAL], 'on', THERMAL_S, now, []),
     cylPos: cyl,
     valveA: fl.valveA,
+    valveB: fl.valveB,
+    fluidMotor: fl.motor,
   }
 }

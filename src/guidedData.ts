@@ -120,6 +120,10 @@ const behaviour = (id: string, title: L, hint: L, steps: import('./exercises').S
 })
 
 Object.assign(ALIASES, {
+  v32t: 'qet:50_pneumatic/5020_velves/502010_control/50201020_3_2_way/5020102030_man_mech/502010203032_3_2_way',
+  v32p: 'qet:50_pneumatic/5020_velves/502010_control/50201020_3_2_way/5020102010_pneu/502010201000_3_2_way',
+  and: 'qet:50_pneumatic/5010_compressed_air/501016_funktion_components/50101620_logic/5010162012_soupape_double',
+  or: 'qet:50_pneumatic/5010_compressed_air/501016_funktion_components/50101620_logic/5010162011_selecteur',
   src1: 'sim-src1', simL: 'sim-l', simN: 'sim-n', switch: Q('380_signaling_operating/21_selector_switches/010_switch_1pos'),
   pb: Q('380_signaling_operating/20_push_buttons/poussoir'), pbnf: Q('380_signaling_operating/20_push_buttons/poussoir_nf'),
   lamp: Q('380_signaling_operating/11_optical_signaling/lampe2'), coil: Q('310_relays_contactors_contacts/01_coils/bobine3'),
@@ -598,6 +602,26 @@ const manualCycle: SimStep[] = [
   { press: (c) => ids(c, isManValve), wait: 2000, ok: (r, c) => out(r, c, isCyl2) || out(r, c, isCyl1) },
   { wait: 2000, ok: (r, c) => back(r, c, isCyl2) || back(r, c, isCyl1) },
 ]
+
+const AND_VALVE = PN('5010_compressed_air/501016_funktion_components/50101620_logic/5010162012_soupape_double')
+const V32T = PN('5020_velves/502010_control/50201020_3_2_way/5020102030_man_mech/502010203032_3_2_way')
+const V32P = PN('5020_velves/502010_control/50201020_3_2_way/5020102010_pneu/502010201000_3_2_way')
+const isAndValve: P = (c, s) => { const f = fluid(c, s); return f?.k === 'logic' && f.op === 'and' }
+const isPilot32: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' && f.a === 'pneu' && !f.three && nPorts(c, s) === 4 }
+/** Commande à deux mains : deux distributeurs 3/2 manuels V1 et V2 alimentent une soupape à deux pressions, qui pilote un 3/2 commandant un vérin simple effet. */
+const pTwoHand = (base: Doc): Doc =>
+  build(base,
+    [['a1', CYL1, 360, 90, 'A1'], ['v3', V32P, 340, 230, 'V3'], ['v1', V32T, 120, 90, 'V1'], ['v2', V32T, 240, 90, 'V2'], ['and', AND_VALVE, 180, 200, ''],
+      ['src', AIR, 250, 330, ''], ['s1', SIL, 100, 180, ''], ['s2', SIL, 230, 180, ''], ['s3', SIL, 400, 330, '']],
+    [['v1', 't1', 'src', 't0'], ['v2', 't1', 'src', 't0'], ['v3', 't2', 'src', 't0'], ['v1', 't2', 'and', 't2'], ['v2', 't2', 'and', 't1'], ['and', 't0', 'v3', 't3'],
+      ['v3', 't0', 'a1', 't0'], ['v1', 't0', 's1', 't0'], ['v2', 't0', 's2', 't0'], ['v3', 't1', 's3', 't0']])
+const twoHandSteps = (): SimStep[] => [
+  { ok: (r, c) => back(r, c, isCyl1) },
+  { press: (c) => ids(c, isMan32).slice(0, 1), toggle: (c) => ids(c, isMan32).slice(0, 1), wait: 1800, ok: (r, c) => back(r, c, isCyl1) },
+  { press: (c) => ids(c, isMan32).slice(1, 2), toggle: (c) => ids(c, isMan32).slice(1, 2), wait: 1800, ok: (r, c) => back(r, c, isCyl1) },
+  { press: (c) => ids(c, isMan32), toggle: (c) => ids(c, isMan32), wait: 1800, ok: (r, c) => out(r, c, isCyl1) },
+  { wait: 1800, ok: (r, c) => back(r, c, isCyl1) },
+]
 const PNEUMATIC: GExercise[] = [
   {
     id: 'p-manual', domain: 'pneumatic', level: 1, minutes: 15,
@@ -728,6 +752,37 @@ const PNEUMATIC: GExercise[] = [
           { press: (c) => ids(c, isCtrlSw), toggle: (c) => ids(c, isCtrlSw), wait: 2000, ok: (r, c) => out(r, c, isCyl2) },
           { wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
         ]),
+    ],
+  },
+  {
+    id: 'p-twohand', domain: 'pneumatic', level: 3, minutes: 35,
+    title: L('Commande à deux mains avec soupape à deux pressions', 'Two-hand control with a two-pressure valve'),
+    summary: L('Un vérin simple effet ne sort que si deux distributeurs manuels sont actionnés ensemble : la fonction ET en pneumatique.', 'A single-acting cylinder only extends when two manual valves are operated together: the AND function in pneumatics.'),
+    brief: [
+      L('Cahier des charges : pour que l’opérateur ait les deux mains occupées, le vérin A1 ne doit sortir que si les deux distributeurs manuels V1 et V2 sont appuyés en même temps. Dès qu’un seul est relâché, le vérin rentre.', 'Brief: to keep the operator’s hands busy, cylinder A1 must only extend when both manual valves V1 and V2 are pressed at the same time. As soon as one is released, the cylinder retracts.'),
+      L('La soupape à deux pressions laisse passer l’air vers sa sortie seulement si ses deux entrées sont sous pression. Sa sortie pilote un distributeur 3/2 à commande pneumatique (V3) qui alimente le vérin.', 'The two-pressure valve only passes air to its outlet when both inlets are under pressure. Its outlet pilots a pneumatically operated 3/2 valve (V3) that feeds the cylinder.'),
+    ],
+    parts: [
+      L('Une source d’air, deux distributeurs 3/2 manuels à ressort V1 et V2, une soupape à deux pressions, un distributeur 3/2 à commande pneumatique V3, un vérin simple effet A1, trois silencieux.', 'An air source, two spring-return manual 3/2 valves V1 and V2, a two-pressure valve, a pneumatically operated 3/2 valve V3, a single-acting cylinder A1, three silencers.'),
+    ],
+    expect: [
+      L('Au repos : le vérin A1 est rentré.', 'At rest: cylinder A1 is retracted.'),
+      L('J’appuie sur V1 seul : rien ne bouge.', 'I press V1 alone: nothing moves.'),
+      L('J’appuie sur V2 seul : rien ne bouge non plus.', 'I press V2 alone: nothing moves either.'),
+      L('J’appuie sur V1 et V2 ensemble : V3 est piloté et le vérin sort.', 'I press V1 and V2 together: V3 is piloted and the cylinder extends.'),
+      L('Je relâche : le vérin rentre.', 'I release: the cylinder retracts.'),
+    ],
+    solution: pTwoHand,
+    steps: [
+      needStep('place', L('Posez la source d’air, deux distributeurs 3/2 manuels, la soupape à deux pressions, un 3/2 piloté, un vérin simple effet et trois silencieux', 'Place the air source, two manual 3/2 valves, the two-pressure valve, a piloted 3/2 valve, a single-acting cylinder and three silencers'),
+        L('Source : {{air:loc}}. Distributeurs manuels à verrouillage : {{v32t:loc}} (ou à ressort : {{v32m:loc}}). Fonction ET : {{and:loc}}. Distributeur piloté : {{v32p:loc}}. Vérin : {{cyl1:loc}}. Silencieux : {{sil:loc}}.', 'Source: {{air:loc}}. Latching manual valves: {{v32t:loc}} (or spring-return: {{v32m:loc}}). AND function: {{and:loc}}. Piloted valve: {{v32p:loc}}. Cylinder: {{cyl1:loc}}. Silencer: {{sil:loc}}.'),
+        [[isAir, 1], [isMan32, 2], [isAndValve, 1], [isPilot32, 1], [isCyl1, 1], [isSilencer, 3]]),
+      stepPlace('wire', L('Raccordez : la source à V1, V2 et V3 ; V1 et V2 aux deux entrées de la soupape ; sa sortie au pilote de V3 ; V3 au vérin', 'Connect: the source to V1, V2 and V3; V1 and V2 to the two inlets of the valve; its outlet to the pilot of V3; V3 to the cylinder'),
+        L('Le pilote de V3 est l’orifice à gauche de son symbole. Chaque échappement (R) va à un silencieux.', 'The pilot of V3 is the port on the left of its symbol. Each exhaust (R) goes to a silencer.'),
+        (c) => pneuWired(c, [isAir, isMan32, isAndValve, isPilot32, isCyl1, isSilencer])),
+      simStep(),
+      simTest('run', L('V1 seul ou V2 seul : rien ; V1 et V2 ensemble : le vérin sort', 'V1 alone or V2 alone: nothing; V1 and V2 together: the cylinder extends'),
+        L('En simulation, cliquez sur V1 puis sur V2 : un distributeur à verrouillage reste enclenché jusqu’au clic suivant. Testez V1 seul, V2 seul, puis les deux.', 'In simulation, click V1 then V2: a latching valve stays engaged until the next click. Test V1 alone, V2 alone, then both.'), twoHandSteps()),
     ],
   },
   {
