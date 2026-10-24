@@ -215,6 +215,16 @@ const ELECTRICAL: GExercise[] = [
       L('Cahier des charges : une lampe de 230 V doit s’allumer quand on ferme un interrupteur et s’éteindre quand on l’ouvre.', 'Brief: a 230 V lamp must light when a switch is closed and go off when it is opened.'),
       L('Le circuit est alimenté par une source monophasée : phase L et neutre N. Le courant part de la phase, traverse l’interrupteur puis la lampe, et revient par le neutre.', 'The circuit is supplied by a single-phase source: phase L and neutral N. Current leaves the phase, goes through the switch then the lamp, and returns by the neutral.'),
     ],
+    parts: [
+      L('Une source monophasée (L et N).', 'A single-phase source (L and N).'),
+      L('Un interrupteur S1 (ou un bouton poussoir S1).', 'A switch S1 (or a push button S1).'),
+      L('Une lampe H1.', 'A lamp H1.'),
+    ],
+    expect: [
+      L('Au repos (interrupteur ouvert, bouton relâché) : la lampe H1 est éteinte.', 'At rest (switch open, button released): lamp H1 is off.'),
+      L('Je ferme l’interrupteur S1 (ou j’appuie sur le bouton S1) : la lampe H1 s’allume.', 'I close switch S1 (or press button S1): lamp H1 lights.'),
+      L('Je rouvre S1 (ou je relâche le bouton) : la lampe H1 s’éteint.', 'I reopen S1 (or release the button): lamp H1 goes off.'),
+    ],
     solution: lampSwitch,
     steps: [
       needStep('place', L('Posez une source, un interrupteur (ou un bouton poussoir) et une lampe', 'Place a source, a switch (or a push button) and a lamp'),
@@ -240,6 +250,16 @@ const ELECTRICAL: GExercise[] = [
       old('start-stop').statement as L,
       L('Le contact d’auto-maintien porte le même repère que la bobine (KM1) : c’est ce qui le relie à elle. Les repères se posent seuls ; vérifiez-les.', 'The latching contact has the same tag as the coil (KM1): that is what ties it to the coil. Tags are assigned automatically; check them.'),
     ],
+    parts: [
+      L('S1 : bouton poussoir NF (arrêt). S2 : bouton poussoir NO (marche).', 'S1: NC push button (stop). S2: NO push button (start).'),
+      L('KM1 : une bobine, et un contact NO de KM1 câblé en parallèle de S2 (auto-maintien).', 'KM1: a coil, and a NO contact of KM1 wired in parallel with S2 (latching).'),
+    ],
+    expect: [
+      L('Au repos : la bobine KM1 est coupée.', 'At rest: coil KM1 is off.'),
+      L('J’appuie sur S2 (marche) : KM1 s’enclenche.', 'I press S2 (start): KM1 pulls in.'),
+      L('Je relâche S2 : KM1 reste enclenchée, maintenue par son propre contact.', 'I release S2: KM1 stays pulled in, held by its own contact.'),
+      L('J’appuie sur S1 (arrêt) : KM1 retombe ; je relâche S1 : elle reste coupée.', 'I press S1 (stop): KM1 drops out; I release S1: it stays off.'),
+    ],
     solution: startStop,
     steps: [
       needStep('place', L('Posez la source, S1 (arrêt, NF), S2 (marche, NO), la bobine KM1 et un contact NO', 'Place the source, S1 (stop, NC), S2 (start, NO), coil KM1 and a NO contact'),
@@ -264,6 +284,18 @@ const ELECTRICAL: GExercise[] = [
     brief: [
       L('Cahier des charges : une commande marche / arrêt en 24 V alternatif. Un voyant H1 indique la marche, un voyant H2 l’arrêt.', 'Brief: a 24 V AC start / stop control. Lamp H1 shows running, lamp H2 shows stopped.'),
       L('Toute la commande est en 24 V : la source, la bobine et les deux voyants doivent être réglés à cette tension, sinon le Contrôle signale une surtension ou une sous-tension.', 'The whole control is 24 V: the source, the coil and both lamps must be set to that voltage, otherwise the Check reports over- or under-voltage.'),
+    ],
+    parts: [
+      L('Une source 24 V alternatif ; la bobine KM1 et les deux voyants H1 et H2 réglés à 24 V.', 'A 24 V AC source; coil KM1 and both lamps H1 and H2 set to 24 V.'),
+      L('S1 : bouton poussoir NF (arrêt). S2 : bouton poussoir NO (marche).', 'S1: NC push button (stop). S2: NO push button (start).'),
+      L('Trois contacts de KM1 : un NO en auto-maintien, un NO qui alimente H1, un NF qui alimente H2.', 'Three KM1 contacts: one NO latching, one NO feeding H1, one NC feeding H2.'),
+    ],
+    expect: [
+      L('Au repos : H2 (arrêt) est allumé, H1 (marche) est éteint, KM1 est coupée.', 'At rest: H2 (stopped) is on, H1 (running) is off, KM1 is off.'),
+      L('J’appuie sur S2 : KM1 s’enclenche, H1 s’allume et H2 s’éteint.', 'I press S2: KM1 pulls in, H1 lights and H2 goes off.'),
+      L('Je relâche S2 : tout reste ainsi (auto-maintien).', 'I release S2: everything stays that way (latching).'),
+      L('J’appuie sur S1 : KM1 retombe, H1 s’éteint et H2 se rallume.', 'I press S1: KM1 drops out, H1 goes off and H2 lights again.'),
+      L('Le Contrôle ne signale aucune erreur de tension.', 'The Check reports no voltage error.'),
     ],
     solution: lamps24,
     steps: [
@@ -295,6 +327,14 @@ const ELECTRICAL: GExercise[] = [
       L('Observez le schéma en simulation, trouvez ce qui empêche l’auto-maintien et réparez-le.', 'Watch the diagram in simulation, find what prevents latching and repair it.'),
     ],
     start: brokenLatch,
+    parts: [
+      L('Circuit fourni : S1 (NF, arrêt), S2 (NO, marche), bobine KM1 et un contact NO de KM1 déjà posé mais non câblé.', 'Circuit provided: S1 (NC, stop), S2 (NO, start), coil KM1 and a KM1 NO contact already placed but not wired.'),
+    ],
+    expect: [
+      L('Panne constatée : j’appuie sur S2, KM1 s’enclenche ; dès que je relâche S2, KM1 retombe.', 'Observed fault: I press S2, KM1 pulls in; as soon as I release S2, KM1 drops out.'),
+      L('Après réparation : j’appuie sur S2 puis je relâche, KM1 reste enclenchée.', 'After repair: I press S2 then release, KM1 stays pulled in.'),
+      L('J’appuie sur S1 : KM1 retombe et reste coupée.', 'I press S1: KM1 drops out and stays off.'),
+    ],
     solution: startStop,
     steps: [
       simStep(),
@@ -314,6 +354,16 @@ const ELECTRICAL: GExercise[] = [
     title: L('Commande depuis deux postes', 'Control from two stations'),
     summary: L('Deux boutons de marche en parallèle, deux boutons d’arrêt en série.', 'Two start buttons in parallel, two stop buttons in series.'),
     brief: [old('two-posts').statement as L, L('Règle à retenir : on met les arrêts en série (n’importe lequel coupe) et les marches en parallèle (n’importe lequel démarre).', 'Rule to remember: stops in series (any one breaks) and starts in parallel (any one starts).')],
+    parts: [
+      L('Poste 1 : arrêt S1 (NF) et marche S2 (NO). Poste 2 : arrêt S4 (NF) et marche S3 (NO).', 'Station 1: stop S1 (NC) and start S2 (NO). Station 2: stop S4 (NC) and start S3 (NO).'),
+      L('Une bobine KM1 et un contact NO de KM1 (auto-maintien).', 'One coil KM1 and one KM1 NO contact (latching).'),
+    ],
+    expect: [
+      L('Au repos : KM1 est coupée.', 'At rest: KM1 is off.'),
+      L('J’appuie sur S2 (poste 1) : KM1 s’enclenche ; je relâche : elle reste enclenchée.', 'I press S2 (station 1): KM1 pulls in; I release: it stays in.'),
+      L('J’appuie sur S4 (poste 2) : KM1 retombe.', 'I press S4 (station 2): KM1 drops out.'),
+      L('J’appuie sur S3 (poste 2) : KM1 s’enclenche. J’appuie sur S1 (poste 1) : elle retombe.', 'I press S3 (station 2): KM1 pulls in. I press S1 (station 1): it drops out.'),
+    ],
     solution: twoPosts,
     steps: [
       needStep('place', L('Posez la source, deux arrêts NF (S1, S4), deux marches NO (S2, S3), la bobine KM1 et son contact', 'Place the source, two NC stops (S1, S4), two NO starts (S2, S3), coil KM1 and its contact'),
@@ -333,6 +383,18 @@ const ELECTRICAL: GExercise[] = [
     title: L('Démarrage en cascade temporisé', 'Delayed cascade start'),
     summary: L('KM2 démarre 5 s après KM1 grâce à une bobine temporisée.', 'KM2 starts 5 s after KM1 thanks to a timed coil.'),
     brief: [old('delay').statement as L, L('La bobine temporisée KT est alimentée par un contact de KM1 ; un contact temporisé de KT enclenche ensuite KM2 après le délai réglé dans ses propriétés (5 s).', 'The timed coil KT is fed by a KM1 contact; a KT timed contact then energises KM2 after the delay set in its properties (5 s).')],
+    parts: [
+      L('S1 : arrêt (NF). S2 : marche (NO).', 'S1: stop (NC). S2: start (NO).'),
+      L('KM1 : bobine et contact NO d’auto-maintien. KT : bobine temporisée réglée à 5 s, alimentée par un contact NO de KM1.', 'KM1: coil and NO latching contact. KT: timed coil set to 5 s, fed by a NO contact of KM1.'),
+      L('KM2 : bobine alimentée par un contact NO de KT.', 'KM2: coil fed by a NO contact of KT.'),
+    ],
+    expect: [
+      L('Au repos : KM1, KT et KM2 sont coupées.', 'At rest: KM1, KT and KM2 are off.'),
+      L('J’appuie sur S2 : KM1 s’enclenche et la temporisation KT démarre ; KM2 n’est pas encore enclenchée.', 'I press S2: KM1 pulls in and the KT timer starts; KM2 is not yet in.'),
+      L('Au bout de 2 s : KM2 est toujours coupée.', 'After 2 s: KM2 is still off.'),
+      L('Au bout de 6 s (5 s écoulées) : KM2 s’enclenche.', 'After 6 s (5 s elapsed): KM2 pulls in.'),
+      L('J’appuie sur S1 : tout retombe.', 'I press S1: everything drops out.'),
+    ],
     solution: delayed,
     steps: [
       needStep('place', L('Posez la source, S1, S2, KM1 et son auto-maintien, la bobine temporisée KT, KM2 et leurs contacts', 'Place the source, S1, S2, KM1 and its latching contact, the timed coil KT, KM2 and its contacts'),
@@ -354,6 +416,17 @@ const ELECTRICAL: GExercise[] = [
     title: L('Verrouillage de deux contacteurs', 'Interlocking two contactors'),
     summary: L('Deux départs qui ne doivent jamais être enclenchés ensemble.', 'Two starters that must never be energised together.'),
     brief: [old('interlock').statement as L, L('C’est la sécurité des inverseurs de sens : sans verrouillage, deux phases seraient court-circuitées si KM1 et KM2 collaient ensemble.', 'This is the safety of reversing starters: without interlock, two phases would be short-circuited if KM1 and KM2 pulled in together.')],
+    parts: [
+      L('S1 : arrêt général (NF). S2 : marche de KM1 (NO). S3 : marche de KM2 (NO).', 'S1: general stop (NC). S2: start of KM1 (NO). S3: start of KM2 (NO).'),
+      L('KM1 et KM2 : chacun une bobine, un contact NO d’auto-maintien et un contact NF de verrouillage placé en série devant la bobine de l’autre.', 'KM1 and KM2: each one coil, one NO latching contact and one NC interlock contact placed in series in front of the other one’s coil.'),
+    ],
+    expect: [
+      L('J’appuie sur S2 : KM1 s’enclenche seul.', 'I press S2: KM1 pulls in alone.'),
+      L('J’appuie sur S3 pendant que KM1 est enclenché : KM2 reste coupée (verrouillage).', 'I press S3 while KM1 is in: KM2 stays off (interlock).'),
+      L('J’appuie sur S1 : arrêt général, KM1 et KM2 sont coupées.', 'I press S1: general stop, KM1 and KM2 are off.'),
+      L('J’appuie sur S3 : KM2 s’enclenche seule.', 'I press S3: KM2 pulls in alone.'),
+      L('J’appuie sur S2 pendant que KM2 est enclenché : KM1 reste coupée.', 'I press S2 while KM2 is in: KM1 stays off.'),
+    ],
     solution: interlock,
     steps: [
       needStep('place', L('Posez la source, S1, S2, S3, KM1 et KM2 avec chacun un contact NO et un contact NF', 'Place the source, S1, S2, S3, KM1 and KM2, each with one NO and one NC contact'),
@@ -372,6 +445,18 @@ const ELECTRICAL: GExercise[] = [
     title: L('Démarrage séquentiel', 'Sequential start'),
     summary: L('KM2 ne démarre que si KM1 est déjà enclenché.', 'KM2 starts only if KM1 is already on.'),
     brief: [old('sequence').statement as L, L('Application typique : un convoyeur ne doit démarrer que si celui qui le suit tourne déjà.', 'Typical use: a conveyor must only start if the one after it is already running.')],
+    parts: [
+      L('S1 : arrêt des deux (NF). S2 : marche de KM1 (NO). S3 : marche de KM2 (NO).', 'S1: stop both (NC). S2: start of KM1 (NO). S3: start of KM2 (NO).'),
+      L('KM1 : bobine + contact NO d’auto-maintien. KM2 : bobine + contact NO d’auto-maintien.', 'KM1: coil + NO latching contact. KM2: coil + NO latching contact.'),
+      L('Un contact NO de KM1 placé en série devant S3 : c’est la condition de démarrage de KM2.', 'A KM1 NO contact placed in series in front of S3: this is the start condition for KM2.'),
+    ],
+    expect: [
+      L('J’appuie sur S3 seul (KM1 pas encore enclenchée) : rien ne se passe, KM2 reste coupée.', 'I press S3 alone (KM1 not yet in): nothing happens, KM2 stays off.'),
+      L('J’appuie sur S2 : KM1 s’enclenche (et reste enclenchée).', 'I press S2: KM1 pulls in (and stays in).'),
+      L('J’appuie ensuite sur S3 : KM2 s’enclenche aussi.', 'I then press S3: KM2 pulls in too.'),
+      L('Je relâche tout : KM1 et KM2 restent enclenchées.', 'I release everything: KM1 and KM2 stay in.'),
+      L('J’appuie sur S1 : KM1 et KM2 retombent.', 'I press S1: KM1 and KM2 drop out.'),
+    ],
     solution: sequence,
     steps: [
       needStep('place', L('Posez la source, S1, S2, S3, KM1, KM2 et trois contacts NO', 'Place the source, S1, S2, S3, KM1, KM2 and three NO contacts'),
@@ -471,6 +556,14 @@ const PNEUMATIC: GExercise[] = [
       L('Cahier des charges : un vérin double effet doit sortir quand on maintient un distributeur manuel appuyé, et rentrer dès qu’on le relâche (rappel par ressort).', 'Brief: a double-acting cylinder must extend while a manual valve is held down, and retract as soon as it is released (spring return).'),
       L('Le distributeur 5/2 a cinq orifices : P (alimentation), A et B (vers le vérin), R1 et R2 (échappements, avec silencieux). Le vérin reçoit l’air d’un côté pendant que l’autre côté s’échappe.', 'The 5/2 valve has five ports: P (supply), A and B (to the cylinder), R1 and R2 (exhausts, with silencers). The cylinder gets air on one side while the other side exhausts.'),
     ],
+    parts: [
+      L('Une source d’air, un distributeur 5/2 manuel à ressort (V1), un vérin double effet (A1), deux silencieux.', 'An air source, a spring-return manual 5/2 valve (V1), a double-acting cylinder (A1), two silencers.'),
+    ],
+    expect: [
+      L('Au repos (distributeur non actionné) : le vérin A1 est rentré.', 'At rest (valve not actuated): cylinder A1 is retracted.'),
+      L('Je maintiens le distributeur V1 appuyé : le vérin sort en une seconde environ.', 'I hold valve V1 pressed: the cylinder extends in about a second.'),
+      L('Je relâche V1 : le ressort ramène le distributeur et le vérin rentre.', 'I release V1: the spring returns the valve and the cylinder retracts.'),
+    ],
     solution: pManual,
     steps: [
       needStep('place', L('Posez la source d’air, un distributeur 5/2 manuel à ressort, un vérin double effet et deux silencieux', 'Place the air source, a spring-return manual 5/2 valve, a double-acting cylinder and two silencers'),
@@ -491,6 +584,14 @@ const PNEUMATIC: GExercise[] = [
       L('Cahier des charges : un vérin simple effet sort tant qu’on appuie sur un bouton pneumatique et rentre quand on le relâche, rappelé par son ressort.', 'Brief: a single-acting cylinder extends while a pneumatic button is pressed and retracts when it is released, returned by its spring.'),
       L('Le distributeur 3/2 normalement fermé alimente le vérin quand il est actionné ; au repos il met le vérin à l’échappement par son orifice R.', 'The normally closed 3/2 valve feeds the cylinder when actuated; at rest it connects the cylinder to exhaust through port R.'),
     ],
+    parts: [
+      L('Une source d’air, un distributeur 3/2 manuel normalement fermé (V1), un vérin simple effet (A1), un silencieux.', 'An air source, a normally closed manual 3/2 valve (V1), a single-acting cylinder (A1), one silencer.'),
+    ],
+    expect: [
+      L('Au repos : le vérin A1 est rentré (ressort), le distributeur V1 ne fait pas passer l’air.', 'At rest: cylinder A1 is retracted (spring), valve V1 passes no air.'),
+      L('Je maintiens V1 appuyé : l’air arrive au vérin et celui-ci sort.', 'I hold V1 pressed: air reaches the cylinder and it extends.'),
+      L('Je relâche V1 : le vérin se vide par l’orifice R et rentre sous l’effet du ressort.', 'I release V1: the cylinder exhausts through port R and retracts under its spring.'),
+    ],
     solution: pSingle,
     steps: [
       needStep('place', L('Posez la source d’air, un distributeur 3/2 manuel, un vérin simple effet et un silencieux', 'Place the air source, a manual 3/2 valve, a single-acting cylinder and a silencer'),
@@ -510,6 +611,15 @@ const PNEUMATIC: GExercise[] = [
     brief: [
       L('Cahier des charges : un interrupteur S1 fait sortir un vérin double effet par l’intermédiaire d’une électrovanne 5/2 à rappel par ressort. Interrupteur ouvert, le vérin rentre.', 'Brief: a switch S1 extends a double-acting cylinder through a spring-return 5/2 solenoid valve. With the switch open, the cylinder retracts.'),
       L('L’électrovanne et sa bobine sont deux symboles : ils sont reliés par un repère commun (YV1). La bobine se câble comme n’importe quel récepteur électrique.', 'The solenoid valve and its coil are two symbols: they are tied by a shared tag (YV1). The coil is wired like any electrical load.'),
+    ],
+    parts: [
+      L('Circuit pneumatique : source d’air, électrovanne 5/2 à ressort repérée YV1, vérin double effet A1, deux silencieux.', 'Pneumatic circuit: air source, spring-return 5/2 solenoid valve tagged YV1, double-acting cylinder A1, two silencers.'),
+      L('Circuit électrique : source, interrupteur S1 (ou bouton), bobine repérée YV1.', 'Electrical circuit: source, switch S1 (or button), coil tagged YV1.'),
+    ],
+    expect: [
+      L('S1 ouvert (ou bouton relâché) : la bobine YV1 n’est pas alimentée, le vérin est rentré.', 'S1 open (or button released): coil YV1 is not energised, the cylinder is retracted.'),
+      L('Je ferme S1 (ou j’appuie) : YV1 est alimentée, l’électrovanne bascule et le vérin sort.', 'I close S1 (or press): YV1 is energised, the valve switches and the cylinder extends.'),
+      L('J’ouvre S1 (ou je relâche) : YV1 retombe, le ressort ramène la vanne et le vérin rentre.', 'I open S1 (or release): YV1 drops out, the spring returns the valve and the cylinder retracts.'),
     ],
     solution: pElectro(1),
     steps: [
@@ -538,6 +648,15 @@ const PNEUMATIC: GExercise[] = [
     brief: [
       L('Cahier des charges : pour éviter qu’un opérateur n’ait la main sous le vérin, celui-ci ne sort que si les deux interrupteurs S1 et S2 sont fermés en même temps.', 'Brief: so an operator never has a hand under the cylinder, it only extends if both switches S1 and S2 are closed at the same time.'),
       L('Deux interrupteurs en série forment un ET logique : il suffit qu’un seul soit ouvert pour couper la bobine.', 'Two switches in series make a logical AND: it is enough for one to be open to cut the coil.'),
+    ],
+    parts: [
+      L('Comme l’exercice précédent, avec deux interrupteurs S1 et S2 en série devant la bobine YV1.', 'As the previous exercise, with two switches S1 and S2 in series in front of coil YV1.'),
+    ],
+    expect: [
+      L('S1 seul fermé : rien ne bouge, le vérin reste rentré.', 'Only S1 closed: nothing moves, the cylinder stays retracted.'),
+      L('S2 seul fermé : rien ne bouge non plus.', 'Only S2 closed: nothing moves either.'),
+      L('S1 et S2 fermés en même temps : YV1 est alimentée et le vérin sort.', 'S1 and S2 closed at the same time: YV1 is energised and the cylinder extends.'),
+      L('J’ouvre l’un des deux : le vérin rentre.', 'I open either one: the cylinder retracts.'),
     ],
     solution: pElectro(2),
     steps: [
@@ -569,6 +688,13 @@ const PNEUMATIC: GExercise[] = [
       L('Quand un vérin ne bouge pas, on suit l’air depuis la source : chaque orifice doit être relié. Trouvez le raccord manquant.', 'When a cylinder does not move, follow the air from the source: every port must be connected. Find the missing connection.'),
     ],
     start: pBroken,
+    parts: [
+      L('Circuit fourni : source d’air, distributeur 5/2 manuel, vérin double effet, deux silencieux, avec un raccord manquant.', 'Circuit provided: air source, manual 5/2 valve, double-acting cylinder, two silencers, with a missing connection.'),
+    ],
+    expect: [
+      L('Panne constatée : je maintiens le distributeur appuyé, le vérin ne bouge pas.', 'Observed fault: I hold the valve pressed, the cylinder does not move.'),
+      L('Après réparation : je maintiens le distributeur, le vérin sort ; je relâche, il rentre.', 'After repair: I hold the valve, the cylinder extends; I release, it retracts.'),
+    ],
     solution: pManual,
     steps: [
       simStep(),
@@ -585,6 +711,17 @@ const PNEUMATIC: GExercise[] = [
     brief: [
       L('Cahier des charges : tant qu’on maintient S2 appuyé, le vérin A1 fait des allers-retours : il sort (A+), et dès qu’il est sorti il rentre (A−), puis ressort, etc.', 'Brief: as long as S2 is held, cylinder A1 cycles: it extends (A+), and as soon as it is out it retracts (A−), then extends again, and so on.'),
       L('On utilise une électrovanne 5/2 bistable (deux bobines YV1 et YV2 : elle garde sa position) et deux fins de course : A1− (vérin rentré) commande YV1, A1+ (vérin sorti) commande YV2.', 'A bistable 5/2 solenoid valve (two coils YV1 and YV2: it keeps its position) and two limit switches are used: A1− (cylinder retracted) drives YV1, A1+ (cylinder extended) drives YV2.'),
+    ],
+    parts: [
+      L('Circuit pneumatique : source, électrovanne 5/2 bistable repérée YV1/YV2, vérin A1, deux silencieux.', 'Pneumatic circuit: source, bistable 5/2 solenoid valve tagged YV1/YV2, cylinder A1, two silencers.'),
+      L('Commande : bouton poussoir S2, fin de course A1− (vérin rentré) vers YV1, fin de course A1+ (vérin sorti) vers YV2, deux bobines YV1 et YV2.', 'Control: push button S2, limit switch A1− (cylinder retracted) to YV1, limit switch A1+ (cylinder extended) to YV2, two coils YV1 and YV2.'),
+    ],
+    expect: [
+      L('Au repos : le vérin est rentré et ne bouge pas.', 'At rest: the cylinder is retracted and does not move.'),
+      L('Je maintiens S2 : A1− (vérin rentré) alimente YV1, le vérin sort.', 'I hold S2: A1− (cylinder retracted) energises YV1, the cylinder extends.'),
+      L('Dès qu’il est sorti, A1+ alimente YV2 : la vanne bascule et le vérin rentre.', 'As soon as it is out, A1+ energises YV2: the valve switches and the cylinder retracts.'),
+      L('De retour en position rentrée, A1− relance YV1 : le cycle recommence tant que S2 est maintenu.', 'Back in the retracted position, A1− energises YV1 again: the cycle restarts as long as S2 is held.'),
+      L('Je relâche S2 : le vérin termine son cycle et s’arrête rentré.', 'I release S2: the cylinder finishes its cycle and stops retracted.'),
     ],
     solution: pAuto,
     steps: [
@@ -720,6 +857,15 @@ const HYDRAULIC: GExercise[] = [
       L('Cahier des charges : une pompe aspire l’huile dans une bâche et l’envoie à un distributeur 4 voies. Le distributeur dirige l’huile vers l’une ou l’autre chambre d’un vérin double effet ; l’huile de l’autre chambre retourne à la bâche.', 'Brief: a pump draws oil from a tank and sends it to a 4-way valve. The valve directs the oil to one or the other chamber of a double-acting cylinder; the oil from the other chamber returns to the tank.'),
       L('En hydraulique, l’huile ne s’échappe pas à l’air : elle revient toujours à la bâche. Un circuit est donc toujours une boucle fermée sur la bâche.', 'In hydraulics the oil does not vent to air: it always returns to the tank. A circuit is therefore always a loop closed on the tank.'),
     ],
+    parts: [
+      L('Une bâche, une pompe, un distributeur 4 voies, un vérin double effet.', 'A tank, a pump, a 4-way valve, a double-acting cylinder.'),
+    ],
+    expect: [
+      L('La pompe aspire l’huile dans la bâche (aspiration reliée à la bâche).', 'The pump draws oil from the tank (suction connected to the tank).'),
+      L('Son refoulement va à l’orifice P du distributeur (un des deux orifices du bas).', 'Its delivery goes to port P of the valve (one of the two bottom ports).'),
+      L('L’autre orifice du bas, T, retourne à la bâche.', 'The other bottom port, T, returns to the tank.'),
+      L('Les deux orifices du haut, A et B, vont aux deux chambres du vérin : selon la position du distributeur, l’huile entre par l’une et ressort par l’autre vers la bâche.', 'The two top ports, A and B, go to the two cylinder chambers: depending on the valve position, oil enters one and leaves the other towards the tank.'),
+    ],
     solution: hCyl,
     steps: [
       needStep('place', L('Posez la bâche, la pompe, un distributeur 4 voies et un vérin double effet', 'Place the tank, the pump, a 4-way valve and a double-acting cylinder'),
@@ -739,6 +885,14 @@ const HYDRAULIC: GExercise[] = [
     brief: [
       L('Cahier des charges : un moteur hydraulique doit tourner dans les deux sens, commandé par un distributeur 4 voies alimenté par une pompe.', 'Brief: a hydraulic motor must turn in both directions, driven by a 4-way valve fed by a pump.'),
       L('Le schéma est le même que pour un vérin : le moteur remplace simplement le vérin. Inverser le distributeur inverse le sens de rotation.', 'The diagram is the same as for a cylinder: the motor simply replaces the cylinder. Reversing the valve reverses the direction of rotation.'),
+    ],
+    parts: [
+      L('Une bâche, une pompe, un distributeur 4 voies, un moteur hydraulique.', 'A tank, a pump, a 4-way valve, a hydraulic motor.'),
+    ],
+    expect: [
+      L('Même câblage que pour le vérin : aspiration à la bâche, refoulement à P, T à la bâche.', 'Same wiring as for the cylinder: suction to the tank, delivery to P, T to the tank.'),
+      L('Les orifices A et B du distributeur vont aux deux orifices du moteur.', 'Ports A and B of the valve go to the two ports of the motor.'),
+      L('Selon la position du distributeur, l’huile entre par l’un ou l’autre orifice : le moteur tourne dans un sens ou dans l’autre.', 'Depending on the valve position, oil enters one port or the other: the motor turns one way or the other.'),
     ],
     solution: hMotor,
     steps: [
@@ -760,6 +914,14 @@ const HYDRAULIC: GExercise[] = [
       L('Cahier des charges : sur le circuit du vérin, la pompe doit être protégée des impuretés par un filtre d’aspiration, et on doit pouvoir isoler la bâche par une vanne manuelle pour intervenir sur la pompe.', 'Brief: on the cylinder circuit, the pump must be protected from contamination by a suction filter, and the tank must be isolable by a manual valve so the pump can be serviced.'),
       L('Les deux organes se placent en série sur la ligne bâche → pompe : bâche, vanne d’arrêt, filtre, pompe. Posés directement sur un fil, ils s’y insèrent seuls.', 'Both parts go in series on the tank → pump line: tank, shut-off valve, filter, pump. Dropped on a wire, they insert themselves.'),
     ],
+    parts: [
+      L('Le circuit du vérin complet, plus une vanne manuelle et un filtre sur la ligne d’aspiration.', 'The complete cylinder circuit, plus a manual valve and a filter on the suction line.'),
+    ],
+    expect: [
+      L('La pompe n’aspire plus directement dans la bâche : l’huile passe d’abord par la vanne manuelle, puis par le filtre, puis entre dans la pompe.', 'The pump no longer draws directly from the tank: oil first passes through the manual valve, then the filter, then enters the pump.'),
+      L('Le reste du circuit est inchangé : refoulement à P, T à la bâche, A et B au vérin.', 'The rest of the circuit is unchanged: delivery to P, T to the tank, A and B to the cylinder.'),
+      L('Fermer la vanne isole la bâche pour intervenir sur la pompe.', 'Closing the valve isolates the tank so the pump can be serviced.'),
+    ],
     solution: hFilter,
     steps: [
       stepPlace('base', L('Réalisez d’abord le circuit de base : bâche, pompe, distributeur et vérin raccordés', 'First build the basic circuit: tank, pump, valve and cylinder connected'),
@@ -780,6 +942,14 @@ const HYDRAULIC: GExercise[] = [
       L('Cahier des charges : on veut lisser les à-coups de pression et garder une réserve d’huile sous pression. On ajoute un accumulateur sur la ligne de refoulement de la pompe.', 'Brief: we want to smooth pressure pulses and keep a reserve of pressurised oil. An accumulator is added on the pump delivery line.'),
       L('L’accumulateur est un piquage sur la ligne de pression : il se raccorde au même point que le refoulement de la pompe, avant le distributeur.', 'The accumulator is a branch on the pressure line: it connects at the same point as the pump delivery, before the valve.'),
     ],
+    parts: [
+      L('Le circuit du vérin complet, plus un accumulateur.', 'The complete cylinder circuit, plus an accumulator.'),
+    ],
+    expect: [
+      L('L’accumulateur se raccorde sur la ligne de refoulement, entre la pompe et l’orifice P du distributeur.', 'The accumulator connects on the delivery line, between the pump and port P of the valve.'),
+      L('Le reste du circuit est inchangé.', 'The rest of the circuit is unchanged.'),
+      L('Il stocke de l’huile sous pression quand la pompe en fournit trop et en restitue quand la demande augmente, ce qui lisse les à-coups.', 'It stores pressurised oil when the pump supplies too much and returns it when demand rises, smoothing pulses.'),
+    ],
     solution: hAccu,
     steps: [
       stepPlace('base', L('Réalisez d’abord le circuit de base', 'First build the basic circuit'),
@@ -799,6 +969,15 @@ const HYDRAULIC: GExercise[] = [
     brief: [
       L('Cahier des charges : une seule pompe alimente deux vérins A1 et A2, chacun commandé par son propre distributeur 4 voies. Les deux distributeurs sont alimentés en parallèle par la pompe et retournent à la même bâche.', 'Brief: a single pump feeds two cylinders A1 and A2, each driven by its own 4-way valve. Both valves are fed in parallel by the pump and return to the same tank.'),
       L('« En parallèle » signifie que le refoulement de la pompe se divise en deux branches, une par distributeur : chaque vérin peut bouger sans l’autre.', '“In parallel” means the pump delivery splits into two branches, one per valve: each cylinder can move without the other.'),
+    ],
+    parts: [
+      L('Une bâche, une seule pompe, deux distributeurs 4 voies, deux vérins A1 et A2.', 'One tank, a single pump, two 4-way valves, two cylinders A1 and A2.'),
+    ],
+    expect: [
+      L('La pompe aspire dans la bâche et son refoulement se divise en deux branches, une vers l’orifice P de chaque distributeur.', 'The pump draws from the tank and its delivery splits into two branches, one to port P of each valve.'),
+      L('Le distributeur 1 commande le vérin A1 (ses orifices A et B vont aux deux chambres de A1).', 'Valve 1 drives cylinder A1 (its ports A and B go to the two chambers of A1).'),
+      L('Le distributeur 2 commande le vérin A2 de la même façon.', 'Valve 2 drives cylinder A2 in the same way.'),
+      L('Les orifices T des deux distributeurs retournent à la bâche : chaque vérin peut être commandé sans l’autre.', 'The T ports of both valves return to the tank: each cylinder can be driven without the other.'),
     ],
     solution: hTwo,
     steps: [

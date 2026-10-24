@@ -505,3 +505,7 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 
 .guided-missing { margin: 5px 0 2px; padding: 5px 8px; background: #e0800018; border-left: 3px solid #e08000; font-weight: 400; font-size: 12px; }
 .guided-missing ul { margin: 3px 0 0 16px; padding: 0; }
+
+.guided-brief h4 { margin: 8px 0 3px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ui-muted); }
+.guided-brief ul, .guided-brief ol { margin: 2px 0 4px 18px; padding: 0; }
+.guided-brief li { margin: 2px 0; }

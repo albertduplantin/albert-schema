@@ -34,6 +34,10 @@ export interface GExercise {
   summary: L
   /** cahier des charges, un paragraphe par entrée */
   brief: L[]
+  /** matériel à utiliser, avec les repères attendus */
+  parts: L[]
+  /** fonctionnement attendu, exactement : « j'appuie sur S1, la lampe H1 s'allume… » */
+  expect: L[]
   /** schéma de départ (par défaut : feuille vide) */
   start?: (base: Doc) => Doc
   /** schéma de référence, chargé par « Voir une solution » */

@@ -27,7 +27,7 @@ const tagLike = /^(A1|YV1|YV2|YV1\/YV2|S\d|KM\d|KT|H\d)/
 const bad: string[] = []
 for (const ex of GUIDED) {
   for (const lang of ['fr', 'en'] as const) {
-    const texts: string[] = [ex.title[lang], ...ex.brief.map((b: { fr: string; en: string }) => b[lang]), ...ex.steps.flatMap((st: { title: { fr: string; en: string }; hint: { fr: string; en: string } }) => [st.title[lang], st.hint[lang]])]
+    const texts: string[] = [ex.title[lang], ...ex.brief.map((b: { fr: string; en: string }) => b[lang]), ...ex.parts.map((b: { fr: string; en: string }) => b[lang]), ...ex.expect.map((b: { fr: string; en: string }) => b[lang]), ...ex.steps.flatMap((st: { title: { fr: string; en: string }; hint: { fr: string; en: string } }) => [st.title[lang], st.hint[lang]])]
     for (const t0 of texts) {
       const t = fillNames(t0, lang)
       if (t.includes('{{')) bad.push(`${ex.id}/${lang} : jeton non résolu dans « ${t0.slice(0, 60)} »`)
@@ -40,5 +40,9 @@ for (const ex of GUIDED) {
 }
 check('textes des exercices : tous les noms entre guillemets existent dans la bibliothèque ou l’interface', bad.length === 0, '\n  ' + [...new Set(bad)].join('\n  '))
 
+for (const ex of GUIDED) {
+  const ok = ex.parts.length >= 1 && ex.expect.length >= 2 && [...ex.parts, ...ex.expect].every((l: { fr: string; en: string }) => l.fr.trim() && l.en.trim())
+  check(`« ${ex.id} » : matériel et fonctionnement attendu décrits dans les deux langues`, ok)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

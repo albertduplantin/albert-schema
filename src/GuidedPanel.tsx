@@ -30,7 +30,15 @@ export function GuidedPanel({ ex, done, missing, lang, onClose, onSolution, onRe
       </div>
       <p className="guided-meta">{'★'.repeat(ex.level)}{'☆'.repeat(3 - ex.level)} {t(('level' + ex.level) as Key)} · {ex.minutes} min · {done.filter(Boolean).length}/{done.length}</p>
       <button className="link guided-brief-toggle" aria-expanded={brief} onClick={() => setBrief(!brief)}>{brief ? '▾' : '▸'} {t('guidedBrief')}</button>
-      {brief && <div className="guided-brief">{ex.brief.map((b, i) => <p key={i}>{fillNames(b[lang], lang)}</p>)}</div>}
+      {brief && (
+        <div className="guided-brief">
+          {ex.brief.map((b, i) => <p key={i}>{fillNames(b[lang], lang)}</p>)}
+          <h4>{t('guidedParts')}</h4>
+          <ul>{ex.parts.map((b, i) => <li key={i}>{fillNames(b[lang], lang)}</li>)}</ul>
+          <h4>{t('guidedExpect')}</h4>
+          <ol>{ex.expect.map((b, i) => <li key={i}>{fillNames(b[lang], lang)}</li>)}</ol>
+        </div>
+      )}
       <ol className="guided-steps">
         {ex.steps.map((st, i) => {
           const isCur = i === current
