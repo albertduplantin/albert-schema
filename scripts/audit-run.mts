@@ -38,6 +38,12 @@ for (const s of els) {
         const r = run(d); const closed = useChange ? false : (m.nc ? false : true)
         if (!useChange && !m.delay && on(r) !== closed) fails.push(`${s.name.fr} (contact de relais) : état incorrect bobine alimentée`) }
       else {
+        if (m.pos3) {
+          // sélecteur 1-0-2 : centre ouvert ; position 1 : commun–repos ; position 2 : commun–travail
+          const c0 = on(run(d)), p1 = on(run(d, [], [sw])), p2 = on(run(d, [], [sw + ':2']))
+          if (c0 || !p1 || p2) fails.push(`${s.name.fr} (pos3) : centre=${c0} position1=${p1} position2=${p2}`)
+          continue
+        }
         const rest = on(run(d)), act = on(run(d, [sw], [sw]))
         if (rest !== (useChange ? true : !!m.nc) || act !== (useChange ? false : !m.nc)) fails.push(`${s.name.fr} (${m.ctl}${m.nc ? ' NF' : ' NO'}) : repos=${rest} actionné=${act}`)
         if (!isOperableDef(s)) fails.push(`${s.name.fr} : pas manœuvrable`)

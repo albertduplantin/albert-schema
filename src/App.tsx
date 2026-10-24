@@ -459,13 +459,21 @@ function Editor() {
     })
   }, [])
   const onSimToggle = useCallback((id: string) => {
+    const sym = all.symbols.find((x) => x.id === id)
+    const m = sym && SYMBOL_MAP[sym.defId]?.sim
+    const three = m?.k === 'switch' && m.pos3
     setSimIn((s) => {
       const toggled = new Set(s.toggled)
-      if (toggled.has(id)) toggled.delete(id)
+      if (three) {
+        // sélecteur 1-0-2 : centre → position 1 → position 2 → centre
+        if (toggled.has(id)) { toggled.delete(id); toggled.add(id + ':2') }
+        else if (toggled.has(id + ':2')) toggled.delete(id + ':2')
+        else toggled.add(id)
+      } else if (toggled.has(id)) toggled.delete(id)
       else toggled.add(id)
       return { ...s, toggled }
     })
-  }, [])
+  }, [all])
   const coilLabels = useMemo(
     () => [...new Set(all.symbols.filter((s) => SYMBOL_MAP[s.defId]?.sim?.k === 'coil' && s.label).map((s) => s.label))],
     [all.symbols],

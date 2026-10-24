@@ -60,6 +60,8 @@ export interface SimResult {
   /** intensité (A) circulant dans chaque conducteur, d'après les caractéristiques des récepteurs (estimations si non renseignées) */
   amps: Record<string, number>
   /** vérins : position de 0 (rentré) à 1 (sorti) */
+  /** sélecteurs à trois positions : position courante (0 = centre, ouvert) */
+  pos3: Record<string, number>
   cylPos: Record<string, number>
   /** distributeurs : vrai = case actionnée */
   valveA: Record<string, boolean>
@@ -175,6 +177,7 @@ function solve(x: Ctx) {
   for (const w of doc.wires) uf.union(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
 
   const closed: Record<string, boolean> = {}
+  const pos3: Record<string, number> = {} // sélecteurs à trois positions : 0 centre (ouvert), 1 ou 2
   const swEdges: [string, string][] = [] // liaisons établies par les contacts fermés
   const link = (a: string, b: string) => {
     uf.union(a, b)
@@ -185,6 +188,16 @@ function solve(x: Ctx) {
     if (m?.k !== 'switch') continue
     const act = actuated(s, m, x)
     closed[s.id] = act
+    if (m.pos3 && m.changeover?.length) {
+      const p1 = x.inp.toggled.has(s.id), p2 = x.inp.toggled.has(s.id + ':2')
+      pos3[s.id] = p2 ? 2 : p1 ? 1 : 0
+      closed[s.id] = p2
+      for (const [com, nc, no] of m.changeover) {
+        if (p2) link(key(s.id, com), key(s.id, no))
+        else if (p1) link(key(s.id, com), key(s.id, nc))
+      }
+      continue
+    }
     if (m.ctl !== 'fixed' && x.inp.cut?.has('stuck:' + s.id)) {
       // contact collé (soudé) : il conduit quel que soit l'ordre de la commande
       for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
@@ -267,7 +280,7 @@ function solve(x: Ctx) {
     const seen = new Set(m.primary.map((p) => potOf(s.id, p)).filter((v): v is string => v !== null))
     if (seen.size >= 2) trafoOn.add(s.id)
   }
-  return { closed, energized, coilOn, potOf, shorts, swEdges, trafoOn }
+  return { closed, pos3, energized, coilOn, potOf, shorts, swEdges, trafoOn }
 }
 
 type Key = string
@@ -636,7 +649,7 @@ export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previo
   }
   const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.fluid && !defs[s.defId]?.decor).map((s) => s.id)
   return {
-    state: memory, energized, closed: out.closed, potentialOf, shorts: out.shorts, unstable, unsupported,
+    state: memory, energized, closed: out.closed, pos3: out.pos3, potentialOf, shorts: out.shorts, unstable, unsupported,
     pendingMs: ctx.pending.length || fluidPending.length ? Math.min(...ctx.pending, ...fluidPending) : null,
     ...(() => { const f = currentFlow(doc, defs, out); return { current: f.dir, amps: f.amps } })(),
     volts,

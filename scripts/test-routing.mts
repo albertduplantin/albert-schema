@@ -310,7 +310,7 @@ for (const dx of [40, -40, 20, 80]) {
   const aux = id(/01_auxiliary_contacts\/con_simple$/)
   const probe = sym('p', aux, 0, 0)
   const pt1 = portPos(probe, 't1')!, pt0 = portPos(probe, 't0')!
-  for (const [name, re, ytop] of [['disjoncteur', /disjonct-m_3f$/, 100], ['bornier', /130_terminals_terminal_strips\/[^/]*\/?[^/]*$/, 100]] as const) {
+  for (const [name, re, ytop] of [['disjoncteur', /disjonct-m_3f$/, 100], ['bornier', /130_terminals_terminal_strips\/[^/]+$/, 100]] as const) {
     const def = lib.symbols.find((s: any) => re.test(s.id) && s.sim?.poles?.length === 3) ?? lib.symbols.find((s: any) => re.test(s.id) && s.sim?.poles?.length >= 2)
     if (!def) { console.log('(pas de ' + name + ' à 3 pôles dans la bibliothèque)'); continue }
     const dev = sym('dev', def.id, 100, ytop)

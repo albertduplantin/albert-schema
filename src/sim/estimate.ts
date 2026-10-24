@@ -15,4 +15,4 @@ export function motorCurrent(s: PlacedSymbol, def: SymbolDef): { value: number; 
 }
 
 /** Puissance absorbée par défaut (W ou VA) d'un récepteur dont on n'a pas renseigné la puissance. */
-export const DEFAULT_WATTS: Record<string, number> = { coil: 8, lamp: 3, buzzer: 3, valve: 8, heater: 500 }
+export const DEFAULT_WATTS: Record<string, number> = { coil: 8, lamp: 3, buzzer: 3, valve: 8, heater: 500, brake: 30 }

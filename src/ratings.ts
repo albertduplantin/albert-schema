@@ -3,7 +3,7 @@ import { RATINGS } from './transformer'
 import { motorCurrent as motorCurrentImpl } from './sim/estimate'
 
 /** Famille d'appareil, qui détermine les caractéristiques que l'on peut renseigner. */
-export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer' | 'rcd'
+export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer' | 'rcd' | 'disconnector'
 
 export function kindOf(def: SymbolDef | undefined): Kind | null {
   if (!def) return null
@@ -15,6 +15,7 @@ export function kindOf(def: SymbolDef | undefined): Kind | null {
     if (/50_residual_current_circuit_breaker/.test(id)) return /^Interrupteur/i.test(def.name.fr) ? 'rcd' : 'breaker'
     if (/12_magneto|11_circuit_breakers/.test(id)) return /moteur|motor|GV/i.test(def.name.fr + ' ' + def.name.en) ? 'motorBreaker' : 'breaker'
     if (/02_power_contacts/.test(id)) return 'contactor'
+    if (/20_disconnecting/.test(id)) return 'disconnector'
     return null
   }
   if (m?.k === 'load') return m.role === 'motor' ? 'motor' : 'consumer'
@@ -62,6 +63,7 @@ export const FIELDS: Record<Kind, FieldDef[]> = {
   motor: [F.kw, F.ie, F.cos, F.ratio],
   consumer: [F.watts],
   rcd: [F.calibre, F.idn],
+  disconnector: [F.calibre],
 }
 
 /** Champs d'un appareil : ceux de sa famille, plus la sensibilité différentielle pour un disjoncteur différentiel. */

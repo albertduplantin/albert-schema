@@ -4,7 +4,7 @@
 //   { k: 'source', pot: { [port]: potentiel } }
 //   { k: 'switch', poles: [[portA, portB], …], ctl: 'coil' | 'momentary' | 'toggle' | 'fixed', nc: boolean }
 //   { k: 'coil',   ports: [a, b] }
-//   { k: 'load',   ports: [...], role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater' }
+//   { k: 'load',   ports: [...], role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater' | 'brake' }
 //
 // La classification repose sur le dossier d'origine et le nom du symbole : QElectroTech ne décrit pas
 // le comportement électrique de ses éléments. Les symboles ambigus (inverseurs, cartes, automates…)
@@ -96,7 +96,7 @@ export function classify({ id, nameFr, nameEn, ports }) {
 
   // ── bobines
   if (has(/01_coils/)) {
-    if (ports.length !== 2 || /thermique|statique|polaris/.test(name)) return null
+    if (ports.length !== 2 || /thermique|statique/.test(name) || (/polaris/.test(name) && !/comm_polarise/.test(file))) return null
     const timer = timerKind(name + ' ' + file)
     return timer ? { k: 'coil', ports: portIds, timer } : { k: 'coil', ports: portIds }
   }
@@ -107,8 +107,8 @@ export function classify({ id, nameFr, nameEn, ports }) {
     /(^|[^a-z])(nf|nc)([^a-z]|$)/.test(name) || /_nf|_nc|nf_|nc_/.test(file) || /ouverture|normally closed/.test(name)
 
   const delayed = has(/11_delayed_contacts/) ? timerKind(name + ' ' + file) : null
-  const contact = (ctl) => {
-    if (/position/.test(name)) return null // sélecteurs rotatifs : non modélisés
+  const contact = (ctl, allowPosition = false) => {
+    if (!allowPosition && /position/.test(name)) return null // sélecteurs à plusieurs contacts : non modélisés
     // contacteurs de puissance « inverseur » à 6 ou 8 bornes : simples contacts à plusieurs pôles (le nom désigne la forme du dessin)
     if (changeover && !(has(/02_power_contacts/) && ports.length !== 3)) {
       const co = ports.length === 3 ? changeoverPorts(ports) : null
@@ -128,13 +128,35 @@ export function classify({ id, nameFr, nameEn, ports }) {
 
   // ── organes de commande manuels
   if (has(/20_push_buttons/)) {
-    if (/led|pedale|pédale|pedal/.test(name + file)) return null
+    if (/led/.test(name + file)) return null
+    // pédales à un seul contact NO ou NF ; les pédales NO/NF à quatre bornes ne sont pas modélisées
+    if (/pedale|pédale|pedal|foot/.test(name + file)) return ports.length === 2 ? contact('momentary', true) : null
     const latching = /urgence|verrou|tirette|cable|câble/.test(name)
     const r = contact(latching ? 'toggle' : 'momentary')
     if (r && latching) r.nc = true
     return r
   }
-  if (has(/21_selector_switches|25_lever_switches|41_limit_switches/)) return contact('toggle')
+  if (has(/21_selector_switches/)) {
+    // sélecteurs et commutateurs rotatifs : deux bornes = interrupteur à deux positions ; trois bornes = inverseur
+    // (1-0-2 et trois positions : centre ouvert, `pos3`) ; les sélecteurs à plusieurs contacts ne sont pas modélisés
+    if (/position|rotatif|rotary|tournant|1-0-2|a cle|à clé|\bcle\b/.test(name + ' ' + file)) {
+      if (ports.length === 2) return contact('toggle', true)
+      const co = ports.length === 3 ? changeoverPorts(ports) : null
+      if (!co) return null
+      const pos3 = /1-0-2|3 positions|3_pos|3pos|trois positions/.test(name + ' ' + file)
+      return pos3 ? { k: 'switch', poles: [], changeover: [co], ctl: 'toggle', nc: false, pos3: true } : { k: 'switch', poles: [], changeover: [co], ctl: 'toggle', nc: false }
+    }
+    return contact('toggle')
+  }
+  if (has(/25_lever_switches|41_limit_switches/)) return contact('toggle')
+
+  // ── capteurs et détecteurs à contact (2 fils NO / NF, ou inverseur à 3 bornes) : on les « actionne » en simulation comme un fin de course
+  if (has(/390_sensors_instruments\/(01_sensors_capacitive|02_sensors_inductive|03_sensors_magnetic|04_sensors_optical|11_sensors_flow|12_sensors_level|13_sensors_pressure|14_sensors_humidity|15_sensors_temperature|16_sensors_ultrasonic)\//)) {
+    if (/sonde|thermocouple|emetteur|émetteur|recepteur|récepteur|luminosit|crepuscolar|capteur_pression$|cellule|sécurité|ossd/.test(name + ' ' + file)) return null
+    if (ports.length === 2) return contact('toggle', true)
+    const co = ports.length === 3 && /nf_no|nf\/no|nc\/no/.test(file + ' ' + name) ? changeoverPorts(ports) : null
+    return co ? { k: 'switch', poles: [], changeover: [co], ctl: 'toggle', nc: false } : null
+  }
 
   // ── protection : disjoncteurs et sectionneurs (fermés par défaut, basculables) ; fusibles et relais thermiques (toujours fermés)
   if (has(/200_fuses_protective_gears\/(11_circuit_breakers|12_magneto|20_disconnecting|50_residual_current_circuit_breaker)/)) {
@@ -142,6 +164,16 @@ export function classify({ id, nameFr, nameEn, ports }) {
     return poles.length ? { k: 'switch', poles, ctl: 'toggle', nc: true } : null
   }
   if (has(/200_fuses_protective_gears\/(10_fuses|30_thermal_relays)/)) {
+    const poles = pairPoles(ports)
+    return poles.length ? { k: 'switch', poles, ctl: 'fixed', nc: false } : null
+  }
+
+  // ── connecteurs à ressort et jonctions : toutes les bornes sont reliées entre elles
+  if (has(/130_terminals_terminal_strips\/95_terminals_spring_box\//) || has(/114_connections\/(combine|splice|bod|lphd|corner)(\.elmt)?$/)) {
+    if (ports.length < 2) return null
+    return { k: 'switch', poles: ports.slice(1).map((p) => [ports[0].id, p.id]), ctl: 'fixed', nc: false }
+  }
+  if (has(/90_terminal_strips_diagram\/90-10-0(111|121|211)(\.elmt)?$/)) {
     const poles = pairPoles(ports)
     return poles.length ? { k: 'switch', poles, ctl: 'fixed', nc: false } : null
   }
@@ -173,6 +205,7 @@ export function classify({ id, nameFr, nameEn, ports }) {
     if (live.length < 2 || live.length > 6 || /dahlander|6_terminals|9_terminals|12_terminals/.test(file)) return null
     return { k: 'load', ports: live.map((p) => p.id), role: 'motor' }
   }
+  if (has(/391_consumers_actuators\/30_brakes\/(brzda_motoru|frein_electro|frein_magnetique)(\.elmt)?$/) && ports.length === 2) return { k: 'load', ports: portIds, role: 'brake' }
   if (has(/391_consumers_actuators\/20_valves/) && ports.length === 2) return { k: 'load', ports: portIds, role: 'valve' }
   if (has(/391_consumers_actuators\/50_heatings/) && ports.length === 2) return { k: 'load', ports: portIds, role: 'heater' }
 

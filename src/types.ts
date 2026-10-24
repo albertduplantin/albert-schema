@@ -25,13 +25,15 @@ export type SimModel =
       nc: boolean
       /** contact temporisé */
       delay?: TimerKind
+      /** sélecteur à trois positions (1-0-2) : centre ouvert ; position 1 : commun–repos, position 2 : commun–travail */
+      pos3?: boolean
       /** lames animables : angle de bascule (degrés) et état dessiné (fermé = touche le contact fixe) */
       blades?: { rot: number; closed: boolean }[]
     }
   | { k: 'coil'; ports: string[]; timer?: TimerKind }
   /** transformateur : le secondaire devient une source quand le primaire est alimenté */
   | { k: 'transformer'; primary: string[]; secondary: string[] }
-  | { k: 'load'; ports: string[]; role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater'; spin?: { cx: number; cy: number; r: number } }
+  | { k: 'load'; ports: string[]; role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater' | 'brake'; spin?: { cx: number; cy: number; r: number } }
 
 /** Comportement fluidique (pneumatique) : voir scripts/fluid-classify.mjs */
 export type FluidModel =

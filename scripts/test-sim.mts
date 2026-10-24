@@ -638,5 +638,33 @@ function rig(doc: any) {
   check('défaut : bobine en court-circuit → court-circuit signalé, bobine non alimentée', [sc.shorts.length > 0, sc.energized.has(coil)], [true, false])
   void mem
 }
+// ── sélecteur 1-0-2 (trois positions), pédale, frein, connecteur à ressort, capteur : nouveaux modèles de simulation
+{
+  const ids = (re: RegExp) => lib.symbols.find((s: any) => re.test(s.id))?.id
+  const sel = ids(/21_selector_switches\/key_1-0-2$/), foot = ids(/20_push_buttons\/foot_no$/), brake = ids(/30_brakes\/frein_magnetique$/)
+  const conn = ids(/95_terminals_spring_box\/wire-connector-3-port$/), sens = ids(/02_sensors_inductive\/capteur_inductif_no$/)
+  const LAMP = 'qet:10_electric/10_allpole/380_signaling_operating/11_optical_signaling/lampe2'
+  check('nouveaux symboles présents dans la bibliothèque', [sel, foot, brake, conn, sens].every(Boolean), true)
+  const defSel = SYMBOL_MAP[sel]
+  check('sélecteur 1-0-2 : modèle à trois positions', defSel.sim.pos3 === true && defSel.sim.changeover.length === 1, true)
+  const com = defSel.sim.changeover[0]
+  const d = T.build(base, [['src', 'sim-src1', 100, 30], ['x', sel, 100, 100, 'S1'], ['h1', LAMP, 100, 240, 'H1'], ['h2', LAMP, 260, 240, 'H2']],
+    [['src', 'a', 'x', com[0]], ['x', com[1], 'h1', 't0'], ['h1', 't1', 'src', 'b'], ['x', com[2], 'h2', 't0'], ['h2', 't1', 'src', 'b']])
+  const g = rig(d)
+  const x = d.symbols.find((v: any) => v.label === 'S1').id
+  const st = (toggled: string[]) => { const r = g.run([], toggled, 100); return [g.on(r, 'H1'), g.on(r, 'H2')] }
+  check('sélecteur 1-0-2 : centre = tout éteint, position 1 = H1, position 2 = H2', JSON.stringify([st([]), st([x]), st([x + ':2'])]), JSON.stringify([[false, false], [true, false], [false, true]]))
+  const dp = T.build(base, [['src', 'sim-src1', 100, 30], ['p', foot, 100, 100, 'S1'], ['h', LAMP, 100, 240, 'H1']], [['src', 'a', 'p', 't0'], ['p', 't1', 'h', 't0'], ['h', 't1', 'src', 'b']])
+  const gp = rig(dp)
+  const pid = dp.symbols.find((v: any) => v.label === 'S1').id
+  check('pédale (NO) : manœuvrable, la lampe suit', [gp.on(gp.run(), 'H1'), gp.on(gp.run([pid]), 'H1')], [false, true])
+  const db = T.build(base, [['src', 'sim-src1', 100, 30], ['b', brake, 100, 100, 'Y1']], [['src', 'a', 'b', 't0'], ['b', 't1', 'src', 'b']])
+  check('frein magnétique : alimenté entre ses deux bornes', rig(db).on(rig(db).run(), 'Y1'), true)
+  const dc = T.build(base, [['src', 'sim-src1', 100, 30], ['c', conn, 100, 100, 'X1'], ['h', LAMP, 100, 240, 'H1']], [['src', 'a', 'c', 't0'], ['c', 't1', 'h', 't0'], ['h', 't1', 'src', 'b']])
+  check('connecteur à ressort : toutes les bornes sont reliées', rig(dc).on(rig(dc).run(), 'H1'), true)
+  const ds = T.build(base, [['src', 'sim-src1', 100, 30], ['c', sens, 100, 100, 'B1'], ['h', LAMP, 100, 240, 'H1']], [['src', 'a', 'c', 't0'], ['c', 't1', 'h', 't0'], ['h', 't1', 'src', 'b']])
+  const gs = rig(ds), bid = ds.symbols.find((v: any) => v.label === 'B1').id
+  check('capteur inductif NO : actionné en simulation, la lampe s’allume', [gs.on(gs.run(), 'H1'), gs.on(gs.run([bid], [bid]), 'H1')], [false, true])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

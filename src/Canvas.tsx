@@ -58,7 +58,7 @@ function potColor(potRaw: string): string {
   if (pot.startsWith('~')) return SECONDARY_COLORS[Number(pot.split(':')[1]) % SECONDARY_COLORS.length] ?? '#8e24aa'
   return '#d62728'
 }
-const GLOW: Record<string, string> = { lamp: '#ffd400', motor: '#35c759', valve: '#35c759', buzzer: '#ff9f0a', heater: '#ff6b35', coil: '#35c759' }
+const GLOW: Record<string, string> = { lamp: '#ffd400', motor: '#35c759', valve: '#35c759', buzzer: '#ff9f0a', heater: '#ff6b35', brake: '#8e24aa', coil: '#35c759' }
 
 interface Props {
   doc: Doc
@@ -817,6 +817,7 @@ export default function Canvas(p: Props) {
                       })}
                     </g>
                   )}
+                  {model?.k === 'switch' && model.pos3 && p.sim && <text x={def.w + 3} y={9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{['0', '1', '2'][p.sim.pos3?.[s.id] ?? 0]}</text>}
                   {model?.k === 'source' && !isSourceBlock(def.id) && s.volts ? <text x={def.w / 2} y={def.h + 8} fontSize={6.5} textAnchor="middle" stroke="none" fill="currentColor" pointerEvents="none">{s.volts} V</text> : null}
                   {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} />}
                 </g>
