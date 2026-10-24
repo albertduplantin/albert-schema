@@ -202,5 +202,25 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   check('fils superposés : chaque borne du composant reçoit les deux fils', onFuse('t0') === 2 && onFuse('t1') === 2, `${onFuse('t0')},${onFuse('t1')}`)
   check('fils superposés : plus aucun fil direct source → lampe', !out.wires.some((w: any) => w.from.symId !== fuse && w.to.symId !== fuse))
 }
+// ── exercices guidés : la solution coche toutes les étapes, un schéma vide ou de départ non
+{
+  const { GUIDED } = await import(ROOT + '/src/guidedData.ts')
+  const ids = new Set<string>()
+  for (const ex of GUIDED) {
+    check(`guidé « ${ex.id} » : identifiant unique, 2 langues, étapes et indices`, !ids.has(ex.id) && ex.steps.length >= 3 && ex.steps.every((st: any) => st.title.fr && st.title.en && st.hint.fr && st.hint.en) && ex.brief.every((b: any) => b.fr && b.en) && !!ex.title.en)
+    ids.add(ex.id)
+    const sol = ex.solution(base)
+    const c = (doc: any, simMode = true) => ({ doc, defs: SYMBOL_MAP, lang: 'fr', simMode })
+    const notDone = ex.steps.filter((st: any) => !st.done(c(sol)))
+    check(`guidé « ${ex.id} » : le schéma de solution coche toutes les étapes`, notDone.length === 0, notDone.map((st: any) => st.id).join(','))
+    const emptyDone = ex.steps.filter((st: any) => st.done(c(base, false)))
+    check(`guidé « ${ex.id} » : une feuille vide ne coche aucune étape`, emptyDone.length === 0, emptyDone.map((st: any) => st.id).join(','))
+    if (ex.start) {
+      const st0 = ex.start(base)
+      const startDone = ex.steps.filter((st: any) => st.done(c(st0, false)))
+      check(`guidé « ${ex.id} » : le schéma de départ ne réussit pas tout`, startDone.length < ex.steps.length, startDone.map((x: any) => x.id).join(','))
+    }
+  }
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

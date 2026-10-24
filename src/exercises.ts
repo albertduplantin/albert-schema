@@ -5,6 +5,8 @@ import { devKey, isOperableDef, simulate, type SimMemory } from './sim/engine'
 export interface Step {
   /** boutons maintenus appuyés pendant ce pas */
   press?: string[]
+  /** interrupteurs basculés (fermés) pendant ce pas */
+  toggle?: string[]
   /** temps simulé écoulé avant la vérification (ms) */
   wait?: number
   /** état attendu : repère → alimenté ? */
@@ -133,29 +135,36 @@ export const EXERCISES: Exercise[] = [
 
 export interface StepResult { text: string; ok: boolean; detail?: string }
 
-/** Rejoue le scénario sur le schéma de l'élève. */
-export function runExercise(ex: Exercise, doc: Doc, defs: Record<string, SymbolDef>, lang: Lang): { ok: boolean; steps: StepResult[]; missing: string[] } {
+/** Rejoue un scénario sur le schéma de l'élève : manœuvres, temps écoulé, états attendus (par repère). */
+export function runSteps(steps: Step[], labels: string[], doc: Doc, defs: Record<string, SymbolDef>, lang: Lang): { ok: boolean; steps: StepResult[]; missing: string[] } {
   const present = new Set(doc.symbols.map((s) => devKey(s.label)))
-  const missing = ex.labels.filter((l) => !present.has(devKey(l)))
+  const missing = labels.filter((l) => !present.has(devKey(l)))
   let mem: SimMemory = {}
   let now = 1_000_000
-  const steps: StepResult[] = []
+  const results: StepResult[] = []
   const byLabel = (l: string) => doc.symbols.filter((s) => devKey(s.label) === devKey(l))
-  for (const st of ex.steps) {
+  for (const st of steps) {
     now += st.wait ?? 100
     const pressed = new Set<string>()
     for (const l of st.press ?? []) for (const s of byLabel(l)) if (isOperableDef(defs[s.defId])) pressed.add(s.id)
-    let r = simulate(doc, defs, mem, { pressed, toggled: new Set() }, now)
+    const toggled = new Set<string>()
+    for (const l of st.toggle ?? []) for (const s of byLabel(l)) toggled.add(s.id)
+    let r = simulate(doc, defs, mem, { pressed, toggled }, now)
     mem = r.state
     // laisse le circuit se stabiliser (retombée d'un relais, etc.)
-    r = simulate(doc, defs, mem, { pressed, toggled: new Set() }, now + 1)
+    r = simulate(doc, defs, mem, { pressed, toggled }, now + 1)
     mem = r.state
     const bad: string[] = []
     for (const [l, want] of Object.entries(st.expect)) {
       const got = byLabel(l).some((s) => r.energized.has(s.id))
       if (got !== want) bad.push(`${l} : ${got ? (lang === 'fr' ? 'alimenté' : 'on') : (lang === 'fr' ? 'coupé' : 'off')}`)
     }
-    steps.push({ text: st.say[lang], ok: bad.length === 0, detail: bad.join(', ') })
+    results.push({ text: st.say[lang], ok: bad.length === 0, detail: bad.join(', ') })
   }
-  return { ok: missing.length === 0 && steps.every((s) => s.ok), steps, missing }
+  return { ok: missing.length === 0 && results.every((s) => s.ok), steps: results, missing }
+}
+
+/** Rejoue le scénario d'un exercice sur le schéma de l'élève. */
+export function runExercise(ex: Exercise, doc: Doc, defs: Record<string, SymbolDef>, lang: Lang): { ok: boolean; steps: StepResult[]; missing: string[] } {
+  return runSteps(ex.steps, ex.labels, doc, defs, lang)
 }

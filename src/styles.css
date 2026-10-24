@@ -476,3 +476,26 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 .combo-list li { padding: 6px 10px; font-size: 13px; cursor: pointer; color: var(--ui-text); }
 .combo-list li:hover { background: var(--ui-bg); }
 .combo-list li.on { font-weight: 700; background: #93a41522; }
+
+/* exercices guidés */
+.guided { margin-bottom: 14px; padding: 10px 12px; background: var(--ui-panel); border: 1px solid var(--ui-line); border-top: 3px solid var(--accent-olive); font-size: 12.5px; }
+.guided-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.guided-meta { margin: 4px 0 6px; color: var(--ui-muted); font-size: 11px; }
+.guided-brief { margin: 4px 0 8px; padding: 6px 8px; background: #93a41514; border-left: 3px solid var(--clair); line-height: 1.45; }
+.guided-brief p { margin: 4px 0; }
+.guided-steps { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.guided-steps li { display: flex; gap: 8px; padding: 6px 4px; border-radius: 2px; color: var(--ui-muted); }
+.guided-steps li.cur { background: #0b6bcb12; border: 1px solid #0b6bcb55; color: var(--ui-text); padding: 7px 6px; }
+.guided-steps li.done { color: var(--ui-text); }
+.guided-steps .num { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--ui-line); display: grid; place-items: center; font-size: 11px; background: var(--ui-panel); }
+.guided-steps li.cur .num { background: #0b6bcb; border-color: #0b6bcb; color: #fff; }
+.guided-steps li.done .num { background: #2e9b2e; border-color: #2e9b2e; color: #fff; }
+.guided-steps .stitle { line-height: 1.35; font-weight: 600; }
+.guided-steps .hint { margin: 5px 0 0; padding: 6px 8px; background: #f0d80022; border-left: 3px solid #d9b800; font-weight: 400; line-height: 1.45; }
+.guided-win { margin: 6px 0; padding: 6px 8px; background: #2e9b2e22; border-left: 3px solid #2e9b2e; font-weight: 700; }
+.guided-actions { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+.guided-filters { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button.on { background: var(--accent-olive); color: #fff; border-color: var(--accent-olive); position: relative; }
+.guided-list .cards { max-height: 55vh; overflow-y: auto; }

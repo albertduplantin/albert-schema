@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addVersion, loadVersions, removeVersion, type Version } from './versions'
 import Combo from './Combo'
+import { GuidedList, GuidedPanel } from './GuidedPanel'
+import { GUIDED, guidedById } from './guidedData'
 import { defaultVolts, sourcePots } from './sim/potentials'
 import { isTerminal, stripOf, terminalRows } from './strips'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
@@ -26,7 +28,6 @@ import { netLabels } from './nets'
 import { pagesOf as pagesOfDoc } from './pages'
 import { addPage, deletePage, mergedDoc, pageCount, pageOfSymbols, renamePage, switchPage } from './pages'
 import { BUILTIN_META } from './galleryMeta'
-import { EXERCISES, runExercise, type StepResult } from './exercises'
 import { decodeDoc, encodeDoc, fragmentFromHash, shareUrl } from './share'
 import { adaptiveScore, hasUsage, recordUse, resetUsage, usageCount } from './usage'
 import { getShare, globalShare, loadGlobalUsage, setShare, shareUse, type ShareChoice } from './globalUsage'
@@ -199,9 +200,12 @@ function Editor() {
   }
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
-  // exercice en cours : un pense-bête flottant avec l'énoncé et un bouton de vérification
-  const [activeEx, setActiveEx] = useState<string | null>(() => { try { return localStorage.getItem('albertschema.exercise') } catch { return null } })
-  const chooseEx = (id: string | null) => { setActiveEx(id); try { if (id) localStorage.setItem('albertschema.exercise', id); else localStorage.removeItem('albertschema.exercise') } catch { /* ignoré */ } }
+  // exercices guidés : liste, exercice en cours, exercices réussis (conservés sur cet appareil)
+  const [showGuided, setShowGuided] = useState(false)
+  const [guidedId, setGuidedId] = useState<string | null>(() => { try { return localStorage.getItem('albertschema.guided') } catch { return null } })
+  const [guidedDone, setGuidedDone] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('albertschema.guidedDone') || '[]') } catch { return [] } })
+  const guidedEx = guidedId ? guidedById(guidedId) : undefined
+  const chooseGuided = (id: string | null) => { setGuidedId(id); try { if (id) localStorage.setItem('albertschema.guided', id); else localStorage.removeItem('albertschema.guided') } catch { /* ignoré */ } }
   // visite guidée : proposée une seule fois, sur une feuille vierge, et relançable depuis l'aide (?)
   const [tourStep, setTourStep] = useState<number | null>(() => {
     try { return localStorage.getItem('albertschema.tour') === '1' || loadDoc().symbols.length ? null : 0 } catch { return null }
@@ -237,7 +241,6 @@ function Editor() {
       })
       .catch(() => say(tr(lang, 'toastInvalid')))
   }
-  const [exResult, setExResult] = useState<Record<string, { ok: boolean; steps: StepResult[]; missing: string[] }>>({})
   const [toast, setToast] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; target: string | null } | null>(null)
   const contentRef = useRef<SVGGElement>(null)
@@ -330,6 +333,42 @@ function Editor() {
     const id = window.setTimeout(() => setSimTick((n) => n + 1), sim.pendingMs / clock.current.speed + 15)
     return () => window.clearTimeout(id)
   }, [sim])
+  // exercice guidé : les étapes se cochent d'après le schéma (recalcul un instant après la dernière modification)
+  const [stepsDone, setStepsDone] = useState<boolean[]>([])
+  useEffect(() => {
+    if (!guidedEx) { setStepsDone([]); return }
+    const id = window.setTimeout(() => {
+      const ctx = { doc: all, defs: SYMBOL_MAP, lang, simMode }
+      setStepsDone(guidedEx.steps.map((st) => { try { return st.done(ctx) } catch { return false } }))
+    }, 150)
+    return () => window.clearTimeout(id)
+  }, [guidedEx, all, lang, simMode])
+  useEffect(() => {
+    if (!guidedEx || !stepsDone.length || !stepsDone.every(Boolean) || guidedDone.includes(guidedEx.id)) return
+    const next = [...guidedDone, guidedEx.id]
+    setGuidedDone(next)
+    try { localStorage.setItem('albertschema.guidedDone', JSON.stringify(next)) } catch { /* ignoré */ }
+  }, [stepsDone, guidedEx, guidedDone])
+  const startGuided = (ex: (typeof GUIDED)[number]) => {
+    if (doc.symbols.length && !window.confirm(tr(lang, 'guidedReplace'))) return
+    if (simMode) setSimMode(false)
+    commit(() => (ex.start ?? ((b: Doc) => b))(emptyDoc()))
+    setSel([])
+    chooseGuided(ex.id)
+    setShowGuided(false)
+  }
+  const guidedSolution = () => {
+    if (!guidedEx || !window.confirm(tr(lang, 'guidedSolutionConfirm'))) return
+    commit(() => guidedEx.solution(emptyDoc()))
+    setSel([])
+  }
+  const guidedRestart = () => {
+    if (!guidedEx || !window.confirm(tr(lang, 'guidedReplace'))) return
+    if (simMode) setSimMode(false)
+    commit(() => (guidedEx.start ?? ((b: Doc) => b))(emptyDoc()))
+    setSel([])
+  }
+
   // chronogramme : on note chaque changement d'état des appareils repérés
   const trace = useRef<{ t0: number; rows: TraceRow[] }>({ t0: 0, rows: [] })
   const [chronoNow, setChronoNow] = useState(0)
@@ -1219,6 +1258,7 @@ function Editor() {
           </div>
         </details>
 
+        <button onClick={() => setShowGuided(true)} title={t('guidedTitle')}>🎓 {t('exercises')}</button>
         <button className="editonly" onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
 
         <div className="group">
@@ -1342,6 +1382,7 @@ function Editor() {
       </main>
 
       <aside className="props">
+        {guidedEx && <GuidedPanel ex={guidedEx} done={guidedEx.steps.map((_, i) => !!stepsDone[i])} lang={lang} onClose={() => chooseGuided(null)} onSolution={guidedSolution} onRestart={guidedRestart} onList={() => setShowGuided(true)} />}
         {sim && !sel.length ? (
           <>
             <h3>{t('simTitle')}</h3>
@@ -1658,30 +1699,6 @@ function Editor() {
                 </div>
               ))}
             </div>
-            <h3>{t('galleryExercises')}</h3>
-            <p className="muted">{t('exerciseHelp')}</p>
-            <div className="cards">
-              {EXERCISES.map((ex) => {
-                const r = exResult[ex.id]
-                return (
-                  <div key={ex.id} className="card wide">
-                    <strong>{ex.title[lang]}</strong>
-                    <span className="lvl">{'★'.repeat(ex.level)}{'☆'.repeat(3 - ex.level)} {t(('level' + ex.level) as Key)}</span>
-                    <p>{ex.statement[lang]}</p>
-                    <p className="muted">{t('exerciseLabels')} : {ex.labels.join(', ')}</p>
-                    <button onClick={() => setExResult((m) => ({ ...m, [ex.id]: runExercise(ex, doc, SYMBOL_MAP, lang) }))}>{t('exerciseCheck')}</button>{' '}
-                    <button onClick={() => { chooseEx(ex.id); setShowGallery(false) }}>{t('exerciseStart')}</button>
-                    {r && (
-                      <div className={'exres ' + (r.ok ? 'ok' : 'ko')}>
-                        <strong>{r.ok ? '✓ ' + t('exerciseOk') : '✗ ' + t('exerciseKo')}</strong>
-                        {r.missing.length > 0 && <div>{t('exerciseMissing')} : {r.missing.join(', ')}</div>}
-                        <ul>{r.steps.map((st, i) => <li key={i}>{st.ok ? '✓' : '✗'} {st.text}{st.detail ? ` — ${st.detail}` : ''}</li>)}</ul>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
             <div className="actions"><button onClick={() => setShowGallery(false)}>{t('close')}</button></div>
           </div>
         </div>
@@ -1742,26 +1759,7 @@ function Editor() {
         </div>
       )}
 
-      {activeEx && (() => {
-        const ex = EXERCISES.find((x) => x.id === activeEx)
-        if (!ex) return null
-        const r = exResult[ex.id]
-        return (
-          <aside className="exercisecard" aria-label={t('galleryExercises')}>
-            <div className="exhead"><strong>{ex.title[lang]}</strong><button className="icon" onClick={() => chooseEx(null)} aria-label={t('close')} title={t('close')}>✕</button></div>
-            <p>{ex.statement[lang]}</p>
-            <p className="muted small">{t('exerciseLabels')} : {ex.labels.join(', ')}</p>
-            <button onClick={() => setExResult((m) => ({ ...m, [ex.id]: runExercise(ex, doc, SYMBOL_MAP, lang) }))}>{t('exerciseCheck')}</button>
-            {r && (
-              <div className={'exres ' + (r.ok ? 'ok' : 'ko')}>
-                <strong>{r.ok ? '✓ ' + t('exerciseOk') : '✗ ' + t('exerciseKo')}</strong>
-                {r.missing.length > 0 && <div>{t('exerciseMissing')} : {r.missing.join(', ')}</div>}
-                <ul>{r.steps.map((st, i) => <li key={i}>{st.ok ? '✓' : '✗'} {st.text}{st.detail ? ` — ${st.detail}` : ''}</li>)}</ul>
-              </div>
-            )}
-          </aside>
-        )
-      })()}
+      {showGuided && <GuidedList list={GUIDED} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} />}
 
       {tourStep !== null && (
         <div className="modal" onClick={endTour}>
