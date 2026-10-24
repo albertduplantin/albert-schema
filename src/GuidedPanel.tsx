@@ -6,6 +6,8 @@ import type { GExercise } from './guided'
 interface PanelProps {
   ex: GExercise
   done: boolean[]
+  /** pour chaque étape : ce qui manque encore (conseils) */
+  missing: string[][]
   lang: Lang
   onClose: () => void
   onSolution: () => void
@@ -14,7 +16,7 @@ interface PanelProps {
 }
 
 /** Panneau d'un exercice guidé : cahier des charges, étapes cochées automatiquement, indice de l'étape en cours. */
-export function GuidedPanel({ ex, done, lang, onClose, onSolution, onRestart, onList }: PanelProps) {
+export function GuidedPanel({ ex, done, missing, lang, onClose, onSolution, onRestart, onList }: PanelProps) {
   const [brief, setBrief] = useState(true)
   const [hint, setHint] = useState<string | null>(null)
   const t = (k: Key) => tr(lang, k)
@@ -37,6 +39,9 @@ export function GuidedPanel({ ex, done, lang, onClose, onSolution, onRestart, on
               <span className="num" aria-hidden="true">{done[i] ? '✓' : i + 1}</span>
               <div>
                 <div className="stitle">{st.title[lang]}</div>
+                {isCur && (missing[i]?.length ?? 0) > 0 && (
+                  <div className="guided-missing" role="note"><strong>{t('guidedMissing')}</strong><ul>{missing[i].map((m, k) => <li key={k}>{m}</li>)}</ul></div>
+                )}
                 {isCur && (
                   <>
                     <button className="link" onClick={() => setHint(hint === st.id ? null : st.id)}>{hint === st.id ? t('guidedHideHint') : t('guidedHint')}</button>

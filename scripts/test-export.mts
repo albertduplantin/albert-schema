@@ -254,5 +254,52 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
     ...sw.flatMap((s: any, k: number) => [{ id: 'pa' + k, from: { symId: src.id, portId: 'a' }, to: { symId: s.id, portId: 't0' }, label: '', color: '#000000', section: '' }, { id: 'pb' + k, from: { symId: s.id, portId: 't1' }, to: { symId: cl.id, portId: 't0' }, label: '', color: '#000000', section: '' }])] }
   check('pneumatique : S1 et S2 en parallèle ne valident pas la sécurité deux mains', doneOf('p-and', pa, 'run') && !doneOf('p-and', parallel, 'run'))
 }
+// ── exercice « lampe et interrupteur » : tous les montages équivalents sont acceptés, et les conseils disent ce qui manque
+{
+  const { GUIDED } = await import(ROOT + '/src/guidedData.ts')
+  const ex = GUIDED.find((g: any) => g.id === 'e-lamp')
+  const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  const ctx = (doc: any, simMode = true) => ({ doc, defs: SYMBOL_MAP, lang: 'fr', simMode })
+  const status = (doc: any) => ex.steps.map((st: any) => !!st.done(ctx(doc)))
+  const variants: [string, string, any[]][] = [
+    ['source en repères L et N + bouton poussoir NO', '', [['l', 'sim-l', 100, 30], ['n', 'sim-n', 300, 30], ['b', Q('380_signaling_operating/20_push_buttons/poussoir'), 100, 110, 'S1'], ['h', Q('380_signaling_operating/11_optical_signaling/lampe2'), 100, 220, 'H1']]],
+    ['bloc source + interrupteur', '', [['s', 'sim-src1', 100, 30], ['b', Q('380_signaling_operating/21_selector_switches/010_switch_1pos'), 100, 110, 'S1'], ['h', Q('380_signaling_operating/11_optical_signaling/lampe2'), 100, 220, 'H1']]],
+    ['bloc source triphasé (fournit phase et neutre)', '', [['s', 'sim-src3', 100, 30], ['b', Q('380_signaling_operating/20_push_buttons/poussoir'), 100, 110, 'S1'], ['h', Q('380_signaling_operating/11_optical_signaling/lampe2'), 100, 220, 'H1']]],
+  ]
+  for (const [name, , specs] of variants) {
+    const placed = T.build(base, specs, [])
+    const st = status(placed)
+    check(`lampe : ${name} → étape « poser » validée`, st[0] === true, JSON.stringify(st))
+    check(`lampe : ${name} → rien de câblé, étape « câbler » non validée`, st[1] === false)
+  }
+  // câblage L → bouton → lampe → N avec repères L et N
+  const wired = T.build(base, variants[0][2], [['l', 'a', 'b', 't0'], ['b', 't1', 'h', 't0'], ['h', 't1', 'n', 'a']])
+  const sw = status(wired)
+  check('lampe : repères L et N + bouton poussoir câblés → toutes les étapes validées', sw.every(Boolean), JSON.stringify(sw))
+  // conseils
+  const partial = T.build(base, [['b', Q('380_signaling_operating/20_push_buttons/poussoir'), 100, 110, 'S1']], [])
+  const miss = ex.steps[0].missing(ctx(partial, false))
+  check('lampe : les conseils listent la source et la lampe manquantes', miss.length === 2 && miss.some((m: string) => /source/.test(m)) && miss.some((m: string) => /lampe/.test(m)), JSON.stringify(miss))
+  const unw = ex.steps[1].missing(ctx(placedOf(variants[1][2]), false))
+  check('lampe : les conseils listent les bornes restées sans fil', unw.length >= 2 && unw.every((m: string) => /^Sans fil/.test(m)), JSON.stringify(unw))
+  function placedOf(specs: any[]) { return T.build(base, specs, []) }
+}
+// ── conseils des étapes de comportement : repères absents et vérifications qui échouent
+{
+  const { GUIDED } = await import(ROOT + '/src/guidedData.ts')
+  const ex = GUIDED.find((g: any) => g.id === 'e-startstop')
+  const run = ex.steps.find((st: any) => st.id === 'run')
+  const c = (doc: any) => ({ doc, defs: SYMBOL_MAP, lang: 'fr', simMode: true })
+  const good = ex.solution(base)
+  check('conseils : un montage correct n’a aucun conseil', run.missing(c(good)).length === 0, JSON.stringify(run.missing(c(good))))
+  const noLatch = ex.solution(base)
+  const ka = noLatch.symbols.find((x: any) => /con_simple$/.test(x.defId))
+  noLatch.wires = noLatch.wires.filter((w: any) => w.from.symId !== ka.id && w.to.symId !== ka.id)
+  const m = run.missing(c(noLatch))
+  check('conseils : sans auto-maintien, la vérification qui échoue est citée', m.length >= 1 && m.some((x: string) => /maintenue|reste|auto-maintien|S2 relâché/i.test(x)), JSON.stringify(m))
+  const renamed = ex.solution(base)
+  for (const x of renamed.symbols) if (x.label === 'KM1') x.label = 'K9'
+  check('conseils : un repère absent est signalé', run.missing(c(renamed)).some((x: string) => /Repère absent : KM1/.test(x)), JSON.stringify(run.missing(c(renamed))))
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

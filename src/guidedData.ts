@@ -1,8 +1,9 @@
 import type { Doc, PlacedSymbol } from './types'
 import { build, type Link, type Spec } from './templates'
 import { checkDoc } from './check'
-import { EXERCISES } from './exercises'
+import { EXERCISES, runSteps } from './exercises'
 import { DEFAULT_DELAY_S } from './sim/engine'
+import { basePot, sourcePots } from './sim/potentials'
 import { allWired, count, L, netOf, passes, scenario, syms, type Ctx, type GExercise, type GStep, type SimStep } from './guided'
 
 /** Exercices guidés. Les étapes se cochent toutes seules d'après le schéma de l'élève ; le dernier jeu d'étapes rejoue un scénario. */
@@ -21,10 +22,20 @@ const KN = Q('310_relays_contactors_contacts/02_contacts_cross_referencing/01_au
 type P = (c: Ctx, s: PlacedSymbol) => boolean
 const model = (c: Ctx, s: PlacedSymbol) => c.defs[s.defId]?.sim
 const power = (s: PlacedSymbol) => /02_power_contacts/.test(s.defId)
-const isSource: P = (_c, s) => s.defId === 'sim-src1'
+const HOT_POTS = new Set(['L', 'L1', 'L2', 'L3', 'LI', '+'])
+const COLD_POTS = new Set(['N', 'NI', '-'])
+const potsOf = (c: Ctx, s: PlacedSymbol) => { const d = c.defs[s.defId]; return d?.sim?.k === 'source' ? Object.values(sourcePots(s, d)).map(basePot) : [] }
+/** Source qui fournit une phase (bloc réglable, repère L, source réseau…). */
+const isSource: P = (c, s) => potsOf(c, s).some((p) => HOT_POTS.has(p))
+/** Toute source qui fournit un potentiel actif : phase, neutre, + ou − (la terre n'en est pas une). */
+const isSupply: P = (c, s) => potsOf(c, s).some((p) => HOT_POTS.has(p) || COLD_POTS.has(p))
+/** Alimentation complète : un potentiel « chaud » et un potentiel de retour (un bloc source, ou deux repères L et N). */
+const supplyOk = (c: Ctx) => c.doc.symbols.some((s) => isSource(c, s)) && c.doc.symbols.some((s) => potsOf(c, s).some((p) => COLD_POTS.has(p)))
 const isNOBtn: P = (c, s) => { const m = model(c, s); return m?.k === 'switch' && m.ctl === 'momentary' && !m.nc }
 const isNCBtn: P = (c, s) => { const m = model(c, s); return m?.k === 'switch' && m.ctl === 'momentary' && m.nc }
 const isToggle: P = (c, s) => { const m = model(c, s); return m?.k === 'switch' && m.ctl === 'toggle' }
+/** Organe de commande manuel : interrupteur ou bouton poussoir à contact travail (NO), quel que soit le symbole choisi. */
+const isCtrlSw: P = (c, s) => isToggle(c, s) || isNOBtn(c, s)
 const isLamp: P = (c, s) => { const m = model(c, s); return m?.k === 'load' && m.role === 'lamp' }
 const isCoil: P = (c, s) => { const m = model(c, s); return m?.k === 'coil' && !m.timer }
 const isTimer: P = (c, s) => { const m = model(c, s); return m?.k === 'coil' && !!m.timer }
@@ -33,13 +44,72 @@ const isNCk: P = (c, s) => { const m = model(c, s); return m?.k === 'switch' && 
 const all = (c: Ctx, p: P) => c.doc.symbols.filter((s) => p(c, s))
 const has = (c: Ctx, p: P, n = 1) => all(c, p).length >= n
 const wired = (c: Ctx, ps: P[]) => ps.every((p) => all(c, p).length > 0) && allWired(c, ps.flatMap((p) => all(c, p)), [])
-const sourceWired = (c: Ctx) => allWired(c, all(c, isSource), ['c']) // la borne PE reste libre
+const sourceWired = (c: Ctx): boolean => {
+  const srcs = all(c, isSupply)
+  if (!srcs.length) return false
+  const used = new Set(c.doc.wires.flatMap((w) => [`${w.from.symId}:${w.from.portId}`, `${w.to.symId}:${w.to.portId}`]))
+  return srcs.every((s) => Object.entries(sourcePots(s, c.defs[s.defId])).every(([port, pot]) => basePot(pot) === 'PE' || used.has(`${s.id}:${port}`)))
+}
 
-const stepPlace = (id: string, title: L, hint: L, done: GStep['done']): GStep => ({ id, title, hint, done })
+/** Bornes restées sans fil (hors terre des sources et arbre d'entraînement des pompes) : « H1 (borne 2) ». */
+function unwired(c: Ctx): string[] {
+  const used = new Set(c.doc.wires.flatMap((w) => [`${w.from.symId}:${w.from.portId}`, `${w.to.symId}:${w.to.portId}`]))
+  const out: string[] = []
+  for (const s of c.doc.symbols) {
+    const d = c.defs[s.defId]
+    if (!d || d.cat === 'sim' && d.sim?.k !== 'source') continue
+    const pots = d.sim?.k === 'source' ? sourcePots(s, d) : {}
+    const free = d.ports.filter((p) => !used.has(`${s.id}:${p.id}`) && basePot(pots[p.id] ?? '') !== 'PE' && !(/61_pumps\/pompe_/.test(d.id) && p.dir === 'left'))
+    if (free.length) out.push(`${s.label || d.name[c.lang]} (${free.map((p) => p.label || (c.lang === 'fr' ? 'borne ' : 'terminal ') + (d.ports.indexOf(p) + 1)).join(', ')})`)
+  }
+  return out
+}
+const stepPlace = (id: string, title: L, hint: L, done: GStep['done']): GStep => ({
+  id, title, hint, done,
+  ...(id === 'wire' || id === 'elec' ? { missing: (c: Ctx) => (c.doc.symbols.length ? unwired(c).slice(0, 6).map((u) => (c.lang === 'fr' ? 'Sans fil : ' : 'Unwired: ') + u) : []) } : {}),
+})
 const simStep = (): GStep => ({ id: 'sim', title: L('Passez en mode Simulation', 'Switch to Simulation mode'), hint: L('Bouton « ▶ Simuler » en haut de l’écran. Cliquez ensuite sur les boutons et interrupteurs pour les manœuvrer.', 'Click “▶ Simulate” at the top of the screen. Then click buttons and switches to operate them.'), done: (c) => c.simMode })
 
+const NAMES = new Map<unknown, [string, string]>()
+const NAME_LIST: [P, string, string][] = [
+  [isNOBtn, 'bouton poussoir NO', 'NO push button'], [isNCBtn, 'bouton poussoir NF', 'NC push button'], [isToggle, 'interrupteur', 'switch'],
+  [isCtrlSw, 'interrupteur ou bouton poussoir NO', 'switch or NO push button'], [isLamp, 'lampe', 'lamp'], [isCoil, 'bobine', 'coil'],
+  [isTimer, 'bobine temporisée', 'timed coil'], [isNOk, 'contact NO commandé par une bobine', 'coil-driven NO contact'],
+  [isNCk, 'contact NF commandé par une bobine', 'coil-driven NC contact'],
+]
+for (const [p, fr, en] of NAME_LIST) NAMES.set(p, [fr, en])
+/** Étape « posez ceci » : se coche quand tout est posé, et dit ce qui manque. `reqs` : [prédicat | 'supply', nombre minimal]. */
+const needStep = (id: string, title: L, hint: L, reqs: [P | 'supply', number][]): GStep => ({
+  id, title, hint,
+  done: (c) => reqs.every(([p, n]) => (p === 'supply' ? supplyOk(c) : has(c, p, n))),
+  missing: (c) => reqs.flatMap(([p, n]) => {
+    if (p === 'supply') {
+      if (supplyOk(c)) return []
+      const hot = c.doc.symbols.some((s) => isSource(c, s)), cold = c.doc.symbols.some((s) => potsOf(c, s).some((q) => COLD_POTS.has(q)))
+      if (!hot && !cold) return [c.lang === 'fr' ? 'une source : le bloc « Source monophasée ou continue », ou deux repères L et N' : 'a source: the “Single-phase or DC source” block, or an L and an N marker']
+      return [hot ? (c.lang === 'fr' ? 'le retour de la source (neutre N ou −) : utilisez le bloc source, ou ajoutez le repère N' : 'the source return (neutral N or −): use the source block, or add the N marker') : (c.lang === 'fr' ? 'la phase de la source (L ou +)' : 'the source phase (L or +)')]
+    }
+    const have = all(c, p).length
+    const name = NAMES.get(p)?.[c.lang === 'fr' ? 0 : 1] ?? '?'
+    return have >= n ? [] : [`${n - have} × ${name}`]
+  }),
+})
+
 /** Étape finale : le circuit se comporte comme demandé (scénario rejoué dans le simulateur). */
-const behaviour = (id: string, title: L, hint: L, steps: import('./exercises').Step[], labels: string[]): GStep => ({ id, title, hint, done: (c) => passes(c, steps, labels) })
+const behaviour = (id: string, title: L, hint: L, steps: import('./exercises').Step[], labels: string[]): GStep => ({
+  id, title, hint,
+  done: (c) => passes(c, steps, labels),
+  // conseils : repères absents, puis les vérifications du scénario qui échouent
+  missing: (c) => {
+    if (!c.doc.symbols.length) return []
+    try {
+      const r = runSteps(steps, labels, c.doc, c.defs, c.lang)
+      const out = r.missing.map((l) => (c.lang === 'fr' ? 'Repère absent : ' : 'Missing tag: ') + l)
+      if (!r.missing.length) for (const st of r.steps.filter((x) => !x.ok).slice(0, 3)) out.push(`${st.text}${st.detail ? ' — ' + st.detail : ''}`)
+      return out
+    } catch { return [] }
+  },
+})
 
 const old = (id: string) => EXERCISES.find((e) => e.id === id)!
 
@@ -102,6 +172,10 @@ const brokenLatch = (base: Doc): Doc => {
   return d
 }
 
+const lampOn = (r: { energized: Set<string> }, c: Ctx) => all(c, isLamp).some((l) => r.energized.has(l.id))
+const ids = (c: Ctx, p: P) => all(c, p).map((s) => s.id)
+const simTest = (id: string, title: L, hint: L, steps: SimStep[]): GStep => ({ id, title, hint, done: (c) => scenario(c, steps) })
+
 const ELECTRICAL: GExercise[] = [
   // ───────────────────────── électrique, niveau 1
   {
@@ -114,20 +188,19 @@ const ELECTRICAL: GExercise[] = [
     ],
     solution: lampSwitch,
     steps: [
-      stepPlace('place', L('Posez la source, un interrupteur et une lampe', 'Place the source, a switch and a lamp'),
-        L('Bibliothèque ▸ « Sources et alimentations » : « Source monophasée ou continue ». Puis un interrupteur (recherchez « interrupteur » ou « switch ») et une lampe (recherchez « lampe »).', 'Library ▸ “Sources and power supplies”: “Single-phase or DC source”. Then a switch and a lamp (search “switch”, “lamp”).'),
-        (c) => has(c, isSource) && has(c, isToggle) && has(c, isLamp)),
+      needStep('place', L('Posez une source, un interrupteur (ou un bouton poussoir) et une lampe', 'Place a source, a switch (or a push button) and a lamp'),
+        L('Bibliothèque ▸ « Sources et alimentations » : « Source monophasée ou continue » (ou deux repères L et N). Puis un interrupteur ou un bouton poussoir à contact normalement ouvert, et une lampe. La liste « Il vous manque » sous l’étape dit ce qui reste à poser.', 'Library ▸ “Sources and power supplies”: “Single-phase or DC source”. Then a switch and a lamp (search “switch”, “lamp”).'),[['supply', 1], [isCtrlSw, 1], [isLamp, 1]]),
       stepPlace('wire', L('Câblez le circuit en boucle : L → interrupteur → lampe → N', 'Wire the circuit as a loop: L → switch → lamp → N'),
         L('Cliquez sur une borne puis sur la suivante. La borne PE de la source reste libre. Un circuit doit toujours se refermer sur la source.', 'Click a terminal then the next one. The source PE terminal stays free. A circuit must always close back on the source.'),
-        (c) => sourceWired(c) && wired(c, [isToggle, isLamp])),
+        (c) => sourceWired(c) && wired(c, [isCtrlSw, isLamp])),
       simStep(),
-      behaviour('run', L('Fermez l’interrupteur : la lampe s’allume ; ouvrez-le : elle s’éteint', 'Close the switch: the lamp lights; open it: it goes off'),
-        L('En simulation, cliquez sur l’interrupteur pour le fermer ou l’ouvrir. La lampe s’allume quand le courant peut circuler dans toute la boucle.', 'In simulation, click the switch to close or open it. The lamp lights when current can flow around the whole loop.'),
+      simTest('run', L('Actionnez l’interrupteur (ou le bouton) : la lampe s’allume ; relâchez ou rouvrez : elle s’éteint', 'Operate the switch (or button): the lamp lights; release or reopen: it goes off'),
+        L('En simulation, cliquez sur l’interrupteur pour le fermer ou l’ouvrir (un bouton poussoir reste actionné tant que vous maintenez le clic). La lampe s’allume quand le courant peut circuler dans toute la boucle.', 'In simulation, click the switch to close or open it (a push button stays operated while you hold the click). The lamp lights when current can flow around the whole loop.'),
         [
-          { expect: { H1: false }, say: L('Interrupteur ouvert : lampe éteinte', 'Switch open: lamp off') },
-          { toggle: ['S1'], expect: { H1: true }, say: L('Interrupteur fermé : lampe allumée', 'Switch closed: lamp on') },
-          { expect: { H1: false }, say: L('Réouvert : lampe éteinte', 'Reopened: lamp off') },
-        ], ['S1', 'H1']),
+          { ok: (r, c) => !lampOn(r, c) },
+          { press: (c) => ids(c, isCtrlSw), toggle: (c) => ids(c, isCtrlSw), wait: 300, ok: (r, c) => lampOn(r, c) },
+          { wait: 300, ok: (r, c) => !lampOn(r, c) },
+        ]),
     ],
   },
   {
@@ -140,9 +213,8 @@ const ELECTRICAL: GExercise[] = [
     ],
     solution: startStop,
     steps: [
-      stepPlace('place', L('Posez la source, S1 (arrêt, NF), S2 (marche, NO), la bobine KM1 et un contact NO', 'Place the source, S1 (stop, NC), S2 (start, NO), coil KM1 and a NO contact'),
-        L('Boutons : « poussoir » (NO) et « poussoir NF ». Bobine : « bobine ». Contact : « contact simple » (NO) dans les contacts auxiliaires. Posez d’abord S1 (arrêt) puis S2 (marche) pour que les repères soient ceux de l’énoncé.', 'Buttons: “push button” (NO) and “push button NC”. Coil: “coil”. Contact: “simple contact” (NO) in auxiliary contacts. Place S1 (stop) first, then S2 (start), so tags match the brief.'),
-        (c) => has(c, isSource) && has(c, isNCBtn) && has(c, isNOBtn) && has(c, isCoil) && has(c, isNOk)),
+      needStep('place', L('Posez la source, S1 (arrêt, NF), S2 (marche, NO), la bobine KM1 et un contact NO', 'Place the source, S1 (stop, NC), S2 (start, NO), coil KM1 and a NO contact'),
+        L('Boutons : « poussoir » (NO) et « poussoir NF ». Bobine : « bobine ». Contact : « contact simple » (NO) dans les contacts auxiliaires. Posez d’abord S1 (arrêt) puis S2 (marche) pour que les repères soient ceux de l’énoncé.', 'Buttons: “push button” (NO) and “push button NC”. Coil: “coil”. Contact: “simple contact” (NO) in auxiliary contacts. Place S1 (stop) first, then S2 (start), so tags match the brief.'),[['supply', 1], [isNCBtn, 1], [isNOBtn, 1], [isCoil, 1], [isNOk, 1]]),
       stepPlace('tags', L('Vérifiez les repères : S1 = arrêt, S2 = marche, KM1 sur la bobine et sur son contact', 'Check the tags: S1 = stop, S2 = start, KM1 on the coil and its contact'),
         L('Double-clic sur un symbole pour changer son repère. Le contact commandé par une bobine prend le repère de la dernière bobine posée.', 'Double-click a symbol to change its tag. A coil-driven contact takes the tag of the last coil placed.'),
         (c) => c.doc.symbols.some((s) => s.label === 'S1' && isNCBtn(c, s)) && c.doc.symbols.some((s) => s.label === 'S2' && isNOBtn(c, s)) && c.doc.symbols.some((s) => s.label === 'KM1' && isCoil(c, s)) && c.doc.symbols.some((s) => s.label === 'KM1' && isNOk(c, s))),
@@ -166,12 +238,11 @@ const ELECTRICAL: GExercise[] = [
     ],
     solution: lamps24,
     steps: [
-      stepPlace('place', L('Posez la source, S1, S2, la bobine KM1, deux voyants H1 et H2 et trois contacts de KM1', 'Place the source, S1, S2, coil KM1, two lamps H1 and H2 and three KM1 contacts'),
-        L('Un contact NO d’auto-maintien, un contact NO pour H1 (marche) et un contact NF pour H2 (arrêt). Les contacts prennent le repère de la bobine.', 'One NO latching contact, one NO contact for H1 (run) and one NC contact for H2 (stop). Contacts take the coil tag.'),
-        (c) => has(c, isSource) && has(c, isNCBtn) && has(c, isNOBtn) && has(c, isCoil) && has(c, isNOk, 2) && has(c, isNCk) && has(c, isLamp, 2)),
+      needStep('place', L('Posez la source, S1, S2, la bobine KM1, deux voyants H1 et H2 et trois contacts de KM1', 'Place the source, S1, S2, coil KM1, two lamps H1 and H2 and three KM1 contacts'),
+        L('Un contact NO d’auto-maintien, un contact NO pour H1 (marche) et un contact NF pour H2 (arrêt). Les contacts prennent le repère de la bobine.', 'One NO latching contact, one NO contact for H1 (run) and one NC contact for H2 (stop). Contacts take the coil tag.'),[['supply', 1], [isNCBtn, 1], [isNOBtn, 1], [isCoil, 1], [isNOk, 2], [isNCk, 1], [isLamp, 2]]),
       stepPlace('volts', L('Réglez la source, la bobine et les deux voyants sur 24 V', 'Set the source, the coil and both lamps to 24 V'),
         L('Sélectionnez la source : champ « Tension de la source » = 24. Pour la bobine et chaque voyant : champ « Tension nominale » = 24 (liste ▾ des valeurs usuelles).', 'Select the source: “Source voltage” = 24. For the coil and each lamp: “Rated voltage” = 24 (usual values list ▾).'),
-        (c) => all(c, isSource).every((s) => s.volts === 24) && has(c, isSource) && all(c, isCoil).every((s) => s.volts === 24) && all(c, isLamp).length >= 2 && all(c, isLamp).every((s) => s.volts === 24)),
+        (c) => all(c, isSupply).every((s) => s.volts === 24) && supplyOk(c) && all(c, isCoil).every((s) => s.volts === 24) && all(c, isLamp).length >= 2 && all(c, isLamp).every((s) => s.volts === 24)),
       stepPlace('wire', L('Câblez la commande et les deux voyants', 'Wire the control and both lamps'),
         L('Chaque voyant est en série avec son contact, entre la phase et le neutre de la source.', 'Each lamp is in series with its contact, between the phase and the neutral of the source.'),
         (c) => sourceWired(c) && wired(c, [isNCBtn, isNOBtn, isCoil, isNOk, isNCk, isLamp])),
@@ -216,9 +287,8 @@ const ELECTRICAL: GExercise[] = [
     brief: [old('two-posts').statement as L, L('Règle à retenir : on met les arrêts en série (n’importe lequel coupe) et les marches en parallèle (n’importe lequel démarre).', 'Rule to remember: stops in series (any one breaks) and starts in parallel (any one starts).')],
     solution: twoPosts,
     steps: [
-      stepPlace('place', L('Posez la source, deux arrêts NF (S1, S4), deux marches NO (S2, S3), la bobine KM1 et son contact', 'Place the source, two NC stops (S1, S4), two NO starts (S2, S3), coil KM1 and its contact'),
-        L('Repères attendus : S1 et S4 pour les arrêts, S2 et S3 pour les marches. Modifiez-les par double-clic si besoin.', 'Expected tags: S1 and S4 for the stops, S2 and S3 for the starts. Double-click to change them if needed.'),
-        (c) => has(c, isSource) && has(c, isNCBtn, 2) && has(c, isNOBtn, 2) && has(c, isCoil) && has(c, isNOk)),
+      needStep('place', L('Posez la source, deux arrêts NF (S1, S4), deux marches NO (S2, S3), la bobine KM1 et son contact', 'Place the source, two NC stops (S1, S4), two NO starts (S2, S3), coil KM1 and its contact'),
+        L('Repères attendus : S1 et S4 pour les arrêts, S2 et S3 pour les marches. Modifiez-les par double-clic si besoin.', 'Expected tags: S1 and S4 for the stops, S2 and S3 for the starts. Double-click to change them if needed.'),[['supply', 1], [isNCBtn, 2], [isNOBtn, 2], [isCoil, 1], [isNOk, 1]]),
       stepPlace('wire', L('Câblez : les arrêts en série, les marches et le contact en parallèle, puis la bobine', 'Wire: stops in series, starts and contact in parallel, then the coil'),
         L('Les trois éléments en parallèle (S2, S3, contact KM1) sont raccordés aux mêmes deux points.', 'The three parallel elements (S2, S3, KM1 contact) are wired to the same two points.'),
         (c) => sourceWired(c) && wired(c, [isNCBtn, isNOBtn, isCoil, isNOk])),
@@ -236,9 +306,8 @@ const ELECTRICAL: GExercise[] = [
     brief: [old('delay').statement as L, L('La bobine temporisée KT est alimentée par un contact de KM1 ; un contact temporisé de KT enclenche ensuite KM2 après le délai réglé dans ses propriétés (5 s).', 'The timed coil KT is fed by a KM1 contact; a KT timed contact then energises KM2 after the delay set in its properties (5 s).')],
     solution: delayed,
     steps: [
-      stepPlace('place', L('Posez la source, S1, S2, KM1 et son auto-maintien, la bobine temporisée KT, KM2 et leurs contacts', 'Place the source, S1, S2, KM1 and its latching contact, the timed coil KT, KM2 and its contacts'),
-        L('Bobine temporisée : « bobine temporisée au travail » (la temporisation se règle sur la bobine). Contacts : trois « contacts simples » NO, repérés KM1 (auto-maintien), KM1 (vers KT) et KT (vers KM2). Repères des bobines : KM1, KT, KM2.', 'Timed coil: “on-delay coil” (the delay is set on the coil). Contacts: three NO “simple contacts” tagged KM1 (latching), KM1 (to KT) and KT (to KM2). Coil tags: KM1, KT, KM2.'),
-        (c) => has(c, isSource) && has(c, isNCBtn) && has(c, isNOBtn) && has(c, isCoil, 2) && has(c, isTimer) && has(c, isNOk, 3)),
+      needStep('place', L('Posez la source, S1, S2, KM1 et son auto-maintien, la bobine temporisée KT, KM2 et leurs contacts', 'Place the source, S1, S2, KM1 and its latching contact, the timed coil KT, KM2 and its contacts'),
+        L('Bobine temporisée : « bobine temporisée au travail » (la temporisation se règle sur la bobine). Contacts : trois « contacts simples » NO, repérés KM1 (auto-maintien), KM1 (vers KT) et KT (vers KM2). Repères des bobines : KM1, KT, KM2.', 'Timed coil: “on-delay coil” (the delay is set on the coil). Contacts: three NO “simple contacts” tagged KM1 (latching), KM1 (to KT) and KT (to KM2). Coil tags: KM1, KT, KM2.'),[['supply', 1], [isNCBtn, 1], [isNOBtn, 1], [isCoil, 2], [isTimer, 1], [isNOk, 3]]),
       stepPlace('delay', L('Réglez la temporisation de KT sur 5 s', 'Set the delay of KT to 5 s'),
         L('Sélectionnez la bobine KT : champ « Temporisation (s) ».', 'Select coil KT: “Delay (s)” field.'),
         (c) => all(c, isTimer).some((s) => (s.delay ?? DEFAULT_DELAY_S) === 5)),
@@ -258,9 +327,8 @@ const ELECTRICAL: GExercise[] = [
     brief: [old('interlock').statement as L, L('C’est la sécurité des inverseurs de sens : sans verrouillage, deux phases seraient court-circuitées si KM1 et KM2 collaient ensemble.', 'This is the safety of reversing starters: without interlock, two phases would be short-circuited if KM1 and KM2 pulled in together.')],
     solution: interlock,
     steps: [
-      stepPlace('place', L('Posez la source, S1, S2, S3, KM1 et KM2 avec chacun un contact NO et un contact NF', 'Place the source, S1, S2, S3, KM1 and KM2, each with one NO and one NC contact'),
-        L('Chaque contacteur a une bobine, un contact NO d’auto-maintien et un contact NF qui sert de verrouillage sur l’autre.', 'Each contactor has a coil, a NO latching contact and an NC contact used as interlock on the other.'),
-        (c) => has(c, isSource) && has(c, isNCBtn) && has(c, isNOBtn, 2) && has(c, isCoil, 2) && has(c, isNOk, 2) && has(c, isNCk, 2)),
+      needStep('place', L('Posez la source, S1, S2, S3, KM1 et KM2 avec chacun un contact NO et un contact NF', 'Place the source, S1, S2, S3, KM1 and KM2, each with one NO and one NC contact'),
+        L('Chaque contacteur a une bobine, un contact NO d’auto-maintien et un contact NF qui sert de verrouillage sur l’autre.', 'Each contactor has a coil, a NO latching contact and an NC contact used as interlock on the other.'),[['supply', 1], [isNCBtn, 1], [isNOBtn, 2], [isCoil, 2], [isNOk, 2], [isNCk, 2]]),
       stepPlace('wire', L('Câblez : le contact NF de chaque contacteur en série avec la bobine de l’autre', 'Wire: the NC contact of each contactor in series with the other one’s coil'),
         L('Le contact NF repéré KM2 se met devant la bobine KM1, et inversement.', 'The NC contact tagged KM2 goes in front of coil KM1, and vice versa.'),
         (c) => sourceWired(c) && wired(c, [isNCBtn, isNOBtn, isCoil, isNOk, isNCk])),
@@ -277,9 +345,8 @@ const ELECTRICAL: GExercise[] = [
     brief: [old('sequence').statement as L, L('Application typique : un convoyeur ne doit démarrer que si celui qui le suit tourne déjà.', 'Typical use: a conveyor must only start if the one after it is already running.')],
     solution: sequence,
     steps: [
-      stepPlace('place', L('Posez la source, S1, S2, S3, KM1, KM2 et trois contacts NO', 'Place the source, S1, S2, S3, KM1, KM2 and three NO contacts'),
-        L('Deux contacts d’auto-maintien (KM1 et KM2) et un contact KM1 de condition devant S3.', 'Two latching contacts (KM1 and KM2) and one KM1 condition contact in front of S3.'),
-        (c) => has(c, isSource) && has(c, isNCBtn) && has(c, isNOBtn, 2) && has(c, isCoil, 2) && has(c, isNOk, 3)),
+      needStep('place', L('Posez la source, S1, S2, S3, KM1, KM2 et trois contacts NO', 'Place the source, S1, S2, S3, KM1, KM2 and three NO contacts'),
+        L('Deux contacts d’auto-maintien (KM1 et KM2) et un contact KM1 de condition devant S3.', 'Two latching contacts (KM1 and KM2) and one KM1 condition contact in front of S3.'),[['supply', 1], [isNCBtn, 1], [isNOBtn, 2], [isCoil, 2], [isNOk, 3]]),
       stepPlace('wire', L('Câblez : le contact KM1 de condition en série avec S3 devant la bobine KM2', 'Wire: the KM1 condition contact in series with S3 in front of coil KM2'),
         L('S1 arrête les deux : il est placé en tête, avant les deux branches.', 'S1 stops both: it sits first, before the two branches.'),
         (c) => sourceWired(c) && wired(c, [isNCBtn, isNOBtn, isCoil, isNOk])),
@@ -318,7 +385,6 @@ const isElec52: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' &
 const isBi52: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' && f.a === 'elec' && f.b === 'elec' && nPorts(c, s) === 5 }
 const isLimit: P = (_c, s) => /41_limit_switches/.test(s.defId)
 const pneuWired = (c: Ctx, ps: P[]) => ps.every((p) => all(c, p).length > 0) && allWired(c, ps.flatMap((p) => all(c, p)))
-const ids = (c: Ctx, p: P) => all(c, p).map((s) => s.id)
 type Pos = { cylPos: Record<string, number> }
 const cylPos = (r: Pos, c: Ctx, p: P) => ids(c, p).map((i) => r.cylPos[i] ?? 0)
 const out = (r: Pos, c: Ctx, p: P) => cylPos(r, c, p).some((v) => v >= 0.99)
@@ -367,8 +433,6 @@ const manualCycle: SimStep[] = [
   { press: (c) => ids(c, isManValve), wait: 2000, ok: (r, c) => out(r, c, isCyl2) || out(r, c, isCyl1) },
   { wait: 2000, ok: (r, c) => back(r, c, isCyl2) || back(r, c, isCyl1) },
 ]
-const simTest = (id: string, title: L, hint: L, steps: SimStep[]): GStep => ({ id, title, hint, done: (c) => scenario(c, steps) })
-
 const PNEUMATIC: GExercise[] = [
   {
     id: 'p-manual', domain: 'pneumatic', level: 1, minutes: 15,
@@ -380,9 +444,8 @@ const PNEUMATIC: GExercise[] = [
     ],
     solution: pManual,
     steps: [
-      stepPlace('place', L('Posez la source d’air, un distributeur 5/2 manuel à ressort, un vérin double effet et deux silencieux', 'Place the air source, a spring-return manual 5/2 valve, a double-acting cylinder and two silencers'),
-        L('Onglet Pneumatique de la bibliothèque : « source d’air comprimé », distributeur « 5/2m [man]-[spring] », « double effet », « silencieux ».', 'Pneumatic tab of the library: “compressed air source”, “5/2m [man]-[spring]” valve, “double acting”, “silencer”.'),
-        (c) => has(c, isAir) && has(c, isMan52) && has(c, isCyl2) && has(c, isSilencer, 2)),
+      needStep('place', L('Posez la source d’air, un distributeur 5/2 manuel à ressort, un vérin double effet et deux silencieux', 'Place the air source, a spring-return manual 5/2 valve, a double-acting cylinder and two silencers'),
+        L('Onglet Pneumatique de la bibliothèque : « source d’air comprimé », distributeur « 5/2m [man]-[spring] », « double effet », « silencieux ».', 'Pneumatic tab of the library: “compressed air source”, “5/2m [man]-[spring]” valve, “double acting”, “silencer”.'),[[isAir, 1], [isMan52, 1], [isCyl2, 1], [isSilencer, 2]]),
       stepPlace('wire', L('Raccordez : source → P ; A et B → les deux chambres du vérin ; R1 et R2 → silencieux', 'Connect: source → P; A and B → the two cylinder chambers; R1 and R2 → silencers'),
         L('Les orifices de travail (A, B) sont en haut du distributeur, l’alimentation et les échappements en bas : l’orifice central du bas est P.', 'Work ports (A, B) are at the top of the valve, supply and exhausts at the bottom: the central bottom port is P.'),
         (c) => pneuWired(c, [isAir, isMan52, isCyl2, isSilencer])),
@@ -401,9 +464,8 @@ const PNEUMATIC: GExercise[] = [
     ],
     solution: pSingle,
     steps: [
-      stepPlace('place', L('Posez la source d’air, un distributeur 3/2 manuel, un vérin simple effet et un silencieux', 'Place the air source, a manual 3/2 valve, a single-acting cylinder and a silencer'),
-        L('Distributeur « 3/2m_nc [man]-[spring] » : commande manuelle, rappel par ressort, normalement fermé.', '“3/2m_nc [man]-[spring]” valve: manual control, spring return, normally closed.'),
-        (c) => has(c, isAir) && has(c, isMan32) && has(c, isCyl1) && has(c, isSilencer)),
+      needStep('place', L('Posez la source d’air, un distributeur 3/2 manuel, un vérin simple effet et un silencieux', 'Place the air source, a manual 3/2 valve, a single-acting cylinder and a silencer'),
+        L('Distributeur « 3/2m_nc [man]-[spring] » : commande manuelle, rappel par ressort, normalement fermé.', '“3/2m_nc [man]-[spring]” valve: manual control, spring return, normally closed.'),[[isAir, 1], [isMan32, 1], [isCyl1, 1], [isSilencer, 1]]),
       stepPlace('wire', L('Raccordez : source → P ; A → vérin ; R → silencieux', 'Connect: source → P; A → cylinder; R → silencer'),
         L('L’orifice du haut est A (sortie vers le vérin). Parmi les deux orifices du bas, P est celui qui reçoit l’air, R celui qui s’échappe.', 'The top port is A (output to the cylinder). Of the two bottom ports, P receives the air and R exhausts.'),
         (c) => pneuWired(c, [isAir, isMan32, isCyl1, isSilencer])),
@@ -422,21 +484,20 @@ const PNEUMATIC: GExercise[] = [
     ],
     solution: pElectro(1),
     steps: [
-      stepPlace('place', L('Posez le circuit pneumatique (source, électrovanne 5/2, vérin, silencieux) et le circuit électrique (source, interrupteur, bobine)', 'Place the pneumatic circuit (source, 5/2 solenoid valve, cylinder, silencers) and the electrical circuit (source, switch, coil)'),
-        L('Électrovanne « 5/2e [elec]-[spring] ». Côté électrique : « Source monophasée ou continue », un interrupteur et une « bobine ».', '“5/2e [elec]-[spring]” solenoid valve. Electrical side: “Single-phase or DC source”, a switch and a “coil”.'),
-        (c) => has(c, isAir) && has(c, isElec52) && has(c, isCyl2) && has(c, isSilencer, 2) && has(c, isSource) && has(c, isToggle) && has(c, isCoil)),
+      needStep('place', L('Posez le circuit pneumatique (source, électrovanne 5/2, vérin, silencieux) et le circuit électrique (source, interrupteur, bobine)', 'Place the pneumatic circuit (source, 5/2 solenoid valve, cylinder, silencers) and the electrical circuit (source, switch, coil)'),
+        L('Électrovanne « 5/2e [elec]-[spring] ». Côté électrique : « Source monophasée ou continue », un interrupteur et une « bobine ».', '“5/2e [elec]-[spring]” solenoid valve. Electrical side: “Single-phase or DC source”, a switch and a “coil”.'),[[isAir, 1], [isElec52, 1], [isCyl2, 1], [isSilencer, 2], ['supply', 1], [isCtrlSw, 1], [isCoil, 1]]),
       stepPlace('tag', L('Donnez le même repère YV1 à l’électrovanne et à sa bobine', 'Give the same tag YV1 to the solenoid valve and its coil'),
         L('Double-clic sur chaque symbole puis champ « Repère » : YV1 des deux côtés. C’est ce repère qui fait agir la bobine sur le distributeur.', 'Double-click each symbol then the “Tag” field: YV1 on both. That tag makes the coil act on the valve.'),
         (c) => sameTag(c, isElec52, isCoil)),
       stepPlace('wire', L('Câblez la partie pneumatique et la partie électrique', 'Wire the pneumatic part and the electrical part'),
         L('Électrique : L → interrupteur → bobine → N. Pneumatique : comme pour le distributeur manuel (P, A, B, R1, R2).', 'Electrical: L → switch → coil → N. Pneumatic: as for the manual valve (P, A, B, R1, R2).'),
-        (c) => pneuWired(c, [isAir, isElec52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isToggle, isCoil])),
+        (c) => pneuWired(c, [isAir, isElec52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isCtrlSw, isCoil])),
       simStep(),
       simTest('run', L('Fermez S1 : le vérin sort ; ouvrez S1 : il rentre', 'Close S1: the cylinder extends; open S1: it retracts'),
         L('En simulation, cliquez sur l’interrupteur. Le vérin met environ une seconde à sortir.', 'In simulation, click the switch. The cylinder takes about a second to extend.'),
         [
           { ok: (r, c) => back(r, c, isCyl2) },
-          { toggle: (c) => ids(c, isToggle), wait: 2000, ok: (r, c) => out(r, c, isCyl2) },
+          { press: (c) => ids(c, isCtrlSw), toggle: (c) => ids(c, isCtrlSw), wait: 2000, ok: (r, c) => out(r, c, isCyl2) },
           { wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
         ]),
     ],
@@ -451,22 +512,21 @@ const PNEUMATIC: GExercise[] = [
     ],
     solution: pElectro(2),
     steps: [
-      stepPlace('place', L('Posez le circuit pneumatique, la source électrique, deux interrupteurs S1 et S2 et la bobine YV1', 'Place the pneumatic circuit, the electrical source, two switches S1 and S2 and coil YV1'),
-        L('Reprenez le circuit de l’exercice précédent et ajoutez un second interrupteur.', 'Start from the previous exercise’s circuit and add a second switch.'),
-        (c) => has(c, isAir) && has(c, isElec52) && has(c, isCyl2) && has(c, isSilencer, 2) && has(c, isSource) && has(c, isToggle, 2) && has(c, isCoil)),
+      needStep('place', L('Posez le circuit pneumatique, la source électrique, deux interrupteurs S1 et S2 et la bobine YV1', 'Place the pneumatic circuit, the electrical source, two switches S1 and S2 and coil YV1'),
+        L('Reprenez le circuit de l’exercice précédent et ajoutez un second interrupteur.', 'Start from the previous exercise’s circuit and add a second switch.'),[[isAir, 1], [isElec52, 1], [isCyl2, 1], [isSilencer, 2], ['supply', 1], [isCtrlSw, 2], [isCoil, 1]]),
       stepPlace('tag', L('Repères : YV1 sur l’électrovanne et sur la bobine', 'Tags: YV1 on the solenoid valve and on the coil'),
         L('Même repère des deux côtés pour que la bobine commande la vanne.', 'Same tag on both sides so the coil drives the valve.'),
         (c) => sameTag(c, isElec52, isCoil)),
       stepPlace('wire', L('Câblez : L → S1 → S2 → bobine → N, et le circuit pneumatique', 'Wire: L → S1 → S2 → coil → N, and the pneumatic circuit'),
         L('Les deux interrupteurs sont l’un derrière l’autre, pas en parallèle.', 'The two switches are one after the other, not in parallel.'),
-        (c) => pneuWired(c, [isAir, isElec52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isToggle, isCoil])),
+        (c) => pneuWired(c, [isAir, isElec52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isCtrlSw, isCoil])),
       simStep(),
       simTest('run', L('Seul S1 fermé : rien ; S1 et S2 fermés : le vérin sort', 'Only S1 closed: nothing; S1 and S2 closed: the cylinder extends'),
         L('Testez les trois cas : S1 seul, S2 seul, les deux.', 'Test the three cases: S1 alone, S2 alone, both.'),
         [
-          { toggle: (c) => ids(c, isToggle).slice(0, 1), wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
-          { toggle: (c) => ids(c, isToggle).slice(1, 2), wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
-          { toggle: (c) => ids(c, isToggle), wait: 2000, ok: (r, c) => out(r, c, isCyl2) },
+          { press: (c) => ids(c, isCtrlSw).slice(0, 1), toggle: (c) => ids(c, isCtrlSw).slice(0, 1), wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
+          { press: (c) => ids(c, isCtrlSw).slice(1, 2), toggle: (c) => ids(c, isCtrlSw).slice(1, 2), wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
+          { press: (c) => ids(c, isCtrlSw), toggle: (c) => ids(c, isCtrlSw), wait: 2000, ok: (r, c) => out(r, c, isCyl2) },
           { wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
         ]),
     ],
@@ -499,12 +559,10 @@ const PNEUMATIC: GExercise[] = [
     ],
     solution: pAuto,
     steps: [
-      stepPlace('place', L('Posez le circuit pneumatique : source, électrovanne 5/2 bistable, vérin A1, deux silencieux', 'Place the pneumatic circuit: source, bistable 5/2 solenoid valve, cylinder A1, two silencers'),
-        L('Électrovanne « 5/2e [elec]-[elec] » : deux bobines. Nommez le vérin A1.', '“5/2e [elec]-[elec]” solenoid valve: two coils. Name the cylinder A1.'),
-        (c) => has(c, isAir) && has(c, isBi52) && has(c, isCyl2) && has(c, isSilencer, 2)),
-      stepPlace('elec', L('Posez la commande : source, bouton S2, deux fins de course A1− et A1+, deux bobines YV1 et YV2', 'Place the control: source, button S2, two limit switches A1− and A1+, two coils YV1 and YV2'),
-        L('Un fin de course prend le repère du vérin suivi de + ou − : « A1+ » est actionné quand le vérin A1 est sorti, « A1- » quand il est rentré. L’électrovanne bistable porte le repère « YV1/YV2 ».', 'A limit switch takes the cylinder tag followed by + or −: “A1+” is actuated when cylinder A1 is out, “A1-” when it is in. The bistable valve is tagged “YV1/YV2”.'),
-        (c) => has(c, isSource) && has(c, isNOBtn) && has(c, isLimit, 2) && has(c, isCoil, 2)),
+      needStep('place', L('Posez le circuit pneumatique : source, électrovanne 5/2 bistable, vérin A1, deux silencieux', 'Place the pneumatic circuit: source, bistable 5/2 solenoid valve, cylinder A1, two silencers'),
+        L('Électrovanne « 5/2e [elec]-[elec] » : deux bobines. Nommez le vérin A1.', '“5/2e [elec]-[elec]” solenoid valve: two coils. Name the cylinder A1.'),[[isAir, 1], [isBi52, 1], [isCyl2, 1], [isSilencer, 2]]),
+      needStep('elec', L('Posez la commande : source, bouton S2, deux fins de course A1− et A1+, deux bobines YV1 et YV2', 'Place the control: source, button S2, two limit switches A1− and A1+, two coils YV1 and YV2'),
+        L('Un fin de course prend le repère du vérin suivi de + ou − : « A1+ » est actionné quand le vérin A1 est sorti, « A1- » quand il est rentré. L’électrovanne bistable porte le repère « YV1/YV2 ».', 'A limit switch takes the cylinder tag followed by + or −: “A1+” is actuated when cylinder A1 is out, “A1-” when it is in. The bistable valve is tagged “YV1/YV2”.'),[['supply', 1], [isNOBtn, 1], [isLimit, 2], [isCoil, 2]]),
       stepPlace('wire', L('Câblez : S2 → A1− → YV1 ; A1+ → YV2 ; et le circuit pneumatique', 'Wire: S2 → A1− → YV1; A1+ → YV2; and the pneumatic circuit'),
         L('A1+ est alimenté directement par la phase : dès que le vérin est sorti il commande YV2. A1− est derrière S2 : il relance un cycle tant que S2 est maintenu.', 'A1+ is fed directly by the phase: as soon as the cylinder is out it drives YV2. A1− is behind S2: it starts a new cycle as long as S2 is held.'),
         (c) => pneuWired(c, [isAir, isBi52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isNOBtn, isCoil]) && allWired(c, all(c, isLimit))),
@@ -541,6 +599,15 @@ const isHFilter: P = (_c, s) => /81_filters/.test(s.defId)
 const isHManual: P = (_c, s) => /45_valves\/vanne_man/.test(s.defId)
 const portsDir = (c: Ctx, s: PlacedSymbol, dir: string) => (c.defs[s.defId]?.ports ?? []).filter((p) => p.dir === dir).map((p) => p.id)
 const dirNets = (c: Ctx, s: PlacedSymbol, dir: string, n: (a: string, b: string) => string) => portsDir(c, s, dir).map((p) => n(s.id, p))
+const FLUID_NAMES: [P, string, string][] = [
+  [isAir, 'source d’air comprimé', 'compressed air source'], [isSilencer, 'silencieux', 'silencer'], [isCyl2, 'vérin double effet', 'double-acting cylinder'],
+  [isCyl1, 'vérin simple effet', 'single-acting cylinder'], [isMan52, 'distributeur 5/2 manuel', 'manual 5/2 valve'], [isMan32, 'distributeur 3/2 manuel', 'manual 3/2 valve'],
+  [isElec52, 'électrovanne 5/2 à ressort', 'spring-return 5/2 solenoid valve'], [isBi52, 'électrovanne 5/2 bistable', 'bistable 5/2 solenoid valve'],
+  [isLimit, 'fin de course', 'limit switch'], [isTank, 'bâche', 'tank'], [isPump, 'pompe', 'pump'], [isHValve4, 'distributeur 4 voies', '4-way valve'],
+  [isHCyl, 'vérin hydraulique', 'hydraulic cylinder'], [isHMotor, 'moteur hydraulique', 'hydraulic motor'], [isHManual, 'vanne manuelle', 'manual valve'],
+  [isHFilter, 'filtre', 'filter'], [isAccu, 'accumulateur', 'accumulator'],
+]
+for (const [p, fr, en] of FLUID_NAMES) NAMES.set(p, [fr, en])
 const hydroStatic = (c: Ctx, ps: P[]) => ps.every((p) => all(c, p).length > 0) && allWired(c, ps.flatMap((p) => all(c, p)), ['t2'])
 
 /** Boucles complètes : bâche → pompe → distributeur 4 voies → charge (vérin ou moteur), avec retour à la bâche. */
@@ -626,9 +693,8 @@ const HYDRAULIC: GExercise[] = [
     ],
     solution: hCyl,
     steps: [
-      stepPlace('place', L('Posez la bâche, la pompe, un distributeur 4 voies et un vérin double effet', 'Place the tank, the pump, a 4-way valve and a double-acting cylinder'),
-        L('Onglet Hydraulique de la bibliothèque : « bâche à l’air libre », « pompe », « distributeur 4-2 » et « vérin double effet ».', 'Hydraulic tab of the library: “open tank”, “pump”, “4-2 valve” and “double-acting cylinder”.'),
-        (c) => has(c, isTank) && has(c, isPump) && has(c, isHValve4) && has(c, isHCyl)),
+      needStep('place', L('Posez la bâche, la pompe, un distributeur 4 voies et un vérin double effet', 'Place the tank, the pump, a 4-way valve and a double-acting cylinder'),
+        L('Onglet Hydraulique de la bibliothèque : « bâche à l’air libre », « pompe », « distributeur 4-2 » et « vérin double effet ».', 'Hydraulic tab of the library: “open tank”, “pump”, “4-2 valve” and “double-acting cylinder”.'),[[isTank, 1], [isPump, 1], [isHValve4, 1], [isHCyl, 1]]),
       stepPlace('wire', L('Raccordez tous les orifices', 'Connect every port'),
         L('Le refoulement de la pompe (en haut) va sur un orifice du bas du distributeur (P). L’autre orifice du bas (T) retourne à la bâche. Les deux orifices du haut (A et B) vont aux deux chambres du vérin.', 'The pump delivery (top) goes to a bottom port of the valve (P). The other bottom port (T) returns to the tank. The two top ports (A and B) go to the two cylinder chambers.'),
         (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl])),
@@ -647,9 +713,8 @@ const HYDRAULIC: GExercise[] = [
     ],
     solution: hMotor,
     steps: [
-      stepPlace('place', L('Posez la bâche, la pompe, un distributeur 4 voies et un moteur hydraulique', 'Place the tank, the pump, a 4-way valve and a hydraulic motor'),
-        L('Le moteur hydraulique est dans la même famille que les pompes de la bibliothèque (« moteur hydraulique »).', 'The hydraulic motor is in the same family as the pumps in the library (“hydraulic motor”).'),
-        (c) => has(c, isTank) && has(c, isPump) && has(c, isHValve4) && has(c, isHMotor)),
+      needStep('place', L('Posez la bâche, la pompe, un distributeur 4 voies et un moteur hydraulique', 'Place the tank, the pump, a 4-way valve and a hydraulic motor'),
+        L('Le moteur hydraulique est dans la même famille que les pompes de la bibliothèque (« moteur hydraulique »).', 'The hydraulic motor is in the same family as the pumps in the library (“hydraulic motor”).'),[[isTank, 1], [isPump, 1], [isHValve4, 1], [isHMotor, 1]]),
       stepPlace('wire', L('Raccordez l’ensemble comme pour le vérin', 'Connect everything as for the cylinder'),
         L('Pompe → P ; T → bâche ; A et B → les deux orifices du moteur ; aspiration de la pompe → bâche.', 'Pump → P; T → tank; A and B → the two motor ports; pump suction → tank.'),
         (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHMotor])),
@@ -671,9 +736,8 @@ const HYDRAULIC: GExercise[] = [
       stepPlace('base', L('Réalisez d’abord le circuit de base : bâche, pompe, distributeur et vérin raccordés', 'First build the basic circuit: tank, pump, valve and cylinder connected'),
         L('Reprenez l’exercice « Circuit hydraulique d’un vérin ».', 'Redo the “Hydraulic circuit for a cylinder” exercise.'),
         (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl]) && hydroLoops(c, isHCyl, true).length >= 1),
-      stepPlace('place', L('Posez une vanne manuelle et un filtre', 'Place a manual valve and a filter'),
-        L('Vanne : « vanne manuelle ». Filtre : famille « filtres ». Posez-les sur le fil entre la bâche et la pompe : le fil se coupe et se raccorde tout seul.', 'Valve: “manual valve”. Filter: “filters” family. Drop them on the wire between tank and pump: the wire is cut and reconnected by itself.'),
-        (c) => has(c, isHManual) && has(c, isHFilter)),
+      needStep('place', L('Posez une vanne manuelle et un filtre', 'Place a manual valve and a filter'),
+        L('Vanne : « vanne manuelle ». Filtre : famille « filtres ». Posez-les sur le fil entre la bâche et la pompe : le fil se coupe et se raccorde tout seul.', 'Valve: “manual valve”. Filter: “filters” family. Drop them on the wire between tank and pump: the wire is cut and reconnected by itself.'),[[isHManual, 1], [isHFilter, 1]]),
       stepPlace('series', L('Sur la ligne d’aspiration : bâche → vanne → filtre → pompe', 'On the suction line: tank → valve → filter → pump'),
         L('Chaque organe a deux orifices : l’un côté bâche, l’autre côté pompe. L’aspiration ne doit plus aller directement de la bâche à la pompe.', 'Each part has two ports: one tank side, one pump side. The suction must no longer go straight from tank to pump.'),
         (c) => { const v = all(c, isHManual)[0], f = all(c, isHFilter)[0]; return !!v && !!f && suctionThrough(c, [v, f]) }),
@@ -692,9 +756,8 @@ const HYDRAULIC: GExercise[] = [
       stepPlace('base', L('Réalisez d’abord le circuit de base', 'First build the basic circuit'),
         L('Bâche, pompe, distributeur et vérin raccordés.', 'Tank, pump, valve and cylinder connected.'),
         (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl]) && hydroLoops(c, isHCyl).length >= 1),
-      stepPlace('place', L('Posez un accumulateur (bâche pressurisée)', 'Place an accumulator (pressurised tank)'),
-        L('Famille « Réservoirs » : « Bâche pressurisée (accumulateur) ».', '“Tanks” family: “Pressurised tank (accumulator)”.'),
-        (c) => has(c, isAccu)),
+      needStep('place', L('Posez un accumulateur (bâche pressurisée)', 'Place an accumulator (pressurised tank)'),
+        L('Famille « Réservoirs » : « Bâche pressurisée (accumulateur) ».', '“Tanks” family: “Pressurised tank (accumulator)”.'),[[isAccu, 1]]),
       stepPlace('wire', L('Raccordez l’accumulateur sur le refoulement de la pompe', 'Connect the accumulator to the pump delivery'),
         L('Il se branche sur le fil entre la pompe et l’orifice P du distributeur. Son seul orifice est relié à cette ligne.', 'It branches onto the wire between the pump and port P of the valve. Its single port connects to that line.'),
         (c) => { const n = netOf(c); const outNets = all(c, isPump).flatMap((p) => dirNets(c, p, 'up', n)); return all(c, isAccu).some((a) => (c.defs[a.defId]?.ports ?? []).some((q) => outNets.includes(n(a.id, q.id)))) && allWired(c, all(c, isAccu)) }),
@@ -710,9 +773,8 @@ const HYDRAULIC: GExercise[] = [
     ],
     solution: hTwo,
     steps: [
-      stepPlace('place', L('Posez la bâche, la pompe, deux distributeurs 4 voies et deux vérins', 'Place the tank, the pump, two 4-way valves and two cylinders'),
-        L('Posez un seul exemplaire de bâche et de pompe, mais deux distributeurs et deux vérins.', 'Place a single tank and a single pump, but two valves and two cylinders.'),
-        (c) => has(c, isTank) && has(c, isPump) && has(c, isHValve4, 2) && has(c, isHCyl, 2)),
+      needStep('place', L('Posez la bâche, la pompe, deux distributeurs 4 voies et deux vérins', 'Place the tank, the pump, two 4-way valves and two cylinders'),
+        L('Posez un seul exemplaire de bâche et de pompe, mais deux distributeurs et deux vérins.', 'Place a single tank and a single pump, but two valves and two cylinders.'),[[isTank, 1], [isPump, 1], [isHValve4, 2], [isHCyl, 2]]),
       stepPlace('wire', L('Raccordez tous les orifices', 'Connect all the ports'),
         L('Le refoulement de la pompe alimente les orifices P des deux distributeurs ; leurs orifices T retournent à la bâche.', 'The pump delivery feeds port P of both valves; their T ports return to the tank.'),
         (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl])),

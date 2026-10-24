@@ -21,6 +21,8 @@ export interface GStep {
   title: L
   hint: L
   done: (c: Ctx) => boolean
+  /** conseils : ce qui manque encore pour réussir l'étape (affiché sous l'étape en cours) */
+  missing?: (c: Ctx) => string[]
 }
 
 export interface GExercise {

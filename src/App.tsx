@@ -338,11 +338,13 @@ function Editor() {
   }, [sim])
   // exercice guidé : les étapes se cochent d'après le schéma (recalcul un instant après la dernière modification)
   const [stepsDone, setStepsDone] = useState<boolean[]>([])
+  const [stepsMissing, setStepsMissing] = useState<string[][]>([])
   useEffect(() => {
-    if (!guidedEx) { setStepsDone([]); return }
+    if (!guidedEx) { setStepsDone([]); setStepsMissing([]); return }
     const id = window.setTimeout(() => {
       const ctx = { doc: all, defs: SYMBOL_MAP, lang, simMode }
       setStepsDone(guidedEx.steps.map((st) => { try { return st.done(ctx) } catch { return false } }))
+      setStepsMissing(guidedEx.steps.map((st) => { try { return st.missing?.(ctx) ?? [] } catch { return [] } }))
     }, 150)
     return () => window.clearTimeout(id)
   }, [guidedEx, all, lang, simMode])
@@ -1386,7 +1388,7 @@ function Editor() {
       </main>
 
       <aside className="props">
-        {guidedEx && <GuidedPanel ex={guidedEx} done={guidedEx.steps.map((_, i) => !!stepsDone[i])} lang={lang} onClose={() => chooseGuided(null)} onSolution={guidedSolution} onRestart={guidedRestart} onList={() => setShowGuided(true)} />}
+        {guidedEx && <GuidedPanel ex={guidedEx} done={guidedEx.steps.map((_, i) => !!stepsDone[i])} missing={guidedEx.steps.map((_, i) => stepsMissing[i] ?? [])} lang={lang} onClose={() => chooseGuided(null)} onSolution={guidedSolution} onRestart={guidedRestart} onList={() => setShowGuided(true)} />}
         {sim && !sel.length ? (
           <>
             <h3>{t('simTitle')}</h3>

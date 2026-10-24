@@ -502,3 +502,6 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 
 .empty { position: absolute; }
 .empty .empty-x { position: absolute; top: 8px; right: 8px; }
+
+.guided-missing { margin: 5px 0 2px; padding: 5px 8px; background: #e0800018; border-left: 3px solid #e08000; font-weight: 400; font-size: 12px; }
+.guided-missing ul { margin: 3px 0 0 16px; padding: 0; }
