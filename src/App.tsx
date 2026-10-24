@@ -20,7 +20,8 @@ import { FONTS } from './fonts'
 import { settingsAdvice, wireAdvice as computeWireAdvice, type Suggestion } from './settings'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
-import { checkDoc } from './check'
+import { checkDoc, type Issue } from './check'
+import { applyFixToDoc, type Fix } from './advice'
 import { netLabels } from './nets'
 import { pagesOf as pagesOfDoc } from './pages'
 import { addPage, deletePage, mergedDoc, pageCount, pageOfSymbols, renamePage, switchPage } from './pages'
@@ -361,9 +362,16 @@ function Editor() {
   }, [simMode, clockUi.paused, clockUi.speed]) // eslint-disable-line react-hooks/exhaustive-deps
   const [showCheck, setShowCheck] = useState(false)
   /** applique une correction proposée par le Contrôle (calibre, réglage…) aux caractéristiques d'un appareil */
-  const applyFix = (fix: { symId: string; rated: Ratings }) => {
-    commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === fix.symId ? { ...s, rated: { ...s.rated, ...fix.rated } } : s)) }))
+  const applyFix = (fix: Fix) => {
+    commit((d) => applyFixToDoc(d, fix, SYMBOL_MAP))
     say(tr(lang, 'fixApplied'))
+  }
+  /** applique d'un coup toutes les corrections proposées (erreurs et avertissements d'abord) */
+  const applyAllFixes = (list: Issue[]) => {
+    const fixes = list.filter((i) => i.fix && !i.resolved && i.level !== 'info').map((i) => i.fix!)
+    if (!fixes.length) return
+    commit((d) => fixes.reduce((acc, f) => applyFixToDoc(acc, f, SYMBOL_MAP), d))
+    say(tr(lang, 'fixesApplied'))
   }
   const issues = useMemo(() => (showCheck ? checkDoc(all, SYMBOL_MAP, lang) : []), [showCheck, all, lang])
   // pastille du bouton Contrôle : nombre d'erreurs et d'avertissements, recalculé un instant après la dernière modification
@@ -1713,13 +1721,16 @@ function Editor() {
               <>
                 <p className="muted">{t('checkHelp')}</p>
                 <p className="muted small">{t('checkDisclaimer')}</p>
+                {issues.filter((i) => i.fix && !i.resolved && i.level !== 'info').length > 1 && (
+                  <p><button onClick={() => applyAllFixes(issues)}>{t('applyAllFixes')} ({issues.filter((i) => i.fix && !i.resolved && i.level !== 'info').length})</button></p>
+                )}
                 <ul className="issues">
                   {issues.map((i, n) => (
                     <li key={n} className={i.level + (i.resolved ? ' resolved' : '')}>
                       <button className="link" disabled={!i.symId} onClick={() => { if (i.symId) { setSel([i.symId]); setShowCheck(false) } }}>
                         {i.resolved ? '✅' : i.level === 'error' ? '⛔' : i.level === 'warn' ? '⚠' : '💡'} {i.text}
                       </button>
-                      {i.fix && <button className="mini" onClick={() => applyFix(i.fix!)}>{t('applyFix')}</button>}
+                      {i.fix && !i.resolved && <button className="mini" onClick={() => applyFix(i.fix!)} title={i.fix.label}>{t('applyFix')} : {i.fix.label}</button>}
                       {i.why && <p className="why">{i.why}</p>}
                     </li>
                   ))}

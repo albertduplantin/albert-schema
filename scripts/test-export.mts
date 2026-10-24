@@ -159,5 +159,34 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   check('source isolée : LI–NI = 230 V, mais phase–terre et neutre–terre indéterminés', voltageBetween('LI', 'NI', fake, SYMBOL_MAP) === 230 && voltageBetween('LI', 'PE', fake, SYMBOL_MAP) === undefined && voltageBetween('NI', 'PE', fake, SYMBOL_MAP) === undefined)
   check('source de terre classique : neutre–terre toujours 0 V', voltageBetween('N', 'PE', fake, SYMBOL_MAP) === 0)
 }
+// ── Contrôle : corrections applicables en un clic
+{
+  const { checkDoc } = await import(ROOT + '/src/check.ts')
+  const { applyFixToDoc } = await import(ROOT + '/src/advice.ts')
+  const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  // tension de bobine inadaptée
+  const d = T.build(base, [['src', 'sim-src1', 400, 30], ['c', Q('380_signaling_operating/11_optical_signaling/lampe2'), 400, 150, 'H2']], [['src', 'a', 'c', 't0'], ['c', 't1', 'src', 'b']])
+  d.symbols.find((x: any) => x.defId === 'sim-src1').volts = 24
+  d.symbols.find((x: any) => x.label === 'H2').volts = 230
+  const bad = checkDoc(d, SYMBOL_MAP, 'fr').find((x: any) => /24 V appliqués/.test(x.text))
+  check('Contrôle : tension inadaptée → correction « tension 24 V » proposée', bad?.fix?.patch?.volts === 24, JSON.stringify(bad?.fix))
+  const fixed = applyFixToDoc(d, bad.fix, SYMBOL_MAP)
+  check('Contrôle : la correction supprime l’erreur', !checkDoc(fixed, SYMBOL_MAP, 'fr').some((x: any) => /24 V appliqués/.test(x.text)) && fixed.symbols.find((x: any) => x.label === 'H2').volts === 24)
+  // moteur sans terre
+  const m = T.motorStarter(base)
+  const mot = m.symbols.find((x: any) => x.label === 'M1')
+  m.wires = m.wires.filter((w: any) => !((w.from.symId === mot.id && w.from.portId === 't3') || (w.to.symId === mot.id && w.to.portId === 't3')))
+  const pe = checkDoc(m, SYMBOL_MAP, 'fr').find((x: any) => /borne de terre/.test(x.text))
+  check('Contrôle : PE du moteur non reliée → correction « relier à la terre »', !!pe?.fix?.earth)
+  const m2 = applyFixToDoc(m, pe.fix, SYMBOL_MAP)
+  check('Contrôle : la borne PE est reliée et l’avertissement disparaît', !checkDoc(m2, SYMBOL_MAP, 'fr').some((x: any) => /borne de terre/.test(x.text)))
+  // calibre trop faible pour le moteur
+  const m3 = T.motorStarter(base)
+  m3.symbols.find((x: any) => x.label === 'Q1').rated = { in: 4, curve: 'D' }
+  const low = checkDoc(m3, SYMBOL_MAP, 'fr').find((x: any) => /inférieur au courant nominal du moteur/.test(x.text))
+  check('Contrôle : calibre trop faible → correction vers un calibre suffisant', (low?.fix?.rated?.in ?? 0) >= 8, JSON.stringify(low?.fix))
+  const m4 = applyFixToDoc(m3, low.fix, SYMBOL_MAP)
+  check('Contrôle : après correction, plus d’erreur de calibre', !checkDoc(m4, SYMBOL_MAP, 'fr').some((x: any) => /inférieur au courant nominal du moteur/.test(x.text)))
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
