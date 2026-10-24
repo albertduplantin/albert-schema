@@ -499,3 +499,6 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 .seg button { border-radius: 0; margin-left: -1px; }
 .seg button.on { background: var(--accent-olive); color: #fff; border-color: var(--accent-olive); position: relative; }
 .guided-list .cards { max-height: 55vh; overflow-y: auto; }
+
+.empty { position: absolute; }
+.empty .empty-x { position: absolute; top: 8px; right: 8px; }

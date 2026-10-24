@@ -200,6 +200,8 @@ function Editor() {
   }
   const [recent, setRecent] = useState<string[]>(loadRecent)
   const [showBom, setShowBom] = useState(false)
+  // fenêtre « feuille vide » : fermable ; elle réapparaît si la feuille est vidée plus tard
+  const [emptyClosed, setEmptyClosed] = useState(false)
   // exercices guidés : liste, exercice en cours, exercices réussis (conservés sur cet appareil)
   const [showGuided, setShowGuided] = useState(false)
   const [guidedId, setGuidedId] = useState<string | null>(() => { try { return localStorage.getItem('albertschema.guided') } catch { return null } })
@@ -260,6 +262,7 @@ function Editor() {
   const doc = h.doc
   const docRef = useRef(doc)
   docRef.current = doc
+  useEffect(() => { if (doc.symbols.length) setEmptyClosed(false) }, [doc.symbols.length])
   useEffect(() => {
     const id = window.setInterval(() => {
       const d = docRef.current
@@ -1353,8 +1356,9 @@ function Editor() {
           <Chrono rows={trace.current.rows} names={signalNames} now={chronoNow} lang={lang}
             onClear={() => { trace.current = { t0: vnow(), rows: [] }; setChronoNow(0) }} />
         )}
-        {!doc.symbols.length && !placing && (
+        {!doc.symbols.length && !placing && !emptyClosed && (
           <div className="empty">
+            <button className="icon empty-x" onClick={() => setEmptyClosed(true)} aria-label={t('close')} title={t('close')}>✕</button>
             <h2>{t('emptyTitle')}</h2>
             <p>{t('emptyText')}</p>
             <div className="tpls">
