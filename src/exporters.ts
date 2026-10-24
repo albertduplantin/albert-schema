@@ -1,5 +1,7 @@
 import type { Doc, Lang } from './types'
-import { PAPER_SIZE, UNIT_MM } from './geometry'
+import { PAPER_SIZE, UNIT_MM, portPos } from './geometry'
+import './ratings' // doit précéder transformer (dépendance circulaire)
+import { termsWithTopology } from './transformer'
 import { SYMBOL_MAP } from './symbols'
 import { terminalRows } from './strips'
 import { dxfOf } from './dxf'
@@ -105,11 +107,45 @@ export function bomRows(doc: Doc, lang: Lang) {
 }
 
 export function wireRows(doc: Doc) {
+  const terms = termsWithTopology(doc, SYMBOL_MAP)
   const name = (r: { symId: string; portId: string }) => {
     const s = doc.symbols.find((x) => x.id === r.symId)
-    return s ? `${s.label || SYMBOL_MAP[s.defId].prefix}:${SYMBOL_MAP[s.defId].ports.find((p) => p.id === r.portId)?.label ?? r.portId}` : '?'
+    return s ? `${s.label || SYMBOL_MAP[s.defId].prefix}:${terms[s.id]?.[r.portId] || SYMBOL_MAP[s.defId].ports.find((p) => p.id === r.portId)?.label || r.portId}` : '?'
   }
-  return doc.wires.map((w) => ({ label: w.label, from: name(w.from), to: name(w.to), section: w.section, color: w.color }))
+  /** longueur du tracé sur la feuille, en mm de papier */
+  const length = (w: Doc['wires'][number]) => {
+    const a = doc.symbols.find((x) => x.id === w.from.symId), b = doc.symbols.find((x) => x.id === w.to.symId)
+    const pa = a && portPos(a, w.from.portId), pb = b && portPos(b, w.to.portId)
+    if (!pa || !pb) return 0
+    const path = [pa, ...(w.via ?? []), pb]
+    let l = 0
+    for (let i = 1; i < path.length; i++) l += Math.abs(path[i].x - path[i - 1].x) + Math.abs(path[i].y - path[i - 1].y) // tracé orthogonal
+    return Math.round(l * UNIT_MM)
+  }
+  return doc.wires.map((w) => ({ label: w.label, from: name(w.from), to: name(w.to), section: w.section, color: w.color, mm: length(w) }))
+}
+
+/** Liste de câblage regroupée par couleur et section : nombre de conducteurs et longueur tracée cumulée (pour préparer les fils à couper). */
+export function wireSummary(doc: Doc) {
+  const m = new Map<string, { color: string; section: string; count: number; mm: number }>()
+  for (const r of wireRows(doc)) {
+    const k = `${r.color}|${r.section}`
+    const e = m.get(k) ?? { color: r.color, section: r.section, count: 0, mm: 0 }
+    e.count++; e.mm += r.mm
+    m.set(k, e)
+  }
+  return [...m.values()].sort((a, b) => a.section.localeCompare(b.section, undefined, { numeric: true }) || a.color.localeCompare(b.color))
+}
+
+/** Liste de câblage seule (fichier CSV) : un conducteur par ligne, puis le récapitulatif par couleur et section. */
+export function exportWiringCsv(doc: Doc, lang: Lang) {
+  const fr = lang === 'fr'
+  const lines = [(fr ? ['Fil', 'De', 'À', 'Section (mm²)', 'Couleur', 'Longueur tracée (mm sur la feuille)'] : ['Wire', 'From', 'To', 'Section (mm²)', 'Colour', 'Drawn length (mm on sheet)']).map(csvCell).join(';')]
+  for (const r of wireRows(doc)) lines.push([r.label, r.from, r.to, r.section, r.color, String(r.mm)].map(csvCell).join(';'))
+  lines.push('')
+  lines.push((fr ? ['Couleur', 'Section (mm²)', 'Nombre de conducteurs', 'Longueur tracée cumulée (mm)'] : ['Colour', 'Section (mm²)', 'Conductors', 'Total drawn length (mm)']).map(csvCell).join(';'))
+  for (const r of wireSummary(doc)) lines.push([r.color, r.section, String(r.count), String(r.mm)].map(csvCell).join(';'))
+  download(fileBase(doc) + '.cablage.csv', new Blob(['﻿' + lines.join(String.fromCharCode(13, 10))], { type: 'text/csv;charset=utf-8' }))
 }
 
 export function exportCsv(doc: Doc, lang: Lang) {

@@ -311,5 +311,14 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   check('recherche « lampe » : toujours par nom', found('lampe').length > 0 && found('lampe').every((s: any) => /lamp/i.test(s.name.fr + s.name.en + (s.group?.fr ?? ''))), String(found('lampe').length))
   check('recherche à plusieurs mots : « bouton urgence »', found('bouton urgence').length > 0, '0')
 }
+// ── liste de câblage : bornes numérotées, longueur tracée, récapitulatif
+{
+  const { wireRows, wireSummary } = await import(ROOT + '/src/exporters.ts')
+  const d = T.motorStarter(base)
+  const rows = wireRows(d)
+  check('liste de câblage : une ligne par fil, longueur tracée positive', rows.length === d.wires.length && rows.every((r: any) => r.mm >= 0) && rows.some((r: any) => r.mm > 0), String(rows.length))
+  const sum = wireSummary(d)
+  check('liste de câblage : le récapitulatif compte tous les conducteurs', sum.reduce((a: number, r: any) => a + r.count, 0) === rows.length, JSON.stringify(sum))
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

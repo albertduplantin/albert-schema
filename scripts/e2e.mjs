@@ -61,6 +61,13 @@ try {
   await page.keyboard.down('Control'); await page.keyboard.press('z'); await page.keyboard.up('Control'); await sleep(300)
   check('annulation du cadre', ((await doc()).shapes ?? []).length === 0)
 
+  // ── outil de mesure : deux clics affichent une distance en mm
+  await menu(1); await click(/Mesurer une distance/, '.toolbar .menu-list button')
+  await page.mouse.click(600, 400); await page.mouse.move(700, 400, { steps: 3 }); await page.mouse.click(700, 400); await sleep(200)
+  check('mesure : distance affichée en mm', await page.evaluate(() => [...document.querySelectorAll('svg.canvas text')].some((t) => /\d+\.\d mm/.test(t.textContent))))
+  await page.keyboard.press('Escape'); await sleep(100)
+  check('mesure : Échap retire la mesure', await page.evaluate(() => ![...document.querySelectorAll('svg.canvas text')].some((t) => /\d+\.\d mm/.test(t.textContent))))
+
   // ── clic droit sur une forme : épaisseur et couleur
   await menu(1); await click(/Ellipse/, '.toolbar .menu-list button')
   await page.mouse.move(1000, 560); await page.mouse.down(); await page.mouse.move(1100, 620, { steps: 4 }); await page.mouse.up(); await sleep(250)

@@ -99,6 +99,8 @@ interface Props {
   /** outil de dessin actif (rectangle, ellipse, ligne), style des nouvelles formes, et fin de l'outil après le tracé */
   dark?: boolean
   tool?: Shape['kind'] | null
+  /** outil de mesure : deux clics donnent la distance et les écarts en mm (papier) */
+  measure?: boolean
   toolStyle?: Partial<Shape>
   onToolDone?: () => void
   labels: { zoomIn: string; zoomOut: string; fit: string; grid: string }
@@ -264,12 +266,53 @@ export default function Canvas(p: Props) {
     const up = (e: KeyboardEvent) => {
       if (e.code === 'Space') space.current = false
     }
+    // écran tactile : un doigt = souris (clic, glisser), deux doigts = zoom par pincement et déplacement de la vue
+    let pinch: { d: number; cx: number; cy: number } | null = null
+    const fire = (type: string, t: Touch, target: EventTarget | null) =>
+      (target ?? el).dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: t.clientX, clientY: t.clientY, button: 0, buttons: type === 'mouseup' ? 0 : 1 }))
+    const dist = (a: Touch, b: Touch) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault()
+      if (e.touches.length === 2) {
+        fire('mouseup', e.touches[0], el) // abandonne le geste à un doigt en cours
+        pinch = { d: dist(e.touches[0], e.touches[1]), cx: (e.touches[0].clientX + e.touches[1].clientX) / 2, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2 }
+      } else if (e.touches.length === 1) fire('mousedown', e.touches[0], e.target)
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
+      if (e.touches.length === 2 && pinch) {
+        const [a, b] = [e.touches[0], e.touches[1]]
+        const d = dist(a, b), cx = (a.clientX + b.clientX) / 2, cy = (a.clientY + b.clientY) / 2
+        const r = el.getBoundingClientRect()
+        const prev = pinch
+        setView((v) => {
+          const k = Math.min(4, Math.max(0.1, v.k * (d / prev.d)))
+          const mx = cx - r.left, my = cy - r.top
+          return { k, x: mx - ((mx - v.x) / v.k) * k + (cx - prev.cx), y: my - ((my - v.y) / v.k) * k + (cy - prev.cy) }
+        })
+        pinch = { d, cx, cy }
+      } else if (e.touches.length === 1 && !pinch) fire('mousemove', e.touches[0], el)
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault()
+      if (pinch) { if (e.touches.length < 2) pinch = null; return }
+      const t = e.changedTouches[0]
+      if (t) fire('mouseup', t, document.elementFromPoint(t.clientX, t.clientY) ?? el)
+    }
+    el.addEventListener('touchstart', onTouchStart, { passive: false })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: false })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: false })
     el.addEventListener('wheel', onWheel, { passive: false })
     fitRef.current()
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     return () => {
       el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
@@ -295,8 +338,15 @@ export default function Canvas(p: Props) {
   }
   useEffect(() => { if (!p.tool) { polyRef.current = null; setPoly(null); setDrawing(null) } }, [p.tool])
 
+  const [ruler, setRuler] = useState<{ a: { x: number; y: number }; b: { x: number; y: number } | null } | null>(null)
+  useEffect(() => { if (!p.measure) setRuler(null) }, [p.measure])
   const onMouseDown = (e: React.MouseEvent) => {
     const pt = toSheet(e)
+    if (p.measure && e.button === 0 && !space.current) {
+      // 1er clic : départ ; 2e clic : arrivée (la mesure reste affichée) ; 3e clic : nouvelle mesure
+      setRuler((r) => (!r || r.b ? { a: pt, b: null } : { a: r.a, b: pt }))
+      return
+    }
     if (e.button === 2 && wiringRef.current) {
       setWiring(null)
       e.preventDefault()
@@ -999,6 +1049,21 @@ export default function Canvas(p: Props) {
           )}
           {guides.v.map((x) => <path key={'v' + x} d={`M${x} 0V${h}`} className="guide" />)}
           {guides.h.map((y) => <path key={'h' + y} d={`M0 ${y}H${w}`} className="guide" />)}
+          {ruler && (() => {
+            const b = ruler.b ?? mouse
+            if (!b) return null
+            const dx = Math.abs(b.x - ruler.a.x) * UNIT_MM, dy = Math.abs(b.y - ruler.a.y) * UNIT_MM, d = Math.hypot(dx, dy)
+            const mx = (ruler.a.x + b.x) / 2, my = (ruler.a.y + b.y) / 2
+            const txt = `${d.toFixed(1)} mm  (Δx ${dx.toFixed(1)} · Δy ${dy.toFixed(1)})`
+            return (
+              <g pointerEvents="none">
+                <path d={`M${ruler.a.x} ${ruler.a.y}L${b.x} ${b.y}`} stroke="#e53935" strokeWidth={1} strokeDasharray="4 2" fill="none" />
+                <circle cx={ruler.a.x} cy={ruler.a.y} r={2.5} fill="#e53935" /><circle cx={b.x} cy={b.y} r={2.5} fill="#e53935" />
+                <rect x={mx - txt.length * 2.6} y={my - 13} width={txt.length * 5.2} height={12} rx={3} fill="#fff" stroke="#e53935" strokeWidth={0.6} />
+                <text x={mx} y={my - 4} textAnchor="middle" fontSize={8} fill="#c62828" stroke="none" fontWeight={700}>{txt}</text>
+              </g>
+            )
+          })()}
           {band && (
             <rect className="band" x={Math.min(band.x0, band.x1)} y={Math.min(band.y0, band.y1)}
               width={Math.abs(band.x1 - band.x0)} height={Math.abs(band.y1 - band.y0)} />

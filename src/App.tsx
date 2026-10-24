@@ -14,7 +14,7 @@ import { PAPER_SIZE, symBBox, uid } from './geometry'
 import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
-import { bomRows, exportCsv, exportDxf, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
+import { bomRows, exportCsv, exportDxf, exportWiringCsv, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
 import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
@@ -736,7 +736,7 @@ function Editor() {
       const ctrl = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
       const step = e.shiftKey ? 50 : 10
-      if (e.key === 'Escape') { setMenu(null); setPlacing(null); setTool(null); setSel([]); setShowKeys(false); setShowBom(false); setShowFeedback(false); setShowCredits(false) }
+      if (e.key === 'Escape') { setMeasure(false); setMenu(null); setPlacing(null); setTool(null); setSel([]); setShowKeys(false); setShowBom(false); setShowFeedback(false); setShowCredits(false) }
       else if (e.key === 'Delete' || e.key === 'Backspace') deleteSel()
       else if (k === 'r' && !ctrl) { if (!placing) rotateSel() }
       else if (e.key === 'Enter' && !ctrl && sel.length === 1 && doc.symbols.some((x) => x.id === sel[0])) { e.preventDefault(); openProps(sel[0]) }
@@ -847,6 +847,7 @@ function Editor() {
   const selSym = sel.length === 1 ? doc.symbols.find((s) => s.id === sel[0]) : undefined
   // outils de dessin : cadres, ellipse, lignes, flèches
   const [tool, setTool] = useState<Shape['kind'] | null>(null)
+  const [measure, setMeasure] = useState(false)
   const [toolStyle, setToolStyle] = useState<Partial<Shape>>({})
   const startTool = (kind: Shape['kind'], style: Partial<Shape> = {}) => {
     if (doc.hideShapes || doc.lockShapes) update((d) => ({ ...d, hideShapes: undefined, lockShapes: undefined }))
@@ -994,6 +995,30 @@ function Editor() {
       </span>
     )
   }
+  /** enregistrement automatique dans un fichier du disque (API File System Access : Chrome, Edge) */
+  const fileHandle = useRef<{ name: string; createWritable: () => Promise<{ write: (d: string) => Promise<void>; close: () => Promise<void> }> } | null>(null)
+  const [autoFile, setAutoFile] = useState<string | null>(null)
+  const canAutoFile = typeof window !== 'undefined' && 'showSaveFilePicker' in window
+  const chooseAutoFile = async () => {
+    try {
+      const h = await (window as unknown as { showSaveFilePicker: (o: unknown) => Promise<typeof fileHandle.current> }).showSaveFilePicker({
+        suggestedName: (doc.title.title || 'schema').replace(/[^\w\-]+/g, '_') + '.albert.json',
+        types: [{ description: 'Albert Schema', accept: { 'application/json': ['.json'] } }],
+      })
+      fileHandle.current = h
+      setAutoFile(h!.name)
+      say(lang === 'fr' ? 'Enregistrement automatique activé : ' + h!.name : 'Autosave enabled: ' + h!.name)
+    } catch { /* annulé */ }
+  }
+  useEffect(() => {
+    const h = fileHandle.current
+    if (!h) return
+    const id = window.setTimeout(async () => {
+      try { const w = await h.createWritable(); await w.write(JSON.stringify(doc, null, 2)); await w.close() }
+      catch { fileHandle.current = null; setAutoFile(null) }
+    }, 1500)
+    return () => window.clearTimeout(id)
+  }, [doc, autoFile])
   /** pinceau de style : copie le style (trait, couleur, police) d'un objet et l'applique aux objets sélectionnés du même genre */
   const painter = useRef<{ kind: 'shape' | 'wire' | 'note'; style: Record<string, unknown> } | null>(null)
   const copyStyle = () => {
@@ -1251,6 +1276,9 @@ function Editor() {
             <button onClick={() => { if (!doc.symbols.length || confirm(t('newConfirm'))) { commit(() => emptyDoc()); setSel([]) } }}>{t('new')}</button>
             <button onClick={() => fileRef.current?.click()}>{t('open')}</button>
             <button onClick={() => { saveJson(doc); say(t('toastSaved')) }}><span>{t('save')}</span><kbd>Ctrl+S</kbd></button>
+            {canAutoFile && (autoFile
+              ? <button onClick={() => { fileHandle.current = null; setAutoFile(null) }}>{lang === 'fr' ? 'Arrêter l’enregistrement auto' : 'Stop autosave'} ({autoFile})</button>
+              : <button onClick={chooseAutoFile}>{lang === 'fr' ? 'Enregistrement auto dans un fichier…' : 'Autosave to a file…'}</button>)}
             <button onClick={() => setShowGallery(true)}>{t('gallery')}</button>
             <button onClick={() => setShowBom(true)}>{t('bom')}</button>
             <button onClick={() => { setVersions(loadVersions()); setShowVersions(true) }}>{t('versions')}</button>
@@ -1261,6 +1289,7 @@ function Editor() {
             {pageCount(doc) > 1 && <button onClick={printAllPages}>{t('printAll')}</button>}
             <button onClick={() => exportDxf(doc)}>{t('exportDxf')}</button>
             <button onClick={() => exportCsv(all, lang)}>{t('exportCsv')}</button>
+            <button onClick={() => exportWiringCsv(all, lang)}>{lang === 'fr' ? 'Liste de câblage (CSV)' : 'Wiring list (CSV)'}</button>
             <button onClick={copyShareLink}>{t('shareLink')}</button>
             <label className="chk keep" title={t('bwHelp')}><input type="checkbox" checked={bw} onChange={(e) => setBw(e.target.checked)} /> {t('bw')}</label>
           </div>
@@ -1323,6 +1352,7 @@ function Editor() {
             <button onClick={() => startTool('line', { stroke: 'solid', arrow: 'end' })}>→ {t('shapeArrow')}</button>
             <button onClick={() => startTool('poly', { stroke: 'solid' })}>⌇ {t('shapePoly')}</button>
             <button onClick={() => startTool('arc', { stroke: 'solid' })}>◠ {t('shapeArc')}</button>
+            <button onClick={() => { setMeasure((v) => !v); setTool(null); setPlacing(null) }}>📏 {lang === 'fr' ? (measure ? 'Quitter la mesure' : 'Mesurer une distance') : measure ? 'Stop measuring' : 'Measure a distance'}</button>
             <button onClick={() => imageRef.current?.click()}>🖼 {t('shapeImage')}</button>
             <label className="chk keep"><input type="checkbox" checked={!!doc.hideShapes} onChange={() => commit((d) => ({ ...d, hideShapes: d.hideShapes ? undefined : true }))} /> {t('shapesHide')}</label>
             <label className="chk keep"><input type="checkbox" checked={!!doc.lockShapes} onChange={() => commit((d) => ({ ...d, lockShapes: d.lockShapes ? undefined : true }))} /> {t('shapesLock')}</label>
@@ -1431,7 +1461,7 @@ function Editor() {
       </aside>
 
       <main className="stage">
-        <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} toolStyle={toolStyle} onToolDone={() => setTool(null)}
+        <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
           onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
@@ -1921,8 +1951,8 @@ function Editor() {
             </table>
             <h3>{t('wires')}</h3>
             <table>
-              <thead><tr><th>{t('label')}</th><th>{t('from')}</th><th>{t('to')}</th><th>{t('section')}</th></tr></thead>
-              <tbody>{wireRows(all).map((r, i) => <tr key={i}><td>{r.label}</td><td>{r.from}</td><td>{r.to}</td><td>{r.section}</td></tr>)}</tbody>
+              <thead><tr><th>{t('label')}</th><th>{t('from')}</th><th>{t('to')}</th><th>{t('section')}</th><th>{lang === 'fr' ? 'Couleur' : 'Colour'}</th><th>mm</th></tr></thead>
+              <tbody>{wireRows(all).map((r, i) => <tr key={i}><td>{r.label}</td><td>{r.from}</td><td>{r.to}</td><td>{r.section}</td><td>{r.color}</td><td>{r.mm}</td></tr>)}</tbody>
             </table>
             {(() => {
               const rows = terminalRows(all, lang)
