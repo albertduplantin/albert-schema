@@ -342,7 +342,12 @@ function solve(x: Ctx) {
 
 type Key = string
 /** Bornes reliées par des fils (et par les bornes de passage) : ensembles de potentiels « source » atteints depuis `start`. */
-export function reachedSources(doc: Doc, defs: Record<string, SymbolDef>, start: Key): { pe: boolean; neutral: boolean } {
+interface SrcGraph { defs: Record<string, SymbolDef>; adj: Map<Key, Key[]>; srcPot: Map<Key, string> }
+// le graphe des fils et des sources ne dépend que du schéma : on le garde le temps que l'objet schéma ne change pas
+const SRC_GRAPHS = new WeakMap<Doc, SrcGraph>()
+function srcGraph(doc: Doc, defs: Record<string, SymbolDef>): SrcGraph {
+  const hit = SRC_GRAPHS.get(doc)
+  if (hit && hit.defs === defs) return hit
   const adj = new Map<Key, Key[]>()
   const link = (a: Key, b: Key) => {
     if (!adj.has(a)) adj.set(a, [])
@@ -357,6 +362,13 @@ export function reachedSources(doc: Doc, defs: Record<string, SymbolDef>, start:
     if (m?.k === 'source') for (const [p, pot] of Object.entries(sourcePots(s, defs[s.defId]))) srcPot.set(key(s.id, p), pot)
     else if (m?.k === 'switch' && m.ctl === 'fixed') for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b)) // bornes, barrettes de terre
   }
+  const g = { defs, adj, srcPot }
+  SRC_GRAPHS.set(doc, g)
+  return g
+}
+
+export function reachedSources(doc: Doc, defs: Record<string, SymbolDef>, start: Key): { pe: boolean; neutral: boolean } {
+  const { adj, srcPot } = srcGraph(doc, defs)
   const seen = new Set<Key>([start])
   const stack = [start]
   let pe = false

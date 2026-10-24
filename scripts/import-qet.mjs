@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { popularity } from './popularity.mjs'
 import { classify, portLabels } from './sim-classify.mjs'
+import { fixName } from './name-fixes.mjs'
 import { classifyFluid } from './fluid-classify.mjs'
 import { animate } from './sim-animate.mjs'
 
@@ -430,7 +431,7 @@ for (const r of roots) {
       sim,
       ...(fluid ? { fluid } : {}),
       prefix: prefixFor(r.dir + '/' + rel.join('/')),
-      name: el, w, h,
+      name: fixName(relFromRoot, el), w, h,
       svg: shapes.map((s) => s).join('').replace(/(-?\d+(?:\.\d+)?)/g, (m) => m), // inchangé, translation ci-dessous
       ports,
       _ox: ox, _oy: oy,

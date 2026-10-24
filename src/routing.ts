@@ -99,6 +99,21 @@ const overlapLen = (a: { lo: number; hi: number }, b: { lo: number; hi: number }
 
 const shareNode = (a: RouteInfo, b: RouteInfo) => a.ports.some((p) => b.ports.includes(p))
 
+/**
+ * Deux tracés peuvent-ils interférer ? Leurs rectangles englobants, élargis de `NEAR` (plus que le plus grand décalage de couloir),
+ * se touchent. Évite de comparer segment par segment des fils éloignés : le coût devient proche du linéaire sur un grand schéma.
+ */
+const NEAR = 120
+function near(a: P[], b: P[]): boolean {
+  let ax1 = Infinity, ay1 = Infinity, ax2 = -Infinity, ay2 = -Infinity
+  for (const p of a) { if (p.x < ax1) ax1 = p.x; if (p.x > ax2) ax2 = p.x; if (p.y < ay1) ay1 = p.y; if (p.y > ay2) ay2 = p.y }
+  for (const p of b) if (p.x >= ax1 - NEAR && p.x <= ax2 + NEAR && p.y >= ay1 - NEAR && p.y <= ay2 + NEAR) return true
+  // aucun sommet de b dans le cadre de a : b peut tout de même enjamber a
+  let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity
+  for (const p of b) { if (p.x < bx1) bx1 = p.x; if (p.x > bx2) bx2 = p.x; if (p.y < by1) by1 = p.y; if (p.y > by2) by2 = p.y }
+  return bx1 <= ax2 + NEAR && bx2 >= ax1 - NEAR && by1 <= ay2 + NEAR && by2 >= ay1 - NEAR
+}
+
 /** Croisements propres entre deux tracés (un segment vertical traverse un segment horizontal). */
 function crossPair(a: P[], b: P[]): number {
   const sa = allSegs(a)
@@ -120,7 +135,7 @@ function crossCost(ids: string[], routes: Record<string, P[]>, info: Record<stri
   const set = new Set(ids)
   for (const i of ids) {
     for (const j of all) {
-      if (j === i || (set.has(j) && j < i) || shareNode(info[i], info[j])) continue
+      if (j === i || (set.has(j) && j < i) || !near(routes[i], routes[j]) || shareNode(info[i], info[j])) continue
       n += crossPair(routes[i], routes[j])
     }
   }
@@ -312,7 +327,7 @@ export function separateRoutes(routes: Record<string, P[]>, info: Record<string,
       const conflicts = (c: number) => {
         const me = { h: m.h, c, lo: m.lo, hi: m.hi }
         for (const other of ids) {
-          if (other === id || shareNode(info[id], info[other])) continue
+          if (other === id || !near(routes[id], routes[other]) || shareNode(info[id], info[other])) continue
           for (const s of allSegs(routes[other])) {
             if (s.h === me.h && Math.abs(s.c - me.c) < TOL && overlapLen(s, me) > TOL) return true
           }
