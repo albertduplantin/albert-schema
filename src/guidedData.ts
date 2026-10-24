@@ -1163,6 +1163,94 @@ const POWER_EX: GExercise[] = [
   },
 ]
 
-export const GUIDED: GExercise[] = [...ELECTRICAL, ...POWER_EX, ...PNEUMATIC, ...HYDRAULIC]
+
+// ───────────────────────── dépannage : un schéma en panne à réparer (la simulation valide la réparation)
+const repairLamp = (base: Doc): Doc => // fil de retour du voyant vers le neutre manquant
+  build(base, [SRC, ['s', SW, 400, 110, 'S1'], ['h', LAMP, 400, 220, 'H1']], [['src', 'a', 's', 't0'], ['s', 't1', 'h', 't0']])
+const repairLatch = (base: Doc): Doc => { // le contact d'auto-maintien n'est pas relié à la bobine
+  const [s, l] = startStopSpecs()
+  return build(base, s, l.filter((k) => !(k[0] === 'ka' && k[1] === 't1')))
+}
+const repairStop = (base: Doc): Doc => { // S1 est un bouton NO : la bobine ne peut jamais être alimentée
+  const [s, l] = startStopSpecs()
+  return build(base, s.map((x) => (x[0] === 's1' ? ['s1', PB, 400, 110, 'S1'] : x)) as Spec[], l)
+}
+const REPAIR: GExercise[] = [
+  {
+    id: 'd-lamp', domain: 'electrical', level: 1, minutes: 10,
+    title: L('Dépannage : le voyant ne s’allume pas', 'Troubleshooting: the lamp does not light'),
+    summary: L('Un montage en panne : trouvez pourquoi le voyant reste éteint et réparez-le.', 'A faulty circuit: find out why the lamp stays off and repair it.'),
+    brief: [
+      L('Panne signalée par l’utilisateur : j’actionne l’interrupteur S1 mais le voyant H1 reste éteint. Le schéma est chargé tel que l’installateur l’a laissé.', 'Fault reported by the user: I operate switch S1 but lamp H1 stays off. The diagram is loaded as the installer left it.'),
+      L('Méthode : passez en simulation, fermez S1 et observez ; un récepteur n’est alimenté que si un circuit complet le relie à la phase ET au neutre. Cherchez la borne restée sans fil.', 'Method: switch to simulation, close S1 and observe; a load is only energised if a complete circuit joins it to both phase AND neutral. Look for the terminal left without a wire.'),
+    ],
+    parts: [L('Ne modifiez que ce qui est nécessaire : un seul fil à ajouter.', 'Change only what is necessary: a single wire to add.')],
+    expect: [
+      L('Après réparation : S1 ouvert, H1 est éteint.', 'After repair: with S1 open, H1 is off.'),
+      L('Je ferme S1 : le voyant H1 s’allume.', 'I close S1: lamp H1 lights.'),
+      L('J’ouvre S1 : H1 s’éteint.', 'I open S1: H1 goes off.'),
+    ],
+    start: repairLamp, solution: lampSwitch,
+    steps: [
+      simStep(),
+      stepPlace('fix', L('Repérez la borne sans fil et réparez le circuit', 'Find the bare terminal and repair the circuit'),
+        L('Le voyant a deux bornes : l’une reçoit la phase par S1, l’autre doit revenir à la borne N de la source.', 'The lamp has two terminals: one gets the phase through S1, the other must return to the source N terminal.'),
+        (c) => sourceWired(c) && wired(c, [isCtrlSw, isLamp])),
+      simTest('run', L('S1 fermé : H1 s’allume ; S1 ouvert : H1 s’éteint', 'S1 closed: H1 lights; S1 open: H1 goes off'),
+        L('Cliquez sur S1 en simulation.', 'Click S1 in simulation.'),
+        [{ ok: (r, c) => !lampOn(r, c) }, { toggle: (c) => ids(c, isCtrlSw), ok: (r, c) => lampOn(r, c) }, { ok: (r, c) => !lampOn(r, c) }]),
+    ],
+  },
+  {
+    id: 'd-latch', domain: 'electrical', level: 1, minutes: 15,
+    title: L('Dépannage : le contacteur ne se maintient pas', 'Troubleshooting: the contactor does not hold'),
+    summary: L('Le contacteur colle tant qu’on appuie sur « marche » : retrouvez le défaut du maintien.', 'The contactor only stays in while “start” is pressed: find the latching fault.'),
+    brief: [
+      L('Panne signalée par l’utilisateur : quand j’appuie sur S2, KM1 colle, mais dès que je relâche le bouton elle retombe.', 'Fault reported by the user: when I press S2, KM1 pulls in, but as soon as I release the button it drops.'),
+      L('Méthode : le maintien est assuré par un contact de KM1 monté en parallèle de S2. Si ce contact n’est relié qu’à une extrémité, il ne maintient rien. Repérez la borne sans fil dans le montage.', 'Method: latching is provided by a KM1 contact in parallel with S2. If that contact is only connected at one end, it holds nothing. Find the bare terminal in the circuit.'),
+    ],
+    parts: [L('Un seul fil à ajouter ; ne changez ni les boutons ni les repères.', 'A single wire to add; do not change the buttons or the tags.')],
+    expect: [
+      L('Au repos : la bobine KM1 est coupée.', 'At rest: coil KM1 is off.'),
+      L('J’appuie sur S2 : KM1 s’enclenche, et reste enclenchée quand je relâche.', 'I press S2: KM1 pulls in, and stays in when I release.'),
+      L('J’appuie sur S1 : KM1 retombe et reste coupée.', 'I press S1: KM1 drops and stays off.'),
+    ],
+    start: repairLatch, solution: startStop,
+    steps: [
+      simStep(),
+      stepPlace('fix', L('Reliez la borne restée libre du contact d’auto-maintien', 'Connect the free terminal of the latching contact'),
+        L('Le contact KM1 doit être raccordé aux deux mêmes points que S2 : à la sortie de S1 et à la bobine.', 'The KM1 contact must connect to the same two points as S2: the S1 output and the coil.'),
+        (c) => sourceWired(c) && wired(c, [isNCBtn, isNOBtn, isCoil, isNOk])),
+      behaviour('run', L('Appui sur S2 : KM1 colle et reste collée ; appui sur S1 : elle retombe', 'Press S2: KM1 pulls in and stays; press S1: it drops'),
+        L('Maintenez S2 puis relâchez : la bobine doit rester alimentée.', 'Hold S2 then release: the coil must stay energised.'), old('start-stop').steps, ['S1', 'S2', 'KM1']),
+    ],
+  },
+  {
+    id: 'd-stop', domain: 'electrical', level: 2, minutes: 15,
+    title: L('Dépannage : impossible de démarrer', 'Troubleshooting: it will not start'),
+    summary: L('Rien ne se passe quand on appuie sur « marche » : un bouton n’est pas du bon type.', 'Nothing happens when “start” is pressed: a button is the wrong type.'),
+    brief: [
+      L('Panne signalée par l’utilisateur : j’appuie sur S2 et KM1 ne colle jamais. Le câblage est correct, aucun fil ne manque.', 'Fault reported by the user: I press S2 and KM1 never pulls in. The wiring is correct, no wire is missing.'),
+      L('Méthode : un arrêt doit laisser passer le courant au repos et le couper quand on appuie. Observez le circuit au repos en simulation : le courant arrive-t-il jusqu’à S2 ? Vérifiez le type de contact de chaque bouton (NO ou NF).', 'Method: a stop button must let current through at rest and cut it when pressed. Observe the circuit at rest in simulation: does current reach S2? Check the contact type of each button (NO or NC).'),
+    ],
+    parts: [L('Remplacez le bouton fautif par le bon type, avec le repère S1, et recâblez-le comme l’ancien.', 'Replace the faulty button with the right type, tagged S1, and wire it like the old one.')],
+    expect: [
+      L('Au repos : la bobine KM1 est coupée.', 'At rest: coil KM1 is off.'),
+      L('J’appuie sur S2 : KM1 s’enclenche, et reste enclenchée quand je relâche.', 'I press S2: KM1 pulls in, and stays in when I release.'),
+      L('J’appuie sur S1 : KM1 retombe.', 'I press S1: KM1 drops.'),
+    ],
+    start: repairStop, solution: startStop,
+    steps: [
+      simStep(),
+      stepPlace('fix', L('Remplacez S1 par un bouton poussoir normalement fermé (NF), repère S1', 'Replace S1 with a normally closed (NC) push button, tagged S1'),
+        L('Bouton : {{pbnf:loc}}. Supprimez l’ancien, posez le nouveau, nommez-le S1 (double-clic) et reliez ses deux bornes comme avant.', 'Button: {{pbnf:loc}}. Delete the old one, place the new one, name it S1 (double-click) and wire its two terminals as before.'),
+        (c) => c.doc.symbols.some((s) => s.label === 'S1' && isNCBtn(c, s)) && sourceWired(c) && wired(c, [isNCBtn, isNOBtn, isCoil, isNOk])),
+      behaviour('run', L('Appui sur S2 : KM1 colle et reste collée ; appui sur S1 : elle retombe', 'Press S2: KM1 pulls in and stays; press S1: it drops'),
+        L('Maintenez S2 puis relâchez, puis appuyez sur S1.', 'Hold S2 then release, then press S1.'), old('start-stop').steps, ['S1', 'S2', 'KM1']),
+    ],
+  },
+]
+
+export const GUIDED: GExercise[] = [...ELECTRICAL, ...POWER_EX, ...REPAIR, ...PNEUMATIC, ...HYDRAULIC]
 export const guidedById = (id: string) => GUIDED.find((g) => g.id === id)
 void count; void syms

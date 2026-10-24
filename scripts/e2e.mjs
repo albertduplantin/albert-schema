@@ -93,6 +93,12 @@ try {
   await menu(0)
   const items = await page.evaluate(() => [...document.querySelectorAll('.toolbar .menu-list')[0].querySelectorAll('button')].map((x) => x.textContent.trim()))
   check('menu Fichier : DXF, versions, nomenclature', ['DXF (AutoCAD, EPLAN…)', 'Versions…', 'Nomenclature'].every((x) => items.includes(x)), items.join(' | '))
+  // ── PDF direct : un vrai fichier PDF est généré
+  await page.evaluate(() => { window.__blobs = []; const o = URL.createObjectURL.bind(URL); URL.createObjectURL = (b) => { window.__blobs.push(b); return o(b) } })
+  await click(/Télécharger en PDF \(cette feuille\)/, '.toolbar .menu-list button')
+  await sleep(2500)
+  const pdfHead = await page.evaluate(async () => { const b = (window.__blobs || []).find((x) => x.type === 'application/pdf'); return b ? { size: b.size, head: await b.slice(0, 8).text(), tail: await b.slice(b.size - 6).text() } : null })
+  check('PDF direct : fichier valide (%PDF… %%EOF)', !!pdfHead && pdfHead.head.startsWith('%PDF-1.4') && pdfHead.tail.includes('%%EOF') && pdfHead.size > 5000, JSON.stringify(pdfHead))
   await page.keyboard.press('Escape')
 
   // ── simulation : marche, voyants

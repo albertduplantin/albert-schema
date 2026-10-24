@@ -14,7 +14,7 @@ import { PAPER_SIZE, symBBox, uid } from './geometry'
 import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
-import { bomRows, exportCsv, exportDxf, exportWiringCsv, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows } from './exporters'
+import { bomRows, exportCsv, exportDxf, exportWiringCsv, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows, fileBase } from './exporters'
 import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
@@ -958,6 +958,21 @@ function Editor() {
   }
 
   /** impression de toutes les feuilles : on affiche chaque page à son tour pour en capturer le dessin, puis on revient à la page d'origine */
+  const pdfAll = async (allPages: boolean) => {
+    if (exportRef.current) exportRef.current.open = false
+    const start = doc.page ?? 0
+    const svgs: string[] = []
+    if (!allPages || pageCount(doc) < 2) { if (contentRef.current) svgs.push(sheetSvg(doc, contentRef.current)) }
+    else {
+      for (let i = 0; i < pageCount(doc); i++) {
+        setH((s) => ({ ...s, doc: switchPage(s.doc, i) }))
+        await new Promise((r) => setTimeout(r, 250))
+        if (contentRef.current) svgs.push(sheetSvg(doc, contentRef.current))
+      }
+      setH((s) => ({ ...s, doc: switchPage(s.doc, start) }))
+    }
+    if (svgs.length) { const { exportPdf } = await import('./pdf'); await exportPdf(doc, svgs, fileBase(doc) + '.pdf') }
+  }
   const printAllPages = async () => {
     if (exportRef.current) exportRef.current.open = false
     const start = doc.page ?? 0
@@ -1286,6 +1301,8 @@ function Editor() {
             <button onClick={withContent((c) => exportSvg(doc, c))}>{t('exportSvg')}</button>
             <button onClick={withContent((c) => exportPng(doc, c))}>{t('exportPng')}</button>
             <button onClick={withContent((c) => printSheet(doc, c))}>{t('print')}</button>
+            <button onClick={() => pdfAll(false)}>{lang === 'fr' ? 'Télécharger en PDF (cette feuille)' : 'Download PDF (this sheet)'}</button>
+            {pageCount(doc) > 1 && <button onClick={() => pdfAll(true)}>{lang === 'fr' ? 'Télécharger en PDF (toutes les feuilles)' : 'Download PDF (all sheets)'}</button>}
             {pageCount(doc) > 1 && <button onClick={printAllPages}>{t('printAll')}</button>}
             <button onClick={() => exportDxf(doc)}>{t('exportDxf')}</button>
             <button onClick={() => exportCsv(all, lang)}>{t('exportCsv')}</button>
