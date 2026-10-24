@@ -114,3 +114,26 @@ export function scenario(c: Ctx, steps: SimStep[]): boolean {
     return true
   } catch { return false }
 }
+
+// ── noms exacts des symboles de la bibliothèque dans les textes des exercices
+import { CATEGORIES, SYMBOL_MAP } from './symbols'
+
+/** Alias courts → identifiants de symboles, déclarés par les exercices. */
+export const ALIASES: Record<string, string> = {}
+
+/**
+ * Remplace `{{alias}}` par « Nom exact du symbole » (dans la langue de l'interface) et `{{alias:loc}}` par « Nom » suivi de son
+ * emplacement dans la bibliothèque (menu ▸ groupe) : les textes ne peuvent ainsi pas s'écarter des noms réellement affichés.
+ */
+export function fillNames(text: string, lang: Lang): string {
+  return text.replace(/\{\{(\w+)(:loc)?\}\}/g, (m, alias: string, loc?: string) => {
+    const def = SYMBOL_MAP[ALIASES[alias] ?? '']
+    if (!def) return m
+    const name = def.name[lang]
+    if (!loc) return `« ${name} »`
+    const menuId = def.menu ?? def.cat
+    const menu = CATEGORIES[def.domain].find((c) => c.id === menuId)?.name[lang]
+    const where = [menu, def.group?.[lang]].filter(Boolean).join(' ▸ ')
+    return where ? `« ${name} » (${where})` : `« ${name} »`
+  })
+}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Domain, Lang } from './types'
 import { tr, type Key } from './i18n'
-import type { GExercise } from './guided'
+import { fillNames, type GExercise } from './guided'
 
 interface PanelProps {
   ex: GExercise
@@ -25,12 +25,12 @@ export function GuidedPanel({ ex, done, missing, lang, onClose, onSolution, onRe
   return (
     <section className="guided" aria-label={t('guidedTitle')}>
       <div className="guided-head">
-        <strong>{ex.title[lang]}</strong>
+        <strong>{fillNames(ex.title[lang], lang)}</strong>
         <button className="icon" onClick={onClose} aria-label={t('close')} title={t('close')}>✕</button>
       </div>
       <p className="guided-meta">{'★'.repeat(ex.level)}{'☆'.repeat(3 - ex.level)} {t(('level' + ex.level) as Key)} · {ex.minutes} min · {done.filter(Boolean).length}/{done.length}</p>
       <button className="link guided-brief-toggle" aria-expanded={brief} onClick={() => setBrief(!brief)}>{brief ? '▾' : '▸'} {t('guidedBrief')}</button>
-      {brief && <div className="guided-brief">{ex.brief.map((b, i) => <p key={i}>{b[lang]}</p>)}</div>}
+      {brief && <div className="guided-brief">{ex.brief.map((b, i) => <p key={i}>{fillNames(b[lang], lang)}</p>)}</div>}
       <ol className="guided-steps">
         {ex.steps.map((st, i) => {
           const isCur = i === current
@@ -38,14 +38,14 @@ export function GuidedPanel({ ex, done, missing, lang, onClose, onSolution, onRe
             <li key={st.id} className={(done[i] ? 'done ' : '') + (isCur ? 'cur' : '')}>
               <span className="num" aria-hidden="true">{done[i] ? '✓' : i + 1}</span>
               <div>
-                <div className="stitle">{st.title[lang]}</div>
+                <div className="stitle">{fillNames(st.title[lang], lang)}</div>
                 {isCur && (missing[i]?.length ?? 0) > 0 && (
-                  <div className="guided-missing" role="note"><strong>{t('guidedMissing')}</strong><ul>{missing[i].map((m, k) => <li key={k}>{m}</li>)}</ul></div>
+                  <div className="guided-missing" role="note"><strong>{t('guidedMissing')}</strong><ul>{missing[i].map((m, k) => <li key={k}>{fillNames(m, lang)}</li>)}</ul></div>
                 )}
                 {isCur && (
                   <>
                     <button className="link" onClick={() => setHint(hint === st.id ? null : st.id)}>{hint === st.id ? t('guidedHideHint') : t('guidedHint')}</button>
-                    {hint === st.id && <p className="hint">{st.hint[lang]}</p>}
+                    {hint === st.id && <p className="hint">{fillNames(st.hint[lang], lang)}</p>}
                   </>
                 )}
               </div>

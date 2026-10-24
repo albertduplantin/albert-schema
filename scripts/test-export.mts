@@ -281,7 +281,7 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   const miss = ex.steps[0].missing(ctx(partial, false))
   check('lampe : les conseils listent la source et la lampe manquantes', miss.length === 2 && miss.some((m: string) => /source/.test(m)) && miss.some((m: string) => /lampe/.test(m)), JSON.stringify(miss))
   const unw = ex.steps[1].missing(ctx(placedOf(variants[1][2]), false))
-  check('lampe : les conseils listent les bornes restées sans fil', unw.length >= 2 && unw.every((m: string) => /^Sans fil/.test(m)), JSON.stringify(unw))
+  check('lampe : les conseils listent les bornes restées sans fil', unw.length >= 2 && unw.every((m: string) => /^Aucun fil/.test(m)), JSON.stringify(unw))
   function placedOf(specs: any[]) { return T.build(base, specs, []) }
 }
 // ── conseils des étapes de comportement : repères absents et vérifications qui échouent
