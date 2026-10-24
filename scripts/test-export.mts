@@ -222,5 +222,37 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
     }
   }
 }
+// ── exercices guidés : des montages faux ne valident pas les étapes de structure
+{
+  const { GUIDED } = await import(ROOT + '/src/guidedData.ts')
+  const ex = (id: string) => GUIDED.find((g: any) => g.id === id)
+  const ctx = (doc: any, simMode = true) => ({ doc, defs: SYMBOL_MAP, lang: 'fr', simMode })
+  const doneOf = (id: string, doc: any, stepId: string) => ex(id).steps.find((st: any) => st.id === stepId).done(ctx(doc))
+  // hydraulique : retour du distributeur à la bâche coupé
+  const h = ex('h-cyl').solution(base)
+  const v = h.symbols.find((x: any) => /distributeur_4-2/.test(x.defId)), tank = h.symbols.find((x: any) => /bache_a_l_air_libre/.test(x.defId))
+  const noReturn = { ...h, wires: h.wires.filter((w: any) => !((w.from.symId === v.id && w.from.portId === 't1' && w.to.symId === tank.id) || (w.to.symId === v.id && w.to.portId === 't1' && w.from.symId === tank.id))) }
+  check('hydraulique : sans retour à la bâche, la boucle n’est pas validée', doneOf('h-cyl', h, 'loop') && !doneOf('h-cyl', noReturn, 'loop'))
+  // hydraulique : P et T inversés sur la bâche (le refoulement de la pompe à la bâche) ne passe pas
+  const pump = h.symbols.find((x: any) => /pompe_hydr_2/.test(x.defId))
+  const swapped = { ...h, wires: h.wires.map((w: any) => (w.from.symId === pump.id && w.from.portId === 't1' ? { ...w, from: { ...w.from, portId: 't0' } } : w)) }
+  check('hydraulique : aspiration branchée sur le refoulement de la pompe → refusé', !doneOf('h-cyl', swapped, 'loop'))
+  // filtre : sans filtre dans la ligne, l'étape « série » est refusée
+  const f = ex('h-filter').solution(base)
+  const fil = f.symbols.find((x: any) => /81_filters/.test(x.defId))
+  check('hydraulique : filtre et vanne en série sur l’aspiration validés, sans eux refusés', doneOf('h-filter', f, 'series') && !doneOf('h-filter', ex('h-cyl').solution(base), 'series'))
+  void fil
+  // pneumatique : repères différents entre vanne et bobine
+  const pe = ex('p-electro').solution(base)
+  const coil = pe.symbols.find((x: any) => /bobine3/.test(x.defId))
+  coil.label = 'KM9'
+  check('électro-pneumatique : bobine et vanne de repères différents → étape refusée', !doneOf('p-electro', pe, 'tag'))
+  // pneumatique : deux interrupteurs en parallèle ne font pas un ET
+  const pa = ex('p-and').solution(base)
+  const sw = pa.symbols.filter((x: any) => /010_switch_1pos/.test(x.defId)), cl = pa.symbols.find((x: any) => /bobine3/.test(x.defId)), src = pa.symbols.find((x: any) => x.defId === 'sim-src1')
+  const parallel = { ...pa, wires: [...pa.wires.filter((w: any) => !sw.some((s: any) => w.from.symId === s.id || w.to.symId === s.id) ), 
+    ...sw.flatMap((s: any, k: number) => [{ id: 'pa' + k, from: { symId: src.id, portId: 'a' }, to: { symId: s.id, portId: 't0' }, label: '', color: '#000000', section: '' }, { id: 'pb' + k, from: { symId: s.id, portId: 't1' }, to: { symId: cl.id, portId: 't0' }, label: '', color: '#000000', section: '' }])] }
+  check('pneumatique : S1 et S2 en parallèle ne valident pas la sécurité deux mains', doneOf('p-and', pa, 'run') && !doneOf('p-and', parallel, 'run'))
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

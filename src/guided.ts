@@ -79,3 +79,36 @@ export const passes = (c: Ctx, steps: Step[], labels: string[]): boolean => {
   if (!c.doc.symbols.length) return false
   try { return runSteps(steps, labels, c.doc, c.defs, c.lang).ok } catch { return false }
 }
+
+// ── scénarios de simulation libres (pneumatique, électro-pneumatique)
+import { simulate, type SimMemory, type SimResult } from './sim/engine'
+
+export interface SimStep {
+  /** organes à maintenir appuyés (identifiants), calculés sur le schéma de l'élève */
+  press?: (c: Ctx) => string[]
+  /** interrupteurs fermés */
+  toggle?: (c: Ctx) => string[]
+  /** temps simulé écoulé avant la mesure (ms) */
+  wait?: number
+  /** état attendu */
+  ok: (r: SimResult, c: Ctx) => boolean
+}
+
+/** Rejoue des manœuvres sur le schéma de l'élève : à chaque pas, le calcul est fait à l'instant de la manœuvre puis `wait` ms plus tard. */
+export function scenario(c: Ctx, steps: SimStep[]): boolean {
+  if (!c.doc.symbols.length) return false
+  try {
+    let mem: SimMemory = {}
+    let now = 1_000_000
+    for (const st of steps) {
+      const inp = { pressed: new Set(st.press?.(c) ?? []), toggled: new Set(st.toggle?.(c) ?? []) }
+      let r = simulate(c.doc, c.defs, mem, inp, now)
+      mem = r.state
+      now += st.wait ?? 100
+      r = simulate(c.doc, c.defs, mem, inp, now)
+      mem = r.state
+      if (!st.ok(r, c)) return false
+    }
+    return true
+  } catch { return false }
+}

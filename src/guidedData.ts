@@ -3,7 +3,7 @@ import { build, type Link, type Spec } from './templates'
 import { checkDoc } from './check'
 import { EXERCISES } from './exercises'
 import { DEFAULT_DELAY_S } from './sim/engine'
-import { allWired, count, L, passes, syms, type Ctx, type GExercise, type GStep } from './guided'
+import { allWired, count, L, netOf, passes, scenario, syms, type Ctx, type GExercise, type GStep, type SimStep } from './guided'
 
 /** Exercices guidés. Les étapes se cochent toutes seules d'après le schéma de l'élève ; le dernier jeu d'étapes rejoue un scénario. */
 
@@ -102,7 +102,7 @@ const brokenLatch = (base: Doc): Doc => {
   return d
 }
 
-export const GUIDED: GExercise[] = [
+const ELECTRICAL: GExercise[] = [
   // ───────────────────────── électrique, niveau 1
   {
     id: 'e-lamp', domain: 'electrical', level: 1, minutes: 10,
@@ -291,5 +291,438 @@ export const GUIDED: GExercise[] = [
   },
 ]
 
+
+// ───────────────────────── pneumatique
+const PN = (p: string) => 'qet:50_pneumatic/' + p
+const V52 = '5020_velves/502010_control/50201060_5_2_way/'
+const CYL2 = PN('5030_actuators/503010_cylinder_lin/50301011_double_acting/5030101100_double_effet')
+const CYL1 = PN('5030_actuators/503010_cylinder_lin/50301010_single_acting/5030101010_simple_effet')
+const AIR = PN('5010_compressed_air/501010_air_generation/50101000_compressed_air_source')
+const SIL = PN('5010_compressed_air/501016_funktion_components/50101610_flow/5010161060_silencer')
+const V52M = PN(V52 + '5020106030_man_mech/502010603010_5_2_way')
+const V52E = PN(V52 + '5020106020_elec/502010602010_5_2_way_010')
+const V52B = PN(V52 + '5020106020_elec/502010602030_5_2_way_030')
+const V32M = PN('5020_velves/502010_control/50201020_3_2_way/5020102030_man_mech/502010203010_3_2_way')
+const LS = Q('390_sensors_instruments/41_limit_switches/fin_de_course_came_2_no')
+
+const fluid = (c: Ctx, s: PlacedSymbol) => c.defs[s.defId]?.fluid
+const isAir: P = (c, s) => fluid(c, s)?.k === 'fsource'
+const isSilencer: P = (c, s) => fluid(c, s)?.k === 'fsink'
+const isCyl2: P = (c, s) => { const f = fluid(c, s); return f?.k === 'cyl' && !!f.rod }
+const isCyl1: P = (c, s) => { const f = fluid(c, s); return f?.k === 'cyl' && !f.rod }
+const nPorts = (c: Ctx, s: PlacedSymbol) => c.defs[s.defId]?.ports.length ?? 0
+const isMan52: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' && f.a === 'man' && nPorts(c, s) === 5 }
+const isMan32: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' && f.a === 'man' && nPorts(c, s) === 3 }
+const isManValve: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' && f.a === 'man' }
+const isElec52: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' && f.a === 'elec' && f.b === 'spring' && nPorts(c, s) === 5 }
+const isBi52: P = (c, s) => { const f = fluid(c, s); return f?.k === 'valve' && f.a === 'elec' && f.b === 'elec' && nPorts(c, s) === 5 }
+const isLimit: P = (_c, s) => /41_limit_switches/.test(s.defId)
+const pneuWired = (c: Ctx, ps: P[]) => ps.every((p) => all(c, p).length > 0) && allWired(c, ps.flatMap((p) => all(c, p)))
+const ids = (c: Ctx, p: P) => all(c, p).map((s) => s.id)
+type Pos = { cylPos: Record<string, number> }
+const cylPos = (r: Pos, c: Ctx, p: P) => ids(c, p).map((i) => r.cylPos[i] ?? 0)
+const out = (r: Pos, c: Ctx, p: P) => cylPos(r, c, p).some((v) => v >= 0.99)
+const back = (r: Pos, c: Ctx, p: P) => cylPos(r, c, p).length > 0 && cylPos(r, c, p).every((v) => v <= 0.01)
+const sameTag = (c: Ctx, a: P, b: P) => all(c, a).some((x) => x.label.trim() && all(c, b).some((y) => y.label.trim().toUpperCase() === x.label.trim().toUpperCase()))
+
+/** Partie pneumatique commune : source d'air, distributeur 5/2, vérin double effet A1 et deux silencieux d'échappement. */
+const pneu52 = (valve: string, valveLabel: string, ports: { b: string; a: string; r1: string; p: string; r2: string }): [Spec[], Link[]] => [
+  [['a1', CYL2, 180, 90, 'A1'], ['v', valve, 200, 230, valveLabel], ['sil1', SIL, 170, 330, ''], ['src', AIR, 250, 330, ''], ['sil2', SIL, 340, 330, '']],
+  [['v', ports.b, 'a1', 't0'], ['v', ports.a, 'a1', 't1'], ['v', ports.r1, 'sil1', 't0'], ['v', ports.p, 'src', 't0'], ['v', ports.r2, 'sil2', 't0']],
+]
+const MAN52 = { b: 't4', a: 't1', r1: 't2', p: 't3', r2: 't0' }
+const ELEC52 = { b: 't3', a: 't1', r1: 't0', p: 't4', r2: 't2' }
+
+const pManual = (base: Doc): Doc => { const [s, l] = pneu52(V52M, 'V1', MAN52); return build(base, s, l) }
+const pSingle = (base: Doc): Doc =>
+  build(base, [['a1', CYL1, 180, 90, 'A1'], ['v', V32M, 200, 230, 'V1'], ['sil', SIL, 170, 330, ''], ['src', AIR, 250, 330, '']],
+    [['v', 't2', 'a1', 't0'], ['v', 't1', 'src', 't0'], ['v', 't0', 'sil', 't0']])
+const pElectro = (n = 1) => (base: Doc): Doc => {
+  const [s, l] = pneu52(V52E, 'YV1', ELEC52)
+  const sw: Spec[] = [['pwr', 'sim-src1', 480, 40], ['s1', SW, 480, 110, 'S1']]
+  const lk: Link[] = [['pwr', 'a', 's1', 't0']]
+  let last = 's1'
+  if (n === 2) { sw.push(['s2', SW, 480, 190, 'S2']); lk.push(['s1', 't1', 's2', 't0']); last = 's2' }
+  sw.push(['y', COIL, 470, n === 2 ? 290 : 210, 'YV1'])
+  lk.push([last, 't1', 'y', 't0'], ['y', 't1', 'pwr', 'b'])
+  return build(base, [...s, ...sw], [...l, ...lk])
+}
+const pBroken = (base: Doc): Doc => {
+  const d = pManual(base)
+  const src = d.symbols.find((x) => x.defId === AIR)!
+  d.wires = d.wires.filter((w) => w.from.symId !== src.id && w.to.symId !== src.id)
+  return d
+}
+const pAuto = (base: Doc): Doc => {
+  const [s, l] = pneu52(V52B, 'YV1/YV2', { b: 't3', a: 't0', r1: 't4', p: 't2', r2: 't1' })
+  return build(base,
+    [...s, ['pwr', 'sim-src1', 480, 40], ['s2', PB, 480, 100, 'S2'], ['m1', LS, 480, 180, 'A1-'], ['y1', COIL, 470, 260, 'YV1'],
+      ['m2', LS, 620, 150, 'A1+'], ['y2', COIL, 610, 260, 'YV2']],
+    [...l, ['pwr', 'a', 's2', 't0'], ['s2', 't1', 'm1', 't0'], ['m1', 't1', 'y1', 't0'], ['y1', 't1', 'pwr', 'b'],
+      ['pwr', 'a', 'm2', 't0'], ['m2', 't1', 'y2', 't0'], ['y2', 't1', 'pwr', 'b']])
+}
+
+const manualCycle: SimStep[] = [
+  { ok: (r, c) => back(r, c, isCyl2) || back(r, c, isCyl1) },
+  { press: (c) => ids(c, isManValve), wait: 2000, ok: (r, c) => out(r, c, isCyl2) || out(r, c, isCyl1) },
+  { wait: 2000, ok: (r, c) => back(r, c, isCyl2) || back(r, c, isCyl1) },
+]
+const simTest = (id: string, title: L, hint: L, steps: SimStep[]): GStep => ({ id, title, hint, done: (c) => scenario(c, steps) })
+
+const PNEUMATIC: GExercise[] = [
+  {
+    id: 'p-manual', domain: 'pneumatic', level: 1, minutes: 15,
+    title: L('Piloter un vérin double effet avec un distributeur 5/2', 'Drive a double-acting cylinder with a 5/2 valve'),
+    summary: L('Source d’air, distributeur manuel, vérin et échappements : le premier circuit pneumatique.', 'Air source, manual valve, cylinder and exhausts: the first pneumatic circuit.'),
+    brief: [
+      L('Cahier des charges : un vérin double effet doit sortir quand on maintient un distributeur manuel appuyé, et rentrer dès qu’on le relâche (rappel par ressort).', 'Brief: a double-acting cylinder must extend while a manual valve is held down, and retract as soon as it is released (spring return).'),
+      L('Le distributeur 5/2 a cinq orifices : P (alimentation), A et B (vers le vérin), R1 et R2 (échappements, avec silencieux). Le vérin reçoit l’air d’un côté pendant que l’autre côté s’échappe.', 'The 5/2 valve has five ports: P (supply), A and B (to the cylinder), R1 and R2 (exhausts, with silencers). The cylinder gets air on one side while the other side exhausts.'),
+    ],
+    solution: pManual,
+    steps: [
+      stepPlace('place', L('Posez la source d’air, un distributeur 5/2 manuel à ressort, un vérin double effet et deux silencieux', 'Place the air source, a spring-return manual 5/2 valve, a double-acting cylinder and two silencers'),
+        L('Onglet Pneumatique de la bibliothèque : « source d’air comprimé », distributeur « 5/2m [man]-[spring] », « double effet », « silencieux ».', 'Pneumatic tab of the library: “compressed air source”, “5/2m [man]-[spring]” valve, “double acting”, “silencer”.'),
+        (c) => has(c, isAir) && has(c, isMan52) && has(c, isCyl2) && has(c, isSilencer, 2)),
+      stepPlace('wire', L('Raccordez : source → P ; A et B → les deux chambres du vérin ; R1 et R2 → silencieux', 'Connect: source → P; A and B → the two cylinder chambers; R1 and R2 → silencers'),
+        L('Les orifices de travail (A, B) sont en haut du distributeur, l’alimentation et les échappements en bas : l’orifice central du bas est P.', 'Work ports (A, B) are at the top of the valve, supply and exhausts at the bottom: the central bottom port is P.'),
+        (c) => pneuWired(c, [isAir, isMan52, isCyl2, isSilencer])),
+      simStep(),
+      simTest('run', L('Maintenez le distributeur : le vérin sort ; relâchez : il rentre', 'Hold the valve: the cylinder extends; release: it retracts'),
+        L('En simulation, maintenez la souris enfoncée sur le distributeur. La tige se déplace en environ une seconde.', 'In simulation, hold the mouse button down on the valve. The rod moves in about a second.'), manualCycle),
+    ],
+  },
+  {
+    id: 'p-single', domain: 'pneumatic', level: 1, minutes: 15,
+    title: L('Vérin simple effet et distributeur 3/2', 'Single-acting cylinder and 3/2 valve'),
+    summary: L('Un vérin rappelé par ressort, commandé par un distributeur à trois orifices.', 'A spring-return cylinder driven by a three-port valve.'),
+    brief: [
+      L('Cahier des charges : un vérin simple effet sort tant qu’on appuie sur un bouton pneumatique et rentre quand on le relâche, rappelé par son ressort.', 'Brief: a single-acting cylinder extends while a pneumatic button is pressed and retracts when it is released, returned by its spring.'),
+      L('Le distributeur 3/2 normalement fermé alimente le vérin quand il est actionné ; au repos il met le vérin à l’échappement par son orifice R.', 'The normally closed 3/2 valve feeds the cylinder when actuated; at rest it connects the cylinder to exhaust through port R.'),
+    ],
+    solution: pSingle,
+    steps: [
+      stepPlace('place', L('Posez la source d’air, un distributeur 3/2 manuel, un vérin simple effet et un silencieux', 'Place the air source, a manual 3/2 valve, a single-acting cylinder and a silencer'),
+        L('Distributeur « 3/2m_nc [man]-[spring] » : commande manuelle, rappel par ressort, normalement fermé.', '“3/2m_nc [man]-[spring]” valve: manual control, spring return, normally closed.'),
+        (c) => has(c, isAir) && has(c, isMan32) && has(c, isCyl1) && has(c, isSilencer)),
+      stepPlace('wire', L('Raccordez : source → P ; A → vérin ; R → silencieux', 'Connect: source → P; A → cylinder; R → silencer'),
+        L('L’orifice du haut est A (sortie vers le vérin). Parmi les deux orifices du bas, P est celui qui reçoit l’air, R celui qui s’échappe.', 'The top port is A (output to the cylinder). Of the two bottom ports, P receives the air and R exhausts.'),
+        (c) => pneuWired(c, [isAir, isMan32, isCyl1, isSilencer])),
+      simStep(),
+      simTest('run', L('Appuyez : le vérin sort ; relâchez : le ressort le fait rentrer', 'Press: the cylinder extends; release: the spring retracts it'),
+        L('Si le vérin ne sort pas, vérifiez que P est bien relié à la source et A au vérin.', 'If the cylinder does not extend, check that P is connected to the source and A to the cylinder.'), manualCycle),
+    ],
+  },
+  {
+    id: 'p-electro', domain: 'pneumatic', level: 2, minutes: 25,
+    title: L('Commande électrique d’un vérin', 'Electrical control of a cylinder'),
+    summary: L('Une électrovanne 5/2 pilotée par un interrupteur : mélange de pneumatique et d’électricité.', 'A 5/2 solenoid valve driven by a switch: pneumatics and electricity together.'),
+    brief: [
+      L('Cahier des charges : un interrupteur S1 fait sortir un vérin double effet par l’intermédiaire d’une électrovanne 5/2 à rappel par ressort. Interrupteur ouvert, le vérin rentre.', 'Brief: a switch S1 extends a double-acting cylinder through a spring-return 5/2 solenoid valve. With the switch open, the cylinder retracts.'),
+      L('L’électrovanne et sa bobine sont deux symboles : ils sont reliés par un repère commun (YV1). La bobine se câble comme n’importe quel récepteur électrique.', 'The solenoid valve and its coil are two symbols: they are tied by a shared tag (YV1). The coil is wired like any electrical load.'),
+    ],
+    solution: pElectro(1),
+    steps: [
+      stepPlace('place', L('Posez le circuit pneumatique (source, électrovanne 5/2, vérin, silencieux) et le circuit électrique (source, interrupteur, bobine)', 'Place the pneumatic circuit (source, 5/2 solenoid valve, cylinder, silencers) and the electrical circuit (source, switch, coil)'),
+        L('Électrovanne « 5/2e [elec]-[spring] ». Côté électrique : « Source monophasée ou continue », un interrupteur et une « bobine ».', '“5/2e [elec]-[spring]” solenoid valve. Electrical side: “Single-phase or DC source”, a switch and a “coil”.'),
+        (c) => has(c, isAir) && has(c, isElec52) && has(c, isCyl2) && has(c, isSilencer, 2) && has(c, isSource) && has(c, isToggle) && has(c, isCoil)),
+      stepPlace('tag', L('Donnez le même repère YV1 à l’électrovanne et à sa bobine', 'Give the same tag YV1 to the solenoid valve and its coil'),
+        L('Double-clic sur chaque symbole puis champ « Repère » : YV1 des deux côtés. C’est ce repère qui fait agir la bobine sur le distributeur.', 'Double-click each symbol then the “Tag” field: YV1 on both. That tag makes the coil act on the valve.'),
+        (c) => sameTag(c, isElec52, isCoil)),
+      stepPlace('wire', L('Câblez la partie pneumatique et la partie électrique', 'Wire the pneumatic part and the electrical part'),
+        L('Électrique : L → interrupteur → bobine → N. Pneumatique : comme pour le distributeur manuel (P, A, B, R1, R2).', 'Electrical: L → switch → coil → N. Pneumatic: as for the manual valve (P, A, B, R1, R2).'),
+        (c) => pneuWired(c, [isAir, isElec52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isToggle, isCoil])),
+      simStep(),
+      simTest('run', L('Fermez S1 : le vérin sort ; ouvrez S1 : il rentre', 'Close S1: the cylinder extends; open S1: it retracts'),
+        L('En simulation, cliquez sur l’interrupteur. Le vérin met environ une seconde à sortir.', 'In simulation, click the switch. The cylinder takes about a second to extend.'),
+        [
+          { ok: (r, c) => back(r, c, isCyl2) },
+          { toggle: (c) => ids(c, isToggle), wait: 2000, ok: (r, c) => out(r, c, isCyl2) },
+          { wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
+        ]),
+    ],
+  },
+  {
+    id: 'p-and', domain: 'pneumatic', level: 2, minutes: 25,
+    title: L('Sécurité deux mains : S1 ET S2', 'Two-hand safety: S1 AND S2'),
+    summary: L('Le vérin ne sort que si les deux interrupteurs sont fermés.', 'The cylinder only extends if both switches are closed.'),
+    brief: [
+      L('Cahier des charges : pour éviter qu’un opérateur n’ait la main sous le vérin, celui-ci ne sort que si les deux interrupteurs S1 et S2 sont fermés en même temps.', 'Brief: so an operator never has a hand under the cylinder, it only extends if both switches S1 and S2 are closed at the same time.'),
+      L('Deux interrupteurs en série forment un ET logique : il suffit qu’un seul soit ouvert pour couper la bobine.', 'Two switches in series make a logical AND: it is enough for one to be open to cut the coil.'),
+    ],
+    solution: pElectro(2),
+    steps: [
+      stepPlace('place', L('Posez le circuit pneumatique, la source électrique, deux interrupteurs S1 et S2 et la bobine YV1', 'Place the pneumatic circuit, the electrical source, two switches S1 and S2 and coil YV1'),
+        L('Reprenez le circuit de l’exercice précédent et ajoutez un second interrupteur.', 'Start from the previous exercise’s circuit and add a second switch.'),
+        (c) => has(c, isAir) && has(c, isElec52) && has(c, isCyl2) && has(c, isSilencer, 2) && has(c, isSource) && has(c, isToggle, 2) && has(c, isCoil)),
+      stepPlace('tag', L('Repères : YV1 sur l’électrovanne et sur la bobine', 'Tags: YV1 on the solenoid valve and on the coil'),
+        L('Même repère des deux côtés pour que la bobine commande la vanne.', 'Same tag on both sides so the coil drives the valve.'),
+        (c) => sameTag(c, isElec52, isCoil)),
+      stepPlace('wire', L('Câblez : L → S1 → S2 → bobine → N, et le circuit pneumatique', 'Wire: L → S1 → S2 → coil → N, and the pneumatic circuit'),
+        L('Les deux interrupteurs sont l’un derrière l’autre, pas en parallèle.', 'The two switches are one after the other, not in parallel.'),
+        (c) => pneuWired(c, [isAir, isElec52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isToggle, isCoil])),
+      simStep(),
+      simTest('run', L('Seul S1 fermé : rien ; S1 et S2 fermés : le vérin sort', 'Only S1 closed: nothing; S1 and S2 closed: the cylinder extends'),
+        L('Testez les trois cas : S1 seul, S2 seul, les deux.', 'Test the three cases: S1 alone, S2 alone, both.'),
+        [
+          { toggle: (c) => ids(c, isToggle).slice(0, 1), wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
+          { toggle: (c) => ids(c, isToggle).slice(1, 2), wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
+          { toggle: (c) => ids(c, isToggle), wait: 2000, ok: (r, c) => out(r, c, isCyl2) },
+          { wait: 2000, ok: (r, c) => back(r, c, isCyl2) },
+        ]),
+    ],
+  },
+  {
+    id: 'p-repair', domain: 'pneumatic', level: 2, minutes: 15,
+    title: L('Réparer : le vérin ne sort pas', 'Repair: the cylinder does not extend'),
+    summary: L('Un circuit incomplet à diagnostiquer et à réparer.', 'An incomplete circuit to diagnose and repair.'),
+    brief: [
+      L('Cahier des charges : on vous remet un circuit pneumatique avec un distributeur manuel. Quand on appuie sur le distributeur, le vérin ne bouge pas.', 'Brief: you are given a pneumatic circuit with a manual valve. When the valve is pressed, the cylinder does not move.'),
+      L('Quand un vérin ne bouge pas, on suit l’air depuis la source : chaque orifice doit être relié. Trouvez le raccord manquant.', 'When a cylinder does not move, follow the air from the source: every port must be connected. Find the missing connection.'),
+    ],
+    start: pBroken,
+    solution: pManual,
+    steps: [
+      simStep(),
+      stepPlace('fix', L('Réparez : raccordez le raccord manquant entre la source d’air et le distributeur', 'Repair: connect the missing link between the air source and the valve'),
+        L('Suivez le chemin de l’air : source d’air → orifice P (alimentation) du distributeur.', 'Follow the air path: air source → valve port P (supply).'),
+        (c) => pneuWired(c, [isAir, isMan52, isCyl2, isSilencer])),
+      simTest('run', L('Vérifiez : le vérin sort quand on maintient le distributeur', 'Check: the cylinder extends when the valve is held'), L('Maintenez la souris enfoncée sur le distributeur en simulation.', 'Hold the mouse button on the valve in simulation.'), manualCycle),
+    ],
+  },
+  {
+    id: 'p-auto', domain: 'pneumatic', level: 3, minutes: 40,
+    title: L('Va-et-vient automatique A+ A−', 'Automatic A+ A− reciprocation'),
+    summary: L('Un vérin qui sort et rentre tout seul grâce à deux fins de course et une électrovanne bistable.', 'A cylinder that extends and retracts by itself using two limit switches and a bistable solenoid valve.'),
+    brief: [
+      L('Cahier des charges : tant qu’on maintient S2 appuyé, le vérin A1 fait des allers-retours : il sort (A+), et dès qu’il est sorti il rentre (A−), puis ressort, etc.', 'Brief: as long as S2 is held, cylinder A1 cycles: it extends (A+), and as soon as it is out it retracts (A−), then extends again, and so on.'),
+      L('On utilise une électrovanne 5/2 bistable (deux bobines YV1 et YV2 : elle garde sa position) et deux fins de course : A1− (vérin rentré) commande YV1, A1+ (vérin sorti) commande YV2.', 'A bistable 5/2 solenoid valve (two coils YV1 and YV2: it keeps its position) and two limit switches are used: A1− (cylinder retracted) drives YV1, A1+ (cylinder extended) drives YV2.'),
+    ],
+    solution: pAuto,
+    steps: [
+      stepPlace('place', L('Posez le circuit pneumatique : source, électrovanne 5/2 bistable, vérin A1, deux silencieux', 'Place the pneumatic circuit: source, bistable 5/2 solenoid valve, cylinder A1, two silencers'),
+        L('Électrovanne « 5/2e [elec]-[elec] » : deux bobines. Nommez le vérin A1.', '“5/2e [elec]-[elec]” solenoid valve: two coils. Name the cylinder A1.'),
+        (c) => has(c, isAir) && has(c, isBi52) && has(c, isCyl2) && has(c, isSilencer, 2)),
+      stepPlace('elec', L('Posez la commande : source, bouton S2, deux fins de course A1− et A1+, deux bobines YV1 et YV2', 'Place the control: source, button S2, two limit switches A1− and A1+, two coils YV1 and YV2'),
+        L('Un fin de course prend le repère du vérin suivi de + ou − : « A1+ » est actionné quand le vérin A1 est sorti, « A1- » quand il est rentré. L’électrovanne bistable porte le repère « YV1/YV2 ».', 'A limit switch takes the cylinder tag followed by + or −: “A1+” is actuated when cylinder A1 is out, “A1-” when it is in. The bistable valve is tagged “YV1/YV2”.'),
+        (c) => has(c, isSource) && has(c, isNOBtn) && has(c, isLimit, 2) && has(c, isCoil, 2)),
+      stepPlace('wire', L('Câblez : S2 → A1− → YV1 ; A1+ → YV2 ; et le circuit pneumatique', 'Wire: S2 → A1− → YV1; A1+ → YV2; and the pneumatic circuit'),
+        L('A1+ est alimenté directement par la phase : dès que le vérin est sorti il commande YV2. A1− est derrière S2 : il relance un cycle tant que S2 est maintenu.', 'A1+ is fed directly by the phase: as soon as the cylinder is out it drives YV2. A1− is behind S2: it starts a new cycle as long as S2 is held.'),
+        (c) => pneuWired(c, [isAir, isBi52, isCyl2, isSilencer]) && sourceWired(c) && wired(c, [isNOBtn, isCoil]) && allWired(c, all(c, isLimit))),
+      simStep(),
+      simTest('run', L('S2 maintenu : le vérin sort puis rentre tout seul ; relâché, il termine son cycle et s’arrête rentré', 'S2 held: the cylinder extends then retracts by itself; released, it finishes its cycle and stops retracted'),
+        L('Maintenez S2 appuyé quelques secondes en observant le chronogramme.', 'Hold S2 down for a few seconds while watching the timing chart.'),
+        [
+          { ok: (r, c) => back(r, c, isCyl2) },
+          { press: (c) => ids(c, isNOBtn), wait: 1500, ok: (r, c) => out(r, c, isCyl2) },
+          { wait: 3500, ok: (r, c) => back(r, c, isCyl2) },
+        ]),
+    ],
+  },
+]
+
+// ───────────────────────── hydraulique (validation structurelle : pas de simulation hydraulique)
+const HY = (p: string) => 'qet:30_hydraulic/' + p
+const TANK = HY('21_tanks/bache_a_l_air_libre')
+const ACCU = HY('21_tanks/bache_pressurisee')
+const PUMP = HY('61_pumps/pompe_hydr_2')
+const VALVE4 = HY('31_control_valves/13_4-2/distributeur_4-2')
+const HCYL = HY('51_cylinders/verin-asymetrique-doubl-effet')
+const HMOT = HY('61_pumps/moteur_hydr_1')
+const HFILT = HY('81_filters/filtre')
+const HVAN = HY('45_valves/vanne_manuelle')
+
+const isTank: P = (_c, s) => /21_tanks\/bache_a_l_air_libre/.test(s.defId)
+const isAccu: P = (_c, s) => /21_tanks\/bache_pressurisee/.test(s.defId)
+const isPump: P = (_c, s) => /61_pumps\/pompe_/.test(s.defId)
+const isHMotor: P = (_c, s) => /61_pumps\/moteur_hydr/.test(s.defId)
+const isHValve4: P = (c, s) => /31_control_valves/.test(s.defId) && nPorts(c, s) === 4
+const isHCyl: P = (c, s) => /51_cylinders\/verin/.test(s.defId) && nPorts(c, s) >= 2
+const isHFilter: P = (_c, s) => /81_filters/.test(s.defId)
+const isHManual: P = (_c, s) => /45_valves\/vanne_man/.test(s.defId)
+const portsDir = (c: Ctx, s: PlacedSymbol, dir: string) => (c.defs[s.defId]?.ports ?? []).filter((p) => p.dir === dir).map((p) => p.id)
+const dirNets = (c: Ctx, s: PlacedSymbol, dir: string, n: (a: string, b: string) => string) => portsDir(c, s, dir).map((p) => n(s.id, p))
+const hydroStatic = (c: Ctx, ps: P[]) => ps.every((p) => all(c, p).length > 0) && allWired(c, ps.flatMap((p) => all(c, p)), ['t2'])
+
+/** Boucles complètes : bâche → pompe → distributeur 4 voies → charge (vérin ou moteur), avec retour à la bâche. */
+function hydroLoops(c: Ctx, load: P, relaxed = false): { pump: PlacedSymbol; valve: PlacedSymbol; load: PlacedSymbol }[] {
+  const n = netOf(c)
+  const res: { pump: PlacedSymbol; valve: PlacedSymbol; load: PlacedSymbol }[] = []
+  const usedV = new Set<string>(), usedL = new Set<string>()
+  for (const t of all(c, isTank)) {
+    const tankNets = [...dirNets(c, t, 'up', n), ...dirNets(c, t, 'down', n)]
+    for (const p of all(c, isPump)) {
+      if (!relaxed && !dirNets(c, p, 'down', n).some((x) => tankNets.includes(x))) continue // aspiration à la bâche (relaxed : peut passer par des organes en série)
+      const outNets = dirNets(c, p, 'up', n)
+      for (const v of all(c, isHValve4)) {
+        if (usedV.has(v.id)) continue
+        const down = dirNets(c, v, 'down', n)
+        if (down.length < 2 || down[0] === down[1] || !down.some((x) => outNets.includes(x)) || !down.some((x) => tankNets.includes(x))) continue
+        const up = dirNets(c, v, 'up', n)
+        for (const l of all(c, load)) {
+          if (usedL.has(l.id)) continue
+          const lp = (c.defs[l.defId]?.ports ?? []).filter((q) => q.dir === 'up' || q.dir === 'down').map((q) => n(l.id, q.id))
+          if (lp.length >= 2 && up.length >= 2 && up[0] !== up[1] && up.every((x) => lp.includes(x))) { res.push({ pump: p, valve: v, load: l }); usedV.add(v.id); usedL.add(l.id); break }
+        }
+      }
+    }
+  }
+  return res
+}
+
+/** Le chemin « bâche → éléments à deux orifices → aspiration de la pompe » traverse tous les éléments donnés (dans un ordre quelconque). */
+function suctionThrough(c: Ctx, elems: PlacedSymbol[]): boolean {
+  const n = netOf(c)
+  const tanks = all(c, isTank).flatMap((t) => [...dirNets(c, t, 'up', n), ...dirNets(c, t, 'down', n)])
+  const pumps = all(c, isPump).flatMap((p) => dirNets(c, p, 'down', n))
+  const edges = elems.map((e) => (c.defs[e.defId]?.ports ?? []).map((q) => n(e.id, q.id)))
+  if (edges.some((e) => e.length < 2)) return false
+  if (pumps.some((x) => tanks.includes(x))) return false // la pompe ne doit plus aspirer directement dans la bâche
+  const perms = (a: number[]): number[][] => (a.length <= 1 ? [a] : a.flatMap((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).map((r) => [x, ...r])))
+  for (const order of perms(elems.map((_, i) => i))) {
+    for (let mask = 0; mask < 1 << order.length; mask++) {
+      let cur: string[] = tanks
+      let ok = true
+      order.forEach((idx, k) => {
+        const [a, b] = (mask >> k) & 1 ? [edges[idx][1], edges[idx][0]] : [edges[idx][0], edges[idx][1]]
+        if (!cur.includes(a)) ok = false
+        cur = [b]
+      })
+      if (ok && cur.some((x) => pumps.includes(x))) return true
+    }
+  }
+  return false
+}
+
+const hCircuit = (load: string): [Spec[], Link[]] => [
+  [['tank', TANK, 300, 330, ''], ['pump', PUMP, 150, 200, ''], ['v', VALVE4, 330, 190, ''], ['load', load, 500, 60, 'A1']],
+  [['pump', 't1', 'tank', 't0'], ['pump', 't0', 'v', 't0'], ['v', 't1', 'tank', 't0'], ['v', 't2', 'load', 't0'], ['v', 't3', 'load', 't1']],
+]
+const hCyl = (base: Doc): Doc => { const [s, l] = hCircuit(HCYL); return build(base, s, l) }
+const hMotor = (base: Doc): Doc => { const [s, l] = hCircuit(HMOT); return build(base, s, l) }
+const hFilter = (base: Doc): Doc => {
+  const [s, l] = hCircuit(HCYL)
+  // la ligne d'aspiration traverse une vanne d'arrêt puis un filtre
+  const links = l.filter((x) => !(x[0] === 'pump' && x[1] === 't1'))
+  return build(base, [...s, ['van', HVAN, 250, 260, 'V1'], ['fil', HFILT, 200, 300, 'F1']], [...links, ['tank', 't0', 'van', 't0'], ['van', 't1', 'fil', 't0'], ['fil', 't1', 'pump', 't1']])
+}
+const hAccu = (base: Doc): Doc => {
+  const [s, l] = hCircuit(HCYL)
+  return build(base, [...s, ['acc', ACCU, 250, 100, '']], [...l, ['pump', 't0', 'acc', 't0']])
+}
+const hTwo = (base: Doc): Doc =>
+  build(base,
+    [['tank', TANK, 300, 400, ''], ['pump', PUMP, 100, 250, ''], ['v1', VALVE4, 280, 250, ''], ['c1', HCYL, 450, 120, 'A1'], ['v2', VALVE4, 280, 130, ''], ['c2', HCYL, 450, 30, 'A2']],
+    [['pump', 't1', 'tank', 't0'], ['pump', 't0', 'v1', 't0'], ['pump', 't0', 'v2', 't0'], ['v1', 't1', 'tank', 't0'], ['v2', 't1', 'tank', 't0'],
+      ['v1', 't2', 'c1', 't0'], ['v1', 't3', 'c1', 't1'], ['v2', 't2', 'c2', 't0'], ['v2', 't3', 'c2', 't1']])
+
+const HYDRAULIC: GExercise[] = [
+  {
+    id: 'h-cyl', domain: 'hydraulic', level: 1, minutes: 20,
+    title: L('Circuit hydraulique d’un vérin', 'Hydraulic circuit for a cylinder'),
+    summary: L('Bâche, pompe, distributeur 4 voies et vérin : le circuit de base, avec son retour à la bâche.', 'Tank, pump, 4-way valve and cylinder: the basic circuit, with its return to the tank.'),
+    brief: [
+      L('Cahier des charges : une pompe aspire l’huile dans une bâche et l’envoie à un distributeur 4 voies. Le distributeur dirige l’huile vers l’une ou l’autre chambre d’un vérin double effet ; l’huile de l’autre chambre retourne à la bâche.', 'Brief: a pump draws oil from a tank and sends it to a 4-way valve. The valve directs the oil to one or the other chamber of a double-acting cylinder; the oil from the other chamber returns to the tank.'),
+      L('En hydraulique, l’huile ne s’échappe pas à l’air : elle revient toujours à la bâche. Un circuit est donc toujours une boucle fermée sur la bâche.', 'In hydraulics the oil does not vent to air: it always returns to the tank. A circuit is therefore always a loop closed on the tank.'),
+    ],
+    solution: hCyl,
+    steps: [
+      stepPlace('place', L('Posez la bâche, la pompe, un distributeur 4 voies et un vérin double effet', 'Place the tank, the pump, a 4-way valve and a double-acting cylinder'),
+        L('Onglet Hydraulique de la bibliothèque : « bâche à l’air libre », « pompe », « distributeur 4-2 » et « vérin double effet ».', 'Hydraulic tab of the library: “open tank”, “pump”, “4-2 valve” and “double-acting cylinder”.'),
+        (c) => has(c, isTank) && has(c, isPump) && has(c, isHValve4) && has(c, isHCyl)),
+      stepPlace('wire', L('Raccordez tous les orifices', 'Connect every port'),
+        L('Le refoulement de la pompe (en haut) va sur un orifice du bas du distributeur (P). L’autre orifice du bas (T) retourne à la bâche. Les deux orifices du haut (A et B) vont aux deux chambres du vérin.', 'The pump delivery (top) goes to a bottom port of the valve (P). The other bottom port (T) returns to the tank. The two top ports (A and B) go to the two cylinder chambers.'),
+        (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl])),
+      stepPlace('loop', L('Le circuit est complet : aspiration à la bâche, refoulement au distributeur, retour à la bâche, les deux chambres du vérin reliées', 'The circuit is complete: suction from the tank, delivery to the valve, return to the tank, both cylinder chambers connected'),
+        L('Vérifiez que l’aspiration de la pompe et le retour T du distributeur arrivent bien tous deux sur la bâche, et que P est sur le refoulement.', 'Check that the pump suction and the valve return T both reach the tank, and that P is on the delivery side.'),
+        (c) => hydroLoops(c, isHCyl).length >= 1),
+    ],
+  },
+  {
+    id: 'h-motor', domain: 'hydraulic', level: 1, minutes: 20,
+    title: L('Circuit hydraulique d’un moteur', 'Hydraulic circuit for a motor'),
+    summary: L('Le même principe pour faire tourner un moteur hydraulique dans les deux sens.', 'The same principle to turn a hydraulic motor in both directions.'),
+    brief: [
+      L('Cahier des charges : un moteur hydraulique doit tourner dans les deux sens, commandé par un distributeur 4 voies alimenté par une pompe.', 'Brief: a hydraulic motor must turn in both directions, driven by a 4-way valve fed by a pump.'),
+      L('Le schéma est le même que pour un vérin : le moteur remplace simplement le vérin. Inverser le distributeur inverse le sens de rotation.', 'The diagram is the same as for a cylinder: the motor simply replaces the cylinder. Reversing the valve reverses the direction of rotation.'),
+    ],
+    solution: hMotor,
+    steps: [
+      stepPlace('place', L('Posez la bâche, la pompe, un distributeur 4 voies et un moteur hydraulique', 'Place the tank, the pump, a 4-way valve and a hydraulic motor'),
+        L('Le moteur hydraulique est dans la même famille que les pompes de la bibliothèque (« moteur hydraulique »).', 'The hydraulic motor is in the same family as the pumps in the library (“hydraulic motor”).'),
+        (c) => has(c, isTank) && has(c, isPump) && has(c, isHValve4) && has(c, isHMotor)),
+      stepPlace('wire', L('Raccordez l’ensemble comme pour le vérin', 'Connect everything as for the cylinder'),
+        L('Pompe → P ; T → bâche ; A et B → les deux orifices du moteur ; aspiration de la pompe → bâche.', 'Pump → P; T → tank; A and B → the two motor ports; pump suction → tank.'),
+        (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHMotor])),
+      stepPlace('loop', L('Le circuit est complet et refermé sur la bâche', 'The circuit is complete and closed on the tank'),
+        L('Deux orifices de moteur, deux orifices de travail du distributeur, reliés deux à deux.', 'Two motor ports, two valve work ports, connected in pairs.'),
+        (c) => hydroLoops(c, isHMotor).length >= 1),
+    ],
+  },
+  {
+    id: 'h-filter', domain: 'hydraulic', level: 2, minutes: 25,
+    title: L('Protéger l’aspiration : vanne d’arrêt et filtre', 'Protect the suction: shut-off valve and filter'),
+    summary: L('Ajouter sur la ligne d’aspiration une vanne manuelle et un filtre.', 'Add a manual valve and a filter on the suction line.'),
+    brief: [
+      L('Cahier des charges : sur le circuit du vérin, la pompe doit être protégée des impuretés par un filtre d’aspiration, et on doit pouvoir isoler la bâche par une vanne manuelle pour intervenir sur la pompe.', 'Brief: on the cylinder circuit, the pump must be protected from contamination by a suction filter, and the tank must be isolable by a manual valve so the pump can be serviced.'),
+      L('Les deux organes se placent en série sur la ligne bâche → pompe : bâche, vanne d’arrêt, filtre, pompe. Posés directement sur un fil, ils s’y insèrent seuls.', 'Both parts go in series on the tank → pump line: tank, shut-off valve, filter, pump. Dropped on a wire, they insert themselves.'),
+    ],
+    solution: hFilter,
+    steps: [
+      stepPlace('base', L('Réalisez d’abord le circuit de base : bâche, pompe, distributeur et vérin raccordés', 'First build the basic circuit: tank, pump, valve and cylinder connected'),
+        L('Reprenez l’exercice « Circuit hydraulique d’un vérin ».', 'Redo the “Hydraulic circuit for a cylinder” exercise.'),
+        (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl]) && hydroLoops(c, isHCyl, true).length >= 1),
+      stepPlace('place', L('Posez une vanne manuelle et un filtre', 'Place a manual valve and a filter'),
+        L('Vanne : « vanne manuelle ». Filtre : famille « filtres ». Posez-les sur le fil entre la bâche et la pompe : le fil se coupe et se raccorde tout seul.', 'Valve: “manual valve”. Filter: “filters” family. Drop them on the wire between tank and pump: the wire is cut and reconnected by itself.'),
+        (c) => has(c, isHManual) && has(c, isHFilter)),
+      stepPlace('series', L('Sur la ligne d’aspiration : bâche → vanne → filtre → pompe', 'On the suction line: tank → valve → filter → pump'),
+        L('Chaque organe a deux orifices : l’un côté bâche, l’autre côté pompe. L’aspiration ne doit plus aller directement de la bâche à la pompe.', 'Each part has two ports: one tank side, one pump side. The suction must no longer go straight from tank to pump.'),
+        (c) => { const v = all(c, isHManual)[0], f = all(c, isHFilter)[0]; return !!v && !!f && suctionThrough(c, [v, f]) }),
+    ],
+  },
+  {
+    id: 'h-accu', domain: 'hydraulic', level: 2, minutes: 25,
+    title: L('Ajouter un accumulateur', 'Add an accumulator'),
+    summary: L('Un réservoir sous pression sur le refoulement de la pompe.', 'A pressurised reservoir on the pump delivery.'),
+    brief: [
+      L('Cahier des charges : on veut lisser les à-coups de pression et garder une réserve d’huile sous pression. On ajoute un accumulateur sur la ligne de refoulement de la pompe.', 'Brief: we want to smooth pressure pulses and keep a reserve of pressurised oil. An accumulator is added on the pump delivery line.'),
+      L('L’accumulateur est un piquage sur la ligne de pression : il se raccorde au même point que le refoulement de la pompe, avant le distributeur.', 'The accumulator is a branch on the pressure line: it connects at the same point as the pump delivery, before the valve.'),
+    ],
+    solution: hAccu,
+    steps: [
+      stepPlace('base', L('Réalisez d’abord le circuit de base', 'First build the basic circuit'),
+        L('Bâche, pompe, distributeur et vérin raccordés.', 'Tank, pump, valve and cylinder connected.'),
+        (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl]) && hydroLoops(c, isHCyl).length >= 1),
+      stepPlace('place', L('Posez un accumulateur (bâche pressurisée)', 'Place an accumulator (pressurised tank)'),
+        L('Famille « Réservoirs » : « Bâche pressurisée (accumulateur) ».', '“Tanks” family: “Pressurised tank (accumulator)”.'),
+        (c) => has(c, isAccu)),
+      stepPlace('wire', L('Raccordez l’accumulateur sur le refoulement de la pompe', 'Connect the accumulator to the pump delivery'),
+        L('Il se branche sur le fil entre la pompe et l’orifice P du distributeur. Son seul orifice est relié à cette ligne.', 'It branches onto the wire between the pump and port P of the valve. Its single port connects to that line.'),
+        (c) => { const n = netOf(c); const outNets = all(c, isPump).flatMap((p) => dirNets(c, p, 'up', n)); return all(c, isAccu).some((a) => (c.defs[a.defId]?.ports ?? []).some((q) => outNets.includes(n(a.id, q.id)))) && allWired(c, all(c, isAccu)) }),
+    ],
+  },
+  {
+    id: 'h-two', domain: 'hydraulic', level: 3, minutes: 35,
+    title: L('Deux vérins sur une même pompe', 'Two cylinders on one pump'),
+    summary: L('Une pompe, une bâche, deux distributeurs : deux vérins commandés séparément.', 'One pump, one tank, two valves: two independently controlled cylinders.'),
+    brief: [
+      L('Cahier des charges : une seule pompe alimente deux vérins A1 et A2, chacun commandé par son propre distributeur 4 voies. Les deux distributeurs sont alimentés en parallèle par la pompe et retournent à la même bâche.', 'Brief: a single pump feeds two cylinders A1 and A2, each driven by its own 4-way valve. Both valves are fed in parallel by the pump and return to the same tank.'),
+      L('« En parallèle » signifie que le refoulement de la pompe se divise en deux branches, une par distributeur : chaque vérin peut bouger sans l’autre.', '“In parallel” means the pump delivery splits into two branches, one per valve: each cylinder can move without the other.'),
+    ],
+    solution: hTwo,
+    steps: [
+      stepPlace('place', L('Posez la bâche, la pompe, deux distributeurs 4 voies et deux vérins', 'Place the tank, the pump, two 4-way valves and two cylinders'),
+        L('Posez un seul exemplaire de bâche et de pompe, mais deux distributeurs et deux vérins.', 'Place a single tank and a single pump, but two valves and two cylinders.'),
+        (c) => has(c, isTank) && has(c, isPump) && has(c, isHValve4, 2) && has(c, isHCyl, 2)),
+      stepPlace('wire', L('Raccordez tous les orifices', 'Connect all the ports'),
+        L('Le refoulement de la pompe alimente les orifices P des deux distributeurs ; leurs orifices T retournent à la bâche.', 'The pump delivery feeds port P of both valves; their T ports return to the tank.'),
+        (c) => hydroStatic(c, [isTank, isPump, isHValve4, isHCyl])),
+      stepPlace('loops', L('Chaque vérin est commandé par son distributeur, avec retour à la bâche', 'Each cylinder is driven by its valve, with return to the tank'),
+        L('Les deux boucles doivent être complètes : pompe → distributeur → vérin → bâche.', 'Both loops must be complete: pump → valve → cylinder → tank.'),
+        (c) => hydroLoops(c, isHCyl).length >= 2),
+    ],
+  },
+]
+
+export const GUIDED: GExercise[] = [...ELECTRICAL, ...PNEUMATIC, ...HYDRAULIC]
 export const guidedById = (id: string) => GUIDED.find((g) => g.id === id)
 void count; void syms
