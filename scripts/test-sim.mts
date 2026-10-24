@@ -716,5 +716,32 @@ function rig(doc: any) {
   const r0 = g.run([g.idOf('S1')], [], 100)
   check('moteur à l’arrêt : pas de sens de rotation', r0.rotation[M], undefined)
 }
+// ── protections : un court-circuit fait fondre le fusible, une surcharge soutenue le fait aussi, un disjoncteur se réarme
+{
+  const FUSE = 'qet:10_electric/10_allpole/200_fuses_protective_gears/10_fuses/pojistka1p'
+  const { simulate } = await import(ROOT + '/src/sim/engine.ts')
+  const mk = (extra: any[], wires: any[], rated: any) => {
+    const d = T.build(base, [['src', 'sim-src1', 100, 30], ['f', FUSE, 100, 120, 'F1'], ...extra], [['src', 'a', 'f', 't0'], ...wires])
+    const f = d.symbols.find((v: any) => v.label === 'F1'); f.rated = rated
+    return { d, fid: f.id }
+  }
+  // court-circuit : sortie du fusible reliée au neutre
+  const sc = mk([], [['f', 't1', 'src', 'b']], { in: 10 })
+  let r = simulate(sc.d, SYMBOL_MAP, {}, { pressed: new Set(), toggled: new Set(), cut: new Set() }, 1000)
+  check('court-circuit : le fusible fond', r.tripped.has(sc.fid), true)
+  check('court-circuit : plus de court-circuit après la fusion', r.shorts.length, 0)
+  // surcharge : une lampe de 100 W sur un fusible de 0,2 A
+  const L = 'qet:10_electric/10_allpole/380_signaling_operating/11_optical_signaling/lampe2'
+  const ov = mk([['h', L, 100, 240, 'H1']], [['f', 't1', 'h', 't0'], ['h', 't1', 'src', 'b']], { in: 0.2 })
+  ov.d.symbols.find((v: any) => v.label === 'H1').rated = { watts: 100 }
+  const inp = { pressed: new Set<string>(), toggled: new Set<string>(), cut: new Set<string>() }
+  r = simulate(ov.d, SYMBOL_MAP, {}, inp, 1000)
+  check('surcharge : pas de fusion immédiate', r.tripped.has(ov.fid), false)
+  r = simulate(ov.d, SYMBOL_MAP, r.state, inp, 1000 + 60000)
+  check('surcharge soutenue : le fusible fond', r.tripped.has(ov.fid), true)
+  const mem = { ...r.state }; delete mem['§TRIP:' + ov.fid]
+  r = simulate(ov.d, SYMBOL_MAP, mem, inp, 1000 + 60100)
+  check('fusible remplacé : le circuit est de nouveau alimenté', r.energized.size > 0 && !r.tripped.has(ov.fid), true)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

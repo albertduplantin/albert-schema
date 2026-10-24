@@ -461,6 +461,14 @@ function Editor() {
   const onSimToggle = useCallback((id: string) => {
     const sym = all.symbols.find((x) => x.id === id)
     const m = sym && SYMBOL_MAP[sym.defId]?.sim
+    if (coilMemory.current['§TRIP:' + id]?.on) {
+      // réarmement d'un disjoncteur déclenché ou remplacement d'un fusible fondu
+      const mem = { ...coilMemory.current }
+      delete mem['§TRIP:' + id]
+      coilMemory.current = mem
+      setSimIn((s) => ({ ...s }))
+      return
+    }
     const three = m?.k === 'switch' && m.pos3
     const nSel = m?.k === 'switch' && m.sel ? m.sel.outs.length : 0
     setSimIn((s) => {

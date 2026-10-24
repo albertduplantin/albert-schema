@@ -1,3 +1,4 @@
+import { detectTrips } from './protect'
 import { basePot, potVolts, sourcePots, withSourceVoltages } from './potentials'
 import type { Doc, PlacedSymbol, SimModel, SymbolDef, TimerKind } from '../types'
 import { cylPos, solveFluid, STROKE_S } from './fluid'
@@ -64,6 +65,8 @@ export interface SimResult {
   pos3: Record<string, number>
   /** moteurs triphasés alimentés : sens de rotation, +1 direct (L1, L2, L3 de gauche à droite), −1 inverse */
   rotation: Record<string, 1 | -1>
+  /** protections déclenchées (disjoncteur) ou fondues (fusible) : identifiants des symboles */
+  tripped: Set<string>
   cylPos: Record<string, number>
   /** distributeurs : vrai = case actionnée */
   valveA: Record<string, boolean>
@@ -196,6 +199,7 @@ function solve(x: Ctx) {
       continue
     }
     if (m?.k !== 'switch') continue
+    if (x.memory['§TRIP:' + s.id]?.on) { closed[s.id] = false; continue } // protection déclenchée ou fusible fondu : circuit ouvert
     const act = actuated(s, m, x)
     closed[s.id] = act
     if (m.sel) {
@@ -619,7 +623,20 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
   return { dir: res, amps }
 }
 
+/** Calcul complet, puis déclenchement des protections (court-circuit, surcharge) : le calcul est refait tant qu'une protection déclenche. */
 export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now = Date.now()): SimResult {
+  let res = simulateOnce(docRaw, defsRaw, previous, inp, now)
+  for (let i = 0; i < 6; i++) {
+    const d = detectTrips(docRaw, defsRaw, res, res.state, now)
+    if (d.pendingMs !== null) res.pendingMs = Math.min(res.pendingMs ?? Infinity, d.pendingMs)
+    if (!d.changed) break
+    res = simulateOnce(docRaw, defsRaw, res.state, inp, now)
+  }
+  res.tripped = new Set(Object.keys(res.state).filter((k) => k.startsWith('§TRIP:') && res.state[k].on).map((k) => k.slice(6)))
+  return res
+}
+
+function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous: SimMemory, inp: SimInputs, now: number): SimResult {
   // sources réglées à une tension ou à une nature inhabituelle : potentiels suffixés (L@24)
   const { doc: docIn, defs } = withSourceVoltages(docRaw, defsRaw)
   const cut = inp.cut
@@ -639,7 +656,7 @@ export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previo
     let changed = false
     const labels = new Set([...Object.keys(memory), ...Object.keys(out.coilOn)])
     for (const l of labels) {
-      if (l.startsWith('§C:') || l.startsWith('§V:')) continue // mémoire des circuits de fluide : gérée plus bas
+      if (l.startsWith('§C:') || l.startsWith('§V:') || l.startsWith('§TRIP:') || l.startsWith('§OVL:')) continue // mémoire des circuits de fluide : gérée plus bas
       const on = !!out.coilOn[l]
       if (on !== (memory[l]?.on ?? false)) {
         memory[l] = { on, since: now }
@@ -736,7 +753,7 @@ export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previo
   }
   const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.fluid && !defs[s.defId]?.decor).map((s) => s.id)
   return {
-    state: memory, energized, closed: out.closed, pos3: out.pos3, rotation, potentialOf, shorts: out.shorts, unstable, unsupported,
+    state: memory, energized, closed: out.closed, pos3: out.pos3, rotation, tripped: new Set<string>(), potentialOf, shorts: out.shorts, unstable, unsupported,
     pendingMs: ctx.pending.length || fluidPending.length ? Math.min(...ctx.pending, ...fluidPending) : null,
     ...(() => { const f = currentFlow(doc, defs, out); return { current: f.dir, amps: f.amps } })(),
     volts,
