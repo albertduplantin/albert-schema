@@ -177,7 +177,8 @@ function solve(x: Ctx) {
   for (const w of doc.wires) uf.union(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
 
   const closed: Record<string, boolean> = {}
-  const pos3: Record<string, number> = {} // sélecteurs à trois positions : 0 centre (ouvert), 1 ou 2
+  const pos3: Record<string, number> = {} // sélecteurs à plusieurs positions : 0 centre (ouvert) pour le 1-0-2, sinon numéro de la position
+  const windingV: Record<string, number | undefined> = {} // tension aux bornes d'un enroulement de moteur couplé
   const swEdges: [string, string][] = [] // liaisons établies par les contacts fermés
   const link = (a: string, b: string) => {
     uf.union(a, b)
@@ -185,9 +186,26 @@ function solve(x: Ctx) {
   }
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
+    if (m?.k === 'ssr') {
+      // relais statique : la sortie suit l'entrée (mémoire propre au symbole)
+      const on = !!x.memory['§S:' + s.id]?.on
+      closed[s.id] = on
+      if (on) for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
+      continue
+    }
     if (m?.k !== 'switch') continue
     const act = actuated(s, m, x)
     closed[s.id] = act
+    if (m.sel) {
+      // sélecteur à N positions : la position 1 n'a pas de marque ; la position k (k ≥ 2) est marquée « id » (k = 2) ou « id:k-1 »
+      const n = m.sel.outs.length
+      let p = 1
+      for (let k = n; k >= 2; k--) if (x.inp.toggled.has(k === 2 ? s.id : s.id + ':' + (k - 1))) { p = k; break }
+      pos3[s.id] = p
+      closed[s.id] = p > 1
+      link(key(s.id, m.sel.com), key(s.id, m.sel.outs[p - 1]))
+      continue
+    }
     if (m.pos3 && m.changeover?.length) {
       const p1 = x.inp.toggled.has(s.id), p2 = x.inp.toggled.has(s.id + ':2')
       pos3[s.id] = p2 ? 2 : p1 ? 1 : 0
@@ -262,11 +280,50 @@ function solve(x: Ctx) {
 
   const energized = new Set<string>()
   const coilOn: Record<string, boolean> = {}
+  /** moteur à enroulements séparés : alimenté si chaque enroulement l'est, en étoile (point commun flottant) ou en triangle */
+  const windingState = (s: PlacedSymbol, windings: [string, string][]): { on: boolean; v: number | undefined } => {
+    const w = windings.map(([a, b]) => ({ pa: potOf(s.id, a), pb: potOf(s.id, b), ra: uf.find(key(s.id, a)), rb: uf.find(key(s.id, b)) }))
+    const powered = w.map(() => false)
+    const volt: (number | undefined)[] = w.map(() => undefined)
+    w.forEach((e, i) => {
+      if (e.pa && e.pb && e.pa !== e.pb) { powered[i] = true; volt[i] = voltBetween(e.pa, e.pb, doc, defs) }
+    })
+    // un point commun flottant (étoile) alimente les enroulements dont l'autre bout est à des phases différentes
+    const groups = new Map<string, { idx: number[]; pots: Set<string> }>()
+    w.forEach((e, i) => {
+      if (powered[i]) return
+      const far = e.pa && !e.pb ? { f: e.rb, p: e.pa } : e.pb && !e.pa ? { f: e.ra, p: e.pb } : null
+      if (!far) return
+      const g = groups.get(far.f) ?? { idx: [], pots: new Set<string>() }
+      g.idx.push(i)
+      g.pots.add(far.p)
+      groups.set(far.f, g)
+    })
+    for (const g of groups.values()) {
+      if (g.pots.size < 2) continue
+      const [p1, p2] = [...g.pots]
+      const line = voltBetween(p1, p2, doc, defs)
+      for (const i of g.idx) { powered[i] = true; volt[i] = line === undefined ? undefined : Math.round((line / Math.sqrt(3)) * 10) / 10 }
+    }
+    return { on: powered.length > 0 && powered.every(Boolean), v: volt.every((q) => q === volt[0]) ? volt[0] : undefined }
+  }
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
+    if (m?.k === 'ssr') {
+      const seenIn = new Set(m.input.map((p) => potOf(s.id, p)).filter((v): v is string => v !== null))
+      const onIn = seenIn.size >= 2
+      if (onIn) energized.add(s.id)
+      coilOn['§S:' + s.id] = onIn
+      continue
+    }
     if (!m || (m.k !== 'coil' && m.k !== 'load')) continue
     const seen = new Set(m.ports.map((p) => potOf(s.id, p)).filter((v): v is string => v !== null))
-    const on = seen.size >= 2
+    let on = seen.size >= 2
+    if (m.k === 'load' && m.windings) {
+      const st = windingState(s, m.windings)
+      on = st.on
+      windingV[s.id] = st.v
+    }
     if (on) energized.add(s.id)
     if (m.k === 'coil' && s.label) coilOn[devKey(s.label)] = coilOn[devKey(s.label)] || on
     // surcharge injectée sur un moteur : le relais thermique déclenche après un délai et reste déclenché tant que la surcharge dure
@@ -280,7 +337,7 @@ function solve(x: Ctx) {
     const seen = new Set(m.primary.map((p) => potOf(s.id, p)).filter((v): v is string => v !== null))
     if (seen.size >= 2) trafoOn.add(s.id)
   }
-  return { closed, pos3, energized, coilOn, potOf, shorts, swEdges, trafoOn }
+  return { closed, pos3, windingV, energized, coilOn, potOf, shorts, swEdges, trafoOn }
 }
 
 type Key = string
@@ -445,11 +502,12 @@ function currentFlow(doc: Doc, defs: Record<string, SymbolDef>, out: ReturnType<
     const m = def?.sim
     if (m?.k === 'source') { for (const [p, pot] of Object.entries(m.pot)) if (pot !== 'PE') sourceNodes.add(key(s.id, p)) } // la terre ne fournit aucun courant
     else if ((m?.k === 'coil' || m?.k === 'load') && out.energized.has(s.id)) {
-      if (m.k === 'load' && m.role === 'motor') load(s.id, m.ports, motorCurrent(s, def)?.value ?? 5)
+      const lp = m.k === 'load' && m.windings ? m.windings.map((w) => w[0]) : m.ports // moteur couplé : le courant entre par les bornes de début d'enroulement
+      if (m.k === 'load' && m.role === 'motor') load(s.id, lp, motorCurrent(s, def)?.value ?? 5)
       else {
         const watts = s.rated?.watts ?? DEFAULT_WATTS[m.k === 'coil' ? 'coil' : m.role] ?? 5
-        const v = volt(s, m.ports) ?? s.volts ?? 24
-        load(s.id, m.ports, watts / v)
+        const v = (m.k === 'load' ? out.windingV[s.id] : undefined) ?? volt(s, m.ports) ?? s.volts ?? 24
+        load(s.id, lp, watts / v)
         for (const p of m.ports) {
           const pot = out.potOf(s.id, p)
           if (pot?.startsWith('~')) { const tid = pot.slice(1).split(':')[0]; trafoVA.set(tid, (trafoVA.get(tid) ?? 0) + watts); break }
@@ -625,6 +683,7 @@ export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previo
     const pots = m.ports.map((p) => out.potOf(s.id, p))
     let v: number | undefined
     for (let i = 0; i < pots.length; i++) for (let j = i + 1; j < pots.length; j++) v = Math.max(v ?? 0, voltBetween(pots[i], pots[j], doc, defs) ?? 0) || v
+    if (m.k === 'load' && m.windings) v = out.windingV[s.id] // tension réelle aux bornes d'un enroulement (étoile : tension simple)
     if (v === undefined) continue
     volts[s.id] = v
     if (s.volts && (v < s.volts * 0.85 || v > s.volts * 1.15)) badVoltage[s.id] = { applied: v, rated: s.volts }

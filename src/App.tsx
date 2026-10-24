@@ -462,9 +462,18 @@ function Editor() {
     const sym = all.symbols.find((x) => x.id === id)
     const m = sym && SYMBOL_MAP[sym.defId]?.sim
     const three = m?.k === 'switch' && m.pos3
+    const nSel = m?.k === 'switch' && m.sel ? m.sel.outs.length : 0
     setSimIn((s) => {
       const toggled = new Set(s.toggled)
-      if (three) {
+      if (nSel) {
+        // sélecteur à N positions : 1 → 2 → … → N → 1
+        const key = (k: number) => (k === 2 ? id : id + ':' + (k - 1))
+        let cur = 1
+        for (let k = nSel; k >= 2; k--) if (toggled.has(key(k))) { cur = k; break }
+        if (cur > 1) toggled.delete(key(cur))
+        const next = (cur % nSel) + 1
+        if (next > 1) toggled.add(key(next))
+      } else if (three) {
         // sélecteur 1-0-2 : centre → position 1 → position 2 → centre
         if (toggled.has(id)) { toggled.delete(id); toggled.add(id + ':2') }
         else if (toggled.has(id + ':2')) toggled.delete(id + ':2')

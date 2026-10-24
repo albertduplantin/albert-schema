@@ -94,6 +94,14 @@ export function classify({ id, nameFr, nameEn, ports }) {
     return Object.keys(pot).length ? { k: 'source', pot } : null
   }
 
+  // ── relais statique (SSR) : la paire de bornes de gauche est l'entrée de commande, celle de droite la voie de sortie
+  if (has(/01_coils\/relais_statique(\.elmt)?$/) && ports.length === 4) {
+    const left = ports.filter((p) => p.x < 35).sort((a, b) => a.y - b.y)
+    const right = ports.filter((p) => p.x >= 35).sort((a, b) => a.y - b.y)
+    if (left.length === 2 && right.length === 2) return { k: 'ssr', input: [left[0].id, left[1].id], poles: [[right[0].id, right[1].id]] }
+    return null
+  }
+
   // ── bobines
   if (has(/01_coils/)) {
     if (ports.length !== 2 || /thermique|statique/.test(name) || (/polaris/.test(name) && !/comm_polarise/.test(file))) return null
@@ -141,6 +149,19 @@ export function classify({ id, nameFr, nameEn, ports }) {
     // (1-0-2 et trois positions : centre ouvert, `pos3`) ; les sélecteurs à plusieurs contacts ne sont pas modélisés
     if (/position|rotatif|rotary|tournant|1-0-2|a cle|à clé|\bcle\b/.test(name + ' ' + file)) {
       if (ports.length === 2) return { k: 'switch', poles: pairPoles(ports), ctl: 'toggle', nc: false } // le nom « 2 positions » ne désigne pas ici un inverseur
+      if (ports.length === 4) {
+        const byDir = {}
+        for (const p of ports) (byDir[p.dir] ||= []).push(p)
+        const groups = Object.values(byDir)
+        const lone = groups.find((g) => g.length === 1)
+        const many = groups.find((g) => g.length === 3)
+        if (groups.length === 2 && lone && many) {
+          const vertical = lone[0].dir === 'up' || lone[0].dir === 'down'
+          const outs = [...many].sort((a, b) => (vertical ? a.x - b.x : a.y - b.y)).map((p) => p.id)
+          return { k: 'switch', poles: [], sel: { com: lone[0].id, outs }, ctl: 'toggle', nc: false }
+        }
+        return null
+      }
       const co = ports.length === 3 ? changeoverPorts(ports) : null
       if (!co) return null
       const pos3 = /1-0-2|3 positions|3_pos|3pos|trois positions/.test(name + ' ' + file)
@@ -152,7 +173,13 @@ export function classify({ id, nameFr, nameEn, ports }) {
 
   // ── capteurs et détecteurs à contact (2 fils NO / NF, ou inverseur à 3 bornes) : on les « actionne » en simulation comme un fin de course
   if (has(/390_sensors_instruments\/(01_sensors_capacitive|02_sensors_inductive|03_sensors_magnetic|04_sensors_optical|11_sensors_flow|12_sensors_level|13_sensors_pressure|14_sensors_humidity|15_sensors_temperature|16_sensors_ultrasonic)\//)) {
-    if (/sonde|thermocouple|emetteur|émetteur|recepteur|récepteur|luminosit|crepuscolar|capteur_pression$|cellule|sécurité|ossd/.test(name + ' ' + file)) return null
+    // détecteurs M12 à 3 ou 4 fils repérés 1 (+), 3 (0 V), 4 (sortie) : la voie 1-4 se ferme (NO) ou s'ouvre (NF) à la détection
+    if (/inductive_sensor_(no|nc)_[34]p_(cable|connector)(\.elmt)?$/.test(file)) {
+      const out = ports.find((p) => p.label === '4')
+      const plus = ports.find((p) => p.label === '1')
+      return out && plus ? { k: 'switch', poles: [[plus.id, out.id]], ctl: 'toggle', nc: /_nc_/.test(file) } : null
+    }
+    if (/sonde|thermocouple|emetteur|émetteur|recepteur|récepteur|luminosit|crepuscolar|capteur_pression(\.elmt)?$|cellule|sécurité|ossd/.test(name + ' ' + file)) return null
     if (ports.length === 2) return contact('toggle', true)
     const co = ports.length === 3 && /nf_no|nf\/no|nc\/no/.test(file + ' ' + name) ? changeoverPorts(ports) : null
     return co ? { k: 'switch', poles: [], changeover: [co], ctl: 'toggle', nc: false } : null
@@ -200,6 +227,16 @@ export function classify({ id, nameFr, nameEn, ports }) {
   }
   if (has(/60_lightings/) && ports.length === 2) return { k: 'load', ports: portIds, role: 'lamp' }
   if (has(/12_acoustic_signaling/) && ports.length === 2) return { k: 'load', ports: portIds, role: 'buzzer' }
+  // moteur triphasé à 6 bornes : U1 V1 W1 en haut, U2 V2 W2 en bas ; chaque enroulement relie deux bornes de même colonne
+  // (le couplage étoile ou triangle est fait par les fils de l'utilisateur)
+  if (has(/391_consumers_actuators\/10_engines\/induction_motor_6_terminals(\.elmt)?$/)) {
+    const tops = ports.filter((p) => p.dir === 'up').sort((a, b) => a.x - b.x)
+    const bots = ports.filter((p) => p.dir === 'down').sort((a, b) => a.x - b.x)
+    if (tops.length === 3 && bots.length === 3) {
+      return { k: 'load', ports: [...tops, ...bots].map((p) => p.id), role: 'motor', windings: tops.map((t, i) => [t.id, bots[i].id]) }
+    }
+    return null
+  }
   if (has(/391_consumers_actuators\/10_engines/)) {
     const live = ports.filter((p) => !/^(pe|gnd|terre)$/i.test(p.label || ''))
     if (live.length < 2 || live.length > 6 || /dahlander|6_terminals|9_terminals|12_terminals/.test(file)) return null
@@ -210,4 +247,19 @@ export function classify({ id, nameFr, nameEn, ports }) {
   if (has(/391_consumers_actuators\/50_heatings/) && ports.length === 2) return { k: 'load', ports: portIds, role: 'heater' }
 
   return null
+}
+
+/** Repères de bornes imposés à certains symboles dont le dessin ne les porte pas (par identifiant de borne). */
+export function portLabels({ id, ports }) {
+  if (/10_engines\/induction_motor_6_terminals(\.elmt)?$/.test(id.toLowerCase())) {
+    const tops = ports.filter((p) => p.dir === 'up').sort((a, b) => a.x - b.x)
+    const bots = ports.filter((p) => p.dir === 'down').sort((a, b) => a.x - b.x)
+    const out = {}
+    ;['U1', 'V1', 'W1'].forEach((l, i) => tops[i] && (out[tops[i].id] = l))
+    ;['U2', 'V2', 'W2'].forEach((l, i) => bots[i] && (out[bots[i].id] = l))
+    const pe = ports.find((p) => p.dir === 'right' || p.dir === 'left')
+    if (pe) out[pe.id] = 'PE'
+    return out
+  }
+  return {}
 }

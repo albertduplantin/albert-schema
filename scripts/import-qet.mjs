@@ -8,7 +8,7 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { popularity } from './popularity.mjs'
-import { classify } from './sim-classify.mjs'
+import { classify, portLabels } from './sim-classify.mjs'
 import { classifyFluid } from './fluid-classify.mjs'
 import { animate } from './sim-animate.mjs'
 
@@ -245,6 +245,10 @@ for (const r of roots) {
     const relFromRoot = relative(root, file).split(sep).join('/')
     const fluid = r.domain === 'pneumatic' ? classifyFluid({ id: relFromRoot, nameFr: el.fr ?? '', ports }) : null
     const sim = r.domain === 'electrical' ? classify({ id: relFromRoot, nameFr: el.fr, nameEn: el.en, ports }) : null
+    if (r.domain === 'electrical') {
+      const lb = portLabels({ id: relFromRoot, ports })
+      for (const p of ports) if (lb[p.id]) p.label = lb[p.id]
+    }
     if (sim) {
       // animation : lames des contacts (CSS : rotation pilotée par --b{n}) et rotor des moteurs
       const anim = animate({ sim, terminals, segs, rounds })

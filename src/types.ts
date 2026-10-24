@@ -27,13 +27,24 @@ export type SimModel =
       delay?: TimerKind
       /** sélecteur à trois positions (1-0-2) : centre ouvert ; position 1 : commun–repos, position 2 : commun–travail */
       pos3?: boolean
+      /** sélecteur à N positions (commun vers l'une des sorties) : position 1 par défaut, un clic passe à la suivante */
+      sel?: { com: string; outs: string[] }
       /** lames animables : angle de bascule (degrés) et état dessiné (fermé = touche le contact fixe) */
       blades?: { rot: number; closed: boolean }[]
     }
   | { k: 'coil'; ports: string[]; timer?: TimerKind }
   /** transformateur : le secondaire devient une source quand le primaire est alimenté */
   | { k: 'transformer'; primary: string[]; secondary: string[] }
-  | { k: 'load'; ports: string[]; role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater' | 'brake'; spin?: { cx: number; cy: number; r: number } }
+  | {
+      k: 'load'
+      ports: string[]
+      role: 'lamp' | 'motor' | 'valve' | 'buzzer' | 'heater' | 'brake'
+      spin?: { cx: number; cy: number; r: number }
+      /** enroulements séparés (moteur à 6 bornes) : chacun entre deux bornes ; le couplage (étoile, triangle) est fait par les fils */
+      windings?: [string, string][]
+    }
+  /** relais statique : l'entrée commande la voie de sortie sans bobine ni repère */
+  | { k: 'ssr'; input: [string, string]; poles: [string, string][] }
 
 /** Comportement fluidique (pneumatique) : voir scripts/fluid-classify.mjs */
 export type FluidModel =

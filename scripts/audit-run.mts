@@ -17,12 +17,29 @@ for (const s of els) {
   const m = s.sim
   n++
   try {
-    if (m.k === 'load' || m.k === 'coil') {
+    if (m.k === 'load' && m.windings) {
+      // moteur à enroulements séparés : étoile (bornes de fin reliées entre elles) sur un réseau triphasé
+      const tops = m.windings.map((w: string[]) => w[0]), bots = m.windings.map((w: string[]) => w[1])
+      const d = T.build(base, [['src', 'sim-src3', 100, 30], ['x', s.id, 100, 100, 'X1']], [['src', 'a', 'x', tops[0]], ['src', 'b', 'x', tops[1]], ['src', 'c', 'x', tops[2]], ['x', bots[0], 'x', bots[1]], ['x', bots[1], 'x', bots[2]]])
+      const r = run(d)
+      if (!r.energized.has(d.symbols.find((x: any) => x.label === 'X1').id)) fails.push(`${s.name.fr} (moteur à enroulements) : couplage étoile non alimenté`)
+    } else if (m.k === 'ssr') {
+      const d = T.build(base, [['src', 'sim-src1', 100, 30], ['x', s.id, 100, 100, 'X1'], ['h', LAMP, 100, 240, 'H1']], [['src', 'a', 'x', m.input[0]], ['x', m.input[1], 'src', 'b'], ['src', 'a', 'x', m.poles[0][0]], ['x', m.poles[0][1], 'h', 't0'], ['h', 't1', 'src', 'b']])
+      if (!run(d).energized.has(d.symbols.find((x: any) => x.label === 'H1').id)) fails.push(`${s.name.fr} (relais statique) : la sortie ne suit pas l'entrée`)
+    } else if (m.k === 'load' || m.k === 'coil') {
       const ps = m.ports
       const d = T.build(base, [['src', 'sim-src1', 100, 30], ['x', s.id, 100, 100, 'X1']], [['src', 'a', 'x', ps[0]], ...(ps[1] ? [['x', ps[1], 'src', 'b']] : [])])
       const r = run(d)
       if (ps.length >= 2 && !r.energized.has(d.symbols.find((x: any) => x.label === 'X1').id)) fails.push(`${s.name.fr} (${m.k}) : non alimenté entre ses deux bornes`)
     } else if (m.k === 'switch') {
+      if (m.sel) {
+        // sélecteur à N positions : la lampe est sur la sortie 1 (position par défaut)
+        const d = T.build(base, [['src', 'sim-src1', 100, 30], ['x', s.id, 100, 100, 'S1'], ['h', LAMP, 100, 240, 'H1']], [['src', 'a', 'x', m.sel.com], ['x', m.sel.outs[0], 'h', 't0'], ['h', 't1', 'src', 'b']])
+        const sw = d.symbols.find((x: any) => x.defId === s.id).id
+        const lampId = d.symbols.find((x: any) => x.defId === LAMP).id
+        if (!run(d).energized.has(lampId) || run(d, [], [sw]).energized.has(lampId)) fails.push(`${s.name.fr} (sélecteur à ${m.sel.outs.length} positions) : position 1 / position 2 incorrectes`)
+        continue
+      }
       const useChange = !m.poles.length && m.changeover?.length
       const [a, b] = useChange ? [m.changeover[0][0], m.changeover[0][1]] : m.poles[0]
       const specs: any[] = [['src', 'sim-src1', 100, 30], ['x', s.id, 100, 100, m.ctl === 'coil' ? 'KM1' : 'S1'], ['h', LAMP, 100, 240, 'H1']]

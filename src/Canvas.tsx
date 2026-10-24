@@ -817,7 +817,7 @@ export default function Canvas(p: Props) {
                       })}
                     </g>
                   )}
-                  {model?.k === 'switch' && model.pos3 && p.sim && <text x={def.w + 3} y={9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{['0', '1', '2'][p.sim.pos3?.[s.id] ?? 0]}</text>}
+                  {model?.k === 'switch' && (model.pos3 || model.sel) && p.sim && <text x={def.w + 3} y={9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{model.sel ? String(p.sim.pos3?.[s.id] ?? 1) : ['0', '1', '2'][p.sim.pos3?.[s.id] ?? 0]}</text>}
                   {model?.k === 'source' && !isSourceBlock(def.id) && s.volts ? <text x={def.w / 2} y={def.h + 8} fontSize={6.5} textAnchor="middle" stroke="none" fill="currentColor" pointerEvents="none">{s.volts} V</text> : null}
                   {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} />}
                 </g>

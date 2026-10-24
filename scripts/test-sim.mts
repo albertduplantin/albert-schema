@@ -666,5 +666,43 @@ function rig(doc: any) {
   const gs = rig(ds), bid = ds.symbols.find((v: any) => v.label === 'B1').id
   check('capteur inductif NO : actionné en simulation, la lampe s’allume', [gs.on(gs.run(), 'H1'), gs.on(gs.run([bid], [bid]), 'H1')], [false, true])
 }
+// ── moteur à 6 bornes : étoile, triangle, enroulements non couplés ; sélecteur à 3 sorties ; capteur M12 ; relais statique
+{
+  const mot = lib.symbols.find((s: any) => /induction_motor_6_terminals$/.test(s.id))
+  const lab = (l: string) => mot.ports.find((p: any) => p.label === l)?.id
+  check('moteur 6 bornes : bornes repérées U1 V1 W1 U2 V2 W2', ['U1', 'V1', 'W1', 'U2', 'V2', 'W2'].every((l) => !!lab(l)), true)
+  const mk = (links: any[], volts = 230) => {
+    const d = T.build(base, [['src', 'sim-src3', 100, 30], ['x', mot.id, 100, 120, 'M1']], [['src', 'a', 'x', lab('U1')], ['src', 'b', 'x', lab('V1')], ['src', 'c', 'x', lab('W1')], ...links])
+    d.symbols.find((v: any) => v.label === 'M1').volts = volts
+    const r = simulate(d, SYMBOL_MAP, {}, { pressed: new Set(), toggled: new Set() }, 1_000_000)
+    const id = d.symbols.find((v: any) => v.label === 'M1').id
+    return { on: r.energized.has(id), v: r.volts[id], bad: !!r.badVoltage[id] }
+  }
+  const star = mk([['x', lab('U2'), 'x', lab('V2')], ['x', lab('V2'), 'x', lab('W2')]])
+  check('moteur 230/400 V en étoile sur 400 V : alimenté sous 231 V, sans alerte', [star.on, Math.round(star.v ?? 0), star.bad], [true, 231, false])
+  const delta = mk([['x', lab('U1'), 'x', lab('W2')], ['x', lab('V1'), 'x', lab('U2')], ['x', lab('W1'), 'x', lab('V2')]])
+  check('moteur 230/400 V en triangle sur 400 V : alimenté mais surtension signalée', [delta.on, Math.round(delta.v ?? 0), delta.bad], [true, 400, true])
+  check('moteur 6 bornes sans couplage : non alimenté', mk([]).on, false)
+  check('moteur 6 bornes à moitié couplé (deux enroulements seulement) : non alimenté', mk([['x', lab('U2'), 'x', lab('V2')]]).on, false)
+  const sel4 = lib.symbols.find((s: any) => /020_switch_3_contacts$/.test(s.id))
+  const LAMP = 'qet:10_electric/10_allpole/380_signaling_operating/11_optical_signaling/lampe2'
+  const outs = sel4.sim.sel.outs
+  const ds = T.build(base, [['src', 'sim-src1', 100, 30], ['x', sel4.id, 100, 100, 'S1'], ['h1', LAMP, 100, 240, 'H1'], ['h2', LAMP, 220, 240, 'H2'], ['h3', LAMP, 340, 240, 'H3']],
+    [['src', 'a', 'x', sel4.sim.sel.com], ['x', outs[0], 'h1', 't0'], ['x', outs[1], 'h2', 't0'], ['x', outs[2], 'h3', 't0'], ['h1', 't1', 'src', 'b'], ['h2', 't1', 'src', 'b'], ['h3', 't1', 'src', 'b']])
+  const gs = rig(ds), sid = ds.symbols.find((v: any) => v.label === 'S1').id
+  const st = (t: string[]) => { const r = gs.run([], t, 100); return ['H1', 'H2', 'H3'].map((l) => gs.on(r, l)) }
+  check('sélecteur à 3 sorties : positions 1, 2, 3', JSON.stringify([st([]), st([sid]), st([sid + ':2'])]), JSON.stringify([[true, false, false], [false, true, false], [false, false, true]]))
+  const snr = lib.symbols.find((s: any) => /inductive_sensor_no_3p_cable$/.test(s.id))
+  const l1 = snr.ports.find((p: any) => p.label === '1').id, l4 = snr.ports.find((p: any) => p.label === '4').id
+  const dn = T.build(base, [['src', 'sim-src1', 100, 30], ['b', snr.id, 100, 100, 'B1'], ['h', LAMP, 100, 240, 'H1']], [['src', 'a', 'b', l1], ['b', l4, 'h', 't0'], ['h', 't1', 'src', 'b']])
+  const gn = rig(dn), bid = dn.symbols.find((v: any) => v.label === 'B1').id
+  check('capteur inductif 3 fils NO : lampe allumée seulement quand il détecte', [gn.on(gn.run(), 'H1'), gn.on(gn.run([bid], [bid]), 'H1')], [false, true])
+  const ssr = lib.symbols.find((s: any) => /relais_statique$/.test(s.id))
+  const dr = T.build(base, [['src', 'sim-src1', 100, 30], ['s', 'qet:10_electric/10_allpole/380_signaling_operating/21_selector_switches/010_switch_1pos', 100, 100, 'S1'], ['x', ssr.id, 100, 200, 'K1'], ['h', LAMP, 300, 240, 'H1']],
+    [['src', 'a', 's', 't0'], ['s', 't1', 'x', ssr.sim.input[0]], ['x', ssr.sim.input[1], 'src', 'b'], ['src', 'a', 'x', ssr.sim.poles[0][0]], ['x', ssr.sim.poles[0][1], 'h', 't0'], ['h', 't1', 'src', 'b']])
+  const gr = rig(dr), s1 = dr.symbols.find((v: any) => v.label === 'S1').id
+  const a0 = gr.on(gr.run([], [], 50), 'H1'), a1 = (() => { gr.run([], [s1], 50); return gr.on(gr.run([], [s1], 200), 'H1') })()
+  check('relais statique : la sortie suit l’entrée commandée par un interrupteur', [a0, a1], [false, true])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
