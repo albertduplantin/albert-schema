@@ -60,6 +60,10 @@ export type FluidModel =
   | { k: 'fgauge'; ports: string[] }
   /** pressostat : un contact électrique de même repère se ferme quand l'orifice est sous pression */
   | { k: 'fpress'; port: string }
+  /** pompe : l'orifice de refoulement `out` n'est sous pression que si l'aspiration `in` est reliée à une bâche */
+  | { k: 'fpump'; out: string; in: string }
+  /** liaisons fixes entre orifices (pièces élémentaires, raccords, filtres) */
+  | { k: 'fnet'; links: [string, string][] }
   /** moteur pneumatique : sens de rotation selon l'orifice alimenté (un seul orifice : un sens, échappement libre) */
   | { k: 'fmotor'; a: string; b?: string; rev?: boolean }
   | {

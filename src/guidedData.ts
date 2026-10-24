@@ -850,7 +850,7 @@ const PNEUMATIC: GExercise[] = [
   },
 ]
 
-// ───────────────────────── hydraulique (validation structurelle : pas de simulation hydraulique)
+// ───────────────────────── hydraulique (structure du circuit, puis simulation : la pompe doit aspirer dans la bâche)
 const HY = (p: string) => 'qet:30_hydraulic/' + p
 const TANK = HY('21_tanks/bache_a_l_air_libre')
 const ACCU = HY('21_tanks/bache_pressurisee')
@@ -954,6 +954,35 @@ const hTwo = (base: Doc): Doc =>
     [['pump', 't1', 'tank', 't0'], ['pump', 't0', 'v1', 't0'], ['pump', 't0', 'v2', 't0'], ['v1', 't1', 'tank', 't0'], ['v2', 't1', 'tank', 't0'],
       ['v1', 't2', 'c1', 't0'], ['v1', 't3', 'c1', 't1'], ['v2', 't2', 'c2', 't0'], ['v2', 't3', 'c2', 't1']])
 
+
+const hSimStep = (): GStep => ({
+  id: 'sim', title: L('Passez en mode Simulation', 'Switch to Simulation mode'),
+  hint: L('Bouton « ▶ Simuler » en haut de l’écran. Le distributeur est une électrovanne : un clic dessus l’actionne (commande manuelle de secours), un second clic la relâche.', 'Click “▶ Simulate” at the top of the screen. The valve is a solenoid valve: one click actuates it (manual override), a second click releases it.'),
+  done: (c) => c.simMode,
+})
+const hCylSteps = (): SimStep[] => [
+  { ok: (r, c) => back(r, c, isHCyl) },
+  { toggle: (c) => ids(c, isHValve4), wait: 3000, ok: (r, c) => out(r, c, isHCyl) },
+  { wait: 3000, ok: (r, c) => back(r, c, isHCyl) },
+]
+const hMotorSteps = (): SimStep[] => {
+  let rest = 0
+  const dir = (r: { fluidMotor: Record<string, -1 | 0 | 1> }, c: Ctx) => ids(c, isHMotor).map((i) => r.fluidMotor[i] ?? 0).find((v) => v !== 0) ?? 0
+  return [
+    { wait: 200, ok: (r, c) => { rest = dir(r, c); return rest !== 0 } },
+    { toggle: (c) => ids(c, isHValve4), wait: 400, ok: (r, c) => dir(r, c) === -rest },
+    { wait: 400, ok: (r, c) => dir(r, c) === rest },
+  ]
+}
+const hTwoSteps = (): SimStep[] => {
+  const nOut = (r: Pos, c: Ctx) => cylPos(r, c, isHCyl).filter((v) => v >= 0.99).length
+  return [
+    { ok: (r, c) => cylPos(r, c, isHCyl).every((v) => v <= 0.01) },
+    { toggle: (c) => ids(c, isHValve4).slice(0, 1), wait: 3000, ok: (r, c) => nOut(r, c) === 1 },
+    { toggle: (c) => ids(c, isHValve4), wait: 3000, ok: (r, c) => nOut(r, c) === 2 },
+    { wait: 3000, ok: (r, c) => cylPos(r, c, isHCyl).every((v) => v <= 0.01) },
+  ]
+}
 const HYDRAULIC: GExercise[] = [
   {
     id: 'h-cyl', domain: 'hydraulic', level: 1, minutes: 20,
@@ -982,6 +1011,9 @@ const HYDRAULIC: GExercise[] = [
       stepPlace('loop', L('Le circuit est complet : aspiration à la bâche, refoulement au distributeur, retour à la bâche, les deux chambres du vérin reliées', 'The circuit is complete: suction from the tank, delivery to the valve, return to the tank, both cylinder chambers connected'),
         L('Vérifiez que l’aspiration de la pompe et le retour T du distributeur arrivent bien tous deux sur la bâche, et que P est sur le refoulement.', 'Check that the pump suction and the valve return T both reach the tank, and that P is on the delivery side.'),
         (c) => hydroLoops(c, isHCyl).length >= 1),
+      hSimStep(),
+      simTest('run', L('Actionnez l’électrovanne : le vérin sort ; relâchez : il rentre', 'Actuate the solenoid valve: the cylinder extends; release: it retracts'),
+        L('Si le vérin ne bouge pas, vérifiez que l’aspiration de la pompe arrive bien à la bâche : sans huile à aspirer, la pompe ne donne aucune pression.', 'If the cylinder does not move, check that the pump suction reaches the tank: with no oil to draw, the pump gives no pressure.'), hCylSteps()),
     ],
   },
   {
@@ -1010,6 +1042,9 @@ const HYDRAULIC: GExercise[] = [
       stepPlace('loop', L('Le circuit est complet et refermé sur la bâche', 'The circuit is complete and closed on the tank'),
         L('Deux orifices de moteur, deux orifices de travail du distributeur, reliés deux à deux.', 'Two motor ports, two valve work ports, connected in pairs.'),
         (c) => hydroLoops(c, isHMotor).length >= 1),
+      hSimStep(),
+      simTest('run', L('Le moteur tourne ; en actionnant l’électrovanne, il tourne dans l’autre sens', 'The motor turns; when you actuate the solenoid valve, it turns the other way'),
+        L('La flèche ↻ ou ↺ à côté du moteur indique son sens. Un clic sur le distributeur l’inverse.', 'The arrow ↻ or ↺ next to the motor shows its direction. A click on the valve reverses it.'), hMotorSteps()),
     ],
   },
   {
@@ -1038,6 +1073,9 @@ const HYDRAULIC: GExercise[] = [
       stepPlace('series', L('Sur la ligne d’aspiration : bâche → vanne → filtre → pompe', 'On the suction line: tank → valve → filter → pump'),
         L('Chaque organe a deux orifices : l’un côté bâche, l’autre côté pompe. L’aspiration ne doit plus aller directement de la bâche à la pompe.', 'Each part has two ports: one tank side, one pump side. The suction must no longer go straight from tank to pump.'),
         (c) => { const v = all(c, isHManual)[0], f = all(c, isHFilter)[0]; return !!v && !!f && suctionThrough(c, [v, f]) }),
+      hSimStep(),
+      simTest('run', L('Actionnez l’électrovanne : le vérin sort ; relâchez : il rentre', 'Actuate the solenoid valve: the cylinder extends; release: it retracts'),
+        L('Si le vérin ne bouge pas, vérifiez que l’aspiration de la pompe arrive bien à la bâche : sans huile à aspirer, la pompe ne donne aucune pression.', 'If the cylinder does not move, check that the pump suction reaches the tank: with no oil to draw, the pump gives no pressure.'), hCylSteps()),
     ],
   },
   {
@@ -1066,6 +1104,9 @@ const HYDRAULIC: GExercise[] = [
       stepPlace('wire', L('Raccordez l’accumulateur sur le refoulement de la pompe', 'Connect the accumulator to the pump delivery'),
         L('Il se branche sur le fil entre la pompe et l’orifice P du distributeur. Son seul orifice est relié à cette ligne.', 'It branches onto the wire between the pump and port P of the valve. Its single port connects to that line.'),
         (c) => { const n = netOf(c); const outNets = all(c, isPump).flatMap((p) => dirNets(c, p, 'up', n)); return all(c, isAccu).some((a) => (c.defs[a.defId]?.ports ?? []).some((q) => outNets.includes(n(a.id, q.id)))) && allWired(c, all(c, isAccu)) }),
+      hSimStep(),
+      simTest('run', L('Actionnez l’électrovanne : le vérin sort ; relâchez : il rentre', 'Actuate the solenoid valve: the cylinder extends; release: it retracts'),
+        L('Si le vérin ne bouge pas, vérifiez que l’aspiration de la pompe arrive bien à la bâche : sans huile à aspirer, la pompe ne donne aucune pression.', 'If the cylinder does not move, check that the pump suction reaches the tank: with no oil to draw, the pump gives no pressure.'), hCylSteps()),
     ],
   },
   {
@@ -1095,6 +1136,9 @@ const HYDRAULIC: GExercise[] = [
       stepPlace('loops', L('Chaque vérin est commandé par son distributeur, avec retour à la bâche', 'Each cylinder is driven by its valve, with return to the tank'),
         L('Les deux boucles doivent être complètes : pompe → distributeur → vérin → bâche.', 'Both loops must be complete: pump → valve → cylinder → tank.'),
         (c) => hydroLoops(c, isHCyl).length >= 2),
+      hSimStep(),
+      simTest('run', L('Chaque distributeur ne commande que son vérin', 'Each valve only drives its own cylinder'),
+        L('Actionnez le premier distributeur seul : un seul vérin sort. Actionnez les deux : les deux sortent.', 'Actuate the first valve alone: only one cylinder extends. Actuate both: both extend.'), hTwoSteps()),
     ],
   },
 ]

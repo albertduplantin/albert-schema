@@ -115,5 +115,40 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   g.run([], [g.idOf('V1')], 50)
   check('vanne d’arrêt fermée : le moteur s’arrête', g.run([], [g.idOf('V1')], 50).fluidMotor[M], 0)
 }
+
+// ── hydraulique : bâche, pompe, distributeur 4/2, vérin, moteur, clapet, filtre
+{
+  const H = (x: string) => lib.symbols.find((s: any) => s.id === 'qet:30_hydraulic/' + x)
+  const [tank, pump, valve, cyl, mot, filt, chk] = [H('21_tanks/bache_a_l_air_libre'), H('61_pumps/pompe_hydr_2'), H('31_control_valves/13_4-2/distributeur_4-2'), H('51_cylinders/verin-asymetrique-doubl-effet'), H('61_pumps/moteur_hydr_1'), H('81_filters/filtre'), H('45_valves/clapet_simple')]
+  check('hydraulique : tous les symboles du circuit de base sont simulables', [tank, pump, valve, cyl, mot, filt, chk].every((d) => !!d?.fluid), true)
+  const circuit = (load: any, suctionToTank = true) => T.build(base, [specFor('tank', tank, 300, 330, ''), specFor('pump', pump, 150, 200, ''), specFor('v', valve, 330, 190, 'YV1'), specFor('load', load, 500, 60, 'A1')],
+    [...(suctionToTank ? [['pump', pump.fluid.in, 'tank', 't0']] : []), ['pump', pump.fluid.out, 'v', 't0'], ['v', 't1', 'tank', 't0'], ['v', 't2', 'load', load.fluid.cap ?? load.fluid.a], ['v', 't3', 'load', load.fluid.rod ?? load.fluid.b]])
+  let d = circuit(cyl)
+  let g = rig(d)
+  const [V, C] = [d.symbols.find((s: any) => s.defId === valve.id).id, d.symbols.find((s: any) => s.defId === cyl.id).id]
+  let r = g.run(); r = g.run([], [], 3000)
+  check('hydraulique : au repos le vérin est rentré (P → A → tige)', r.cylPos[C], 0)
+  r = g.run([], [V], 100); r = g.run([], [V], 3000)
+  check('hydraulique : électrovanne actionnée (clic de secours) : le vérin sort', r.cylPos[C], 1)
+  r = g.run([], [], 100); r = g.run([], [], 3000)
+  check('hydraulique : relâchée, le ressort ramène le distributeur et le vérin rentre', r.cylPos[C], 0)
+  g = rig(circuit(cyl, false)); r = g.run(); r = g.run([], [d.symbols.find((s: any) => s.defId === valve.id).id], 3000)
+  check('hydraulique : pompe sans aspiration à la bâche : aucune pression, le vérin ne bouge pas', r.cylPos[C] ?? 0, 0)
+  d = circuit(mot); g = rig(d)
+  const M = d.symbols.find((s: any) => s.defId === mot.id).id, V2 = d.symbols.find((s: any) => s.defId === valve.id).id
+  r = g.run(); r = g.run([], [], 100)
+  const rest = r.fluidMotor[M]
+  r = g.run([], [V2], 100)
+  const act = r.fluidMotor[M]
+  check('hydraulique : le moteur tourne, et dans l’autre sens quand on actionne le distributeur', [rest !== 0, act !== 0, rest === -act], [true, true, true])
+  // clapet anti-retour et filtre en série sur la ligne de refoulement
+  const d3 = T.build(base, [specFor('tank', tank, 300, 330, ''), specFor('pump', pump, 150, 200, ''), specFor('f', filt, 200, 120), specFor('k', chk, 260, 120), specFor('v', valve, 330, 190), specFor('load', cyl, 500, 60)],
+    [['pump', pump.fluid.in, 'tank', 't0'], ['pump', pump.fluid.out, 'f', filt.fluid.ports[0]], ['f', filt.fluid.ports[1], 'k', chk.fluid.from], ['k', chk.fluid.to, 'v', 't0'], ['v', 't1', 'tank', 't0'], ['v', 't2', 'load', cyl.fluid.cap], ['v', 't3', 'load', cyl.fluid.rod]])
+  const g3 = rig(d3)
+  const C3 = d3.symbols.find((s: any) => s.defId === cyl.id).id
+  g3.run(); const V3 = d3.symbols.find((s: any) => s.defId === valve.id).id
+  r = g3.run([], [V3], 100); r = g3.run([], [V3], 3000)
+  check('hydraulique : filtre et clapet passant en série : le vérin sort', r.cylPos[C3], 1)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests pneumatiques passent')
 process.exit(fails ? 1 : 0)

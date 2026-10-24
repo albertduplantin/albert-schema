@@ -74,6 +74,7 @@ export function solveFluid(x: FluidIn): FluidOut {
   let build!: Net
   /** liaisons décidées pour chaque clapet ou fonction logique (passe précédente) */
   let gates = new Map<string, [string, string][]>()
+  let pumpOn = new Set<string>() // pompes dont l'aspiration est reliée à une bâche
   let decisions = ''
   const pressureIn = (b: Net, k: string): Pressure => {
     const set = b.pots.get(b.uf.find(k))
@@ -95,6 +96,7 @@ export function solveFluid(x: FluidIn): FluidOut {
       if (!f) continue
       if (f.k === 'valve') for (const [a, b] of valveA[s.id] ? f.act : valveB[s.id] ? f.actB ?? f.rest : f.rest) uf.union(key(s.id, a), key(s.id, b))
       else if (f.k === 'flink') for (const p of f.ports.slice(1)) uf.union(key(s.id, f.ports[0]), key(s.id, p))
+      else if (f.k === 'fnet') for (const [a, b] of f.links) uf.union(key(s.id, a), key(s.id, b))
       else if (f.k === 'check' || f.k === 'logic') {
         if (s.id !== exclude) for (const [a, b] of gates.get(s.id) ?? []) uf.union(a, b)
       }
@@ -103,6 +105,7 @@ export function solveFluid(x: FluidIn): FluidOut {
       const f = defs[s.defId]?.fluid
       if (f?.k === 'fsource') for (const p of f.ports) mark(key(s.id, p), 'P')
       if (f?.k === 'fsink') for (const p of f.ports) mark(key(s.id, p), 'R')
+      if (f?.k === 'fpump' && pumpOn.has(s.id)) mark(key(s.id, f.out), 'P')
     }
     return { uf, pots }
   }
@@ -115,7 +118,8 @@ export function solveFluid(x: FluidIn): FluidOut {
       if (f?.k !== 'valve') continue
       const [la, lb] = valveCoils(s.label)
       const aOn =
-        (f.a === 'elec' && !!la && !!x.coilOn[la]) ||
+        (f.a === 'elec' && ((!!la && !!x.coilOn[la]) || x.toggled.has(s.id))) || // commande manuelle de secours : un clic sur l'électrovanne la actionne
+
         (f.a === 'man' && (x.pressed.has(s.id) || x.toggled.has(s.id))) ||
         (f.a === 'pneu' && !!f.pilotA && pilotP.has(key(s.id, f.pilotA)))
       const bOn = (f.b === 'elec' && !!lb && !!x.coilOn[lb]) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
@@ -151,7 +155,15 @@ export function solveFluid(x: FluidIn): FluidOut {
       }
     }
     gates = next
-    decisions = [...next].map(([id, l]) => id + l.map((x) => x.join('>')).join(',')).join(';')
+    // pompes : elles ne refoulent que si l'aspiration est reliée à une bâche (échappement à l'air libre)
+    const net0 = buildNet()
+    const pumps = new Set<string>()
+    for (const s of doc.symbols) {
+      const f = defs[s.defId]?.fluid
+      if (f?.k === 'fpump' && pressureIn(net0, key(s.id, f.in)) === 'R') pumps.add(s.id)
+    }
+    pumpOn = pumps
+    decisions = [...next].map(([id, l]) => id + l.map((x) => x.join('>')).join(',')).join(';') + '|' + [...pumps].join(',')
     build = buildNet()
   }
   const potOf = (k: string): Pressure => {

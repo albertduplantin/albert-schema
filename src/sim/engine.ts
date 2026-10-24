@@ -103,7 +103,7 @@ const key = (symId: string, portId: string) => `${symId}:${portId}`
 
 /** Organe manœuvrable à la souris : contact, bouton, ou distributeur à commande manuelle. */
 export function isOperableDef(def: SymbolDef | undefined): 'momentary' | 'toggle' | null {
-  if (def?.fluid?.k === 'valve') return def.fluid.manual ?? null
+  if (def?.fluid?.k === 'valve') return def.fluid.manual ?? (def.fluid.a === 'elec' ? 'toggle' : null) // une électrovanne a une commande manuelle de secours
   return isOperable(def?.sim)
 }
 

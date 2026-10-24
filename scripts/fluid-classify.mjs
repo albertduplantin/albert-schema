@@ -180,3 +180,100 @@ export function classifyFluid({ id, nameFr, ports }) {
   }
   return null
 }
+
+/**
+ * Comportement fluidique des symboles hydrauliques (dossier 30_hydraulic). Les distributeurs sont dessinés avec leurs orifices sur la case de repos
+ * (à droite, côté ressort) : en haut A (gauche) et B (droite), en bas P (gauche) et T (droite) ; la case de gauche, commandée par l'électroaimant,
+ * est celle de la position actionnée (flèches croisées).
+ */
+export function classifyHydraulic({ id, nameFr, ports }) {
+  const has = (re) => re.test(id)
+  const ids = (a) => a.map((p) => p.id)
+  const byX = (a, b) => a.x - b.x
+  const up = ports.filter((p) => p.dir === 'up').sort(byX)
+  const down = ports.filter((p) => p.dir === 'down').sort(byX)
+
+  // ── bâches : échappement à la bâche (pression nulle)
+  // bâche pressurisée = accumulateur : il stocke la pression d'une ligne sans rien relier
+  if (has(/21_tanks\/bache_pressurisee/)) return { k: 'fgauge', ports: ids(ports) }
+  if (has(/21_tanks\//)) return { k: 'fsink', ports: ids(ports) }
+
+  // ── pompes : refoulement en haut, aspiration en bas ; la pompe ne refoule que si l'aspiration est reliée à une bâche
+  if (has(/61_pumps\/(pompe_|pomp_mot)/) && !has(/pomp_mot/)) {
+    const out = ports.find((p) => p.dir === 'up')
+    const inn = ports.find((p) => p.dir === 'down')
+    return out && inn ? { k: 'fpump', out: out.id, in: inn.id } : null
+  }
+  // ── moteurs hydrauliques : sens selon l'orifice alimenté
+  if (has(/61_pumps\/moteur_hydr/) && up.length === 1 && down.length === 1) return { k: 'fmotor', a: up[0].id, b: down[0].id }
+
+  // ── filtres et échangeurs : traversée
+  if (has(/(81_filters|71_exchangers)\//) && ports.length === 2) return { k: 'flink', ports: ids(ports) }
+
+  // ── vérins : la tige est du côté de la chambre annulaire
+  if (has(/51_cylinders\//)) {
+    if (has(/teleskop/)) return null
+    if (ports.length === 1) return { k: 'cyl', cap: ports[0].id, single: 'push' }
+    if (ports.length === 2) {
+      const [l, r] = [...ports].sort(byX)
+      if (has(/tige-a-gauche/)) return { k: 'cyl', cap: r.id, rod: l.id }
+      return { k: 'cyl', cap: l.id, rod: r.id }
+    }
+    return null
+  }
+
+  // ── clapet anti-retour : passe de droite (pointe du V) à gauche (bille)
+  if (has(/45_valves\/clapet_simple/) && ports.length === 2) {
+    const [l, r] = [...ports].sort(byX)
+    return { k: 'check', from: r.id, to: l.id }
+  }
+  if (has(/45_valves\/picv_valve/) && ports.length === 2) return { k: 'flink', ports: ids(ports) }
+  if (has(/45_valves\/pressostat/) && ports.length === 1) return { k: 'fpress', port: ports[0].id }
+
+  // ── robinets : manuels (ouverts au repos, un clic les ferme) ; électriques et motorisés (fermés au repos, ouverts sous tension)
+  if (has(/45_valves\/(vanne_manuelle|vanne_man_1)(\.elmt)?$/) && ports.length === 2) return { k: 'valve', rest: [[ports[0].id, ports[1].id]], act: [], a: 'man', b: 'none', manual: 'toggle' }
+  if (has(/45_valves\/(vanne_elec_1|vanne_mot_1)(\.elmt)?$/) && ports.length === 2) return { k: 'valve', rest: [], act: [[ports[0].id, ports[1].id]], a: 'elec', b: 'spring' }
+
+  // ── distributeurs 2/2 : deux paires d'orifices (case de gauche, case de droite), reliées ensemble quand la voie est ouverte
+  if (has(/31_control_valves\/11_2-2\//) && up.length === 2 && down.length === 2) {
+    const open = [[up[0].id, down[0].id], [up[1].id, down[1].id]]
+    const nc = has(/electrovanne_2_2_nf/) || /ferm/i.test(nameFr)
+    return { k: 'valve', rest: nc ? [] : open, act: nc ? open : [], a: 'elec', b: 'spring' }
+  }
+  // ── distributeurs 3/2 : P en bas à gauche, T en bas à droite, A en haut ; au repos P→A, actionné A→T
+  if (has(/31_control_valves\/12_3-2\/distributeur_3-2/) && up.length === 1 && down.length === 2) {
+    const [A, P, T] = [up[0].id, down[0].id, down[1].id]
+    return { k: 'valve', rest: [[P, A]], act: [[A, T]], a: 'elec', b: 'spring' }
+  }
+  // ── distributeurs 4/2 : au repos P→A et B→T ; actionné P→B et A→T (centre ouvert : tout relié au repos ; centre fermé : rien)
+  if (has(/31_control_valves\/13_4-2\//) && up.length === 2 && down.length === 2) {
+    const [A, B, P, T] = [up[0].id, up[1].id, down[0].id, down[1].id]
+    const rest = has(/centre_ferme/) ? [] : has(/centre_ouvert/) ? [[P, A], [P, B], [P, T]] : [[P, A], [B, T]]
+    return { k: 'valve', rest, act: [[P, B], [A, T]], a: 'elec', b: 'spring' }
+  }
+
+  // ── pièces élémentaires (cases isolées) : liaisons fixes selon leur nom
+  if (has(/31_control_valves\/01_single_parts\//)) {
+    if (has(/(fermee|fermes)(\.elmt)?$/) && ports.length === 2) return { k: 'fgauge', ports: ids(ports) }
+    if (has(/1_voie_p_vers_a(\.elmt)?$/) && ports.length === 2) return { k: 'flink', ports: ids(ports) }
+    if (has(/3_ports/) && ports.length === 3) {
+      const A = ports.find((p) => p.dir === 'up')
+      const downs = ports.filter((p) => p.dir === 'down')
+      if (!A || downs.length !== 2) return null
+      const same = downs.find((p) => p.x === A.x)
+      const other = downs.find((p) => p.x !== A.x)
+      return { k: 'fnet', links: [[A.id, has(/3_orifices_p-a(\.elmt)?$/) ? same.id : other.id]] }
+    }
+    if (has(/4_ports/) && up.length === 2 && down.length === 2) {
+      const [A, B, P, T] = [up[0].id, up[1].id, down[0].id, down[1].id]
+      const table = {
+        'a-b-t_relies': [[A, B], [B, T]], 'b-t_fermes': [[P, A]], 'croisees': [[P, B], [A, T]], 'p-a-b_relies': [[P, A], [A, B]], 'p-a-t_relies': [[P, A], [A, T]],
+        'p-a_fermes': [[B, T]], 'p-b_relies': [[P, B]], 'p-t_relies': [[P, T]], 'parallele': [[P, A], [B, T]], 'centre_ferme': [], 'centre_ouvert': [[P, A], [A, B], [B, T]],
+      }
+      const key = Object.keys(table).find((k) => id.replace(/\.elmt$/, '').endsWith(k) || id.replace(/\.elmt$/, '').endsWith('voies_' + k) || id.includes(k))
+      return key ? { k: 'fnet', links: table[key] } : null
+    }
+    return null
+  }
+  return null
+}

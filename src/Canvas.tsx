@@ -838,7 +838,7 @@ export default function Canvas(p: Props) {
                   const port = def.fluid.k === 'fpress' ? def.fluid.port : def.fluid.ports[0]
                   const pot = p.sim.potentialOf[`${s.id}:${port}`]
                   if (pot !== 'P' && pot !== 'R') return null
-                  return <text x={b.x2 + 3} y={b.y1 + 9} fontSize={8} stroke="none" fill={pot === 'P' ? '#1565c0' : '#777'} fontWeight={700} pointerEvents="none">{pot === 'P' ? '6 bar' : '0 bar'}</text>
+                  return <text x={b.x2 + 3} y={b.y1 + 9} fontSize={8} stroke="none" fill={pot === 'P' ? '#1565c0' : '#777'} fontWeight={700} pointerEvents="none">{pot === 'P' ? (def.domain === 'hydraulic' ? '160 bar' : '6 bar') : '0 bar'}</text>
                 })()}
                 {p.sim && def.fluid?.k === 'fmotor' && (p.sim.fluidMotor[s.id] ?? 0) !== 0 && (
                   <text x={b.x2 + 3} y={b.y1 + 9} fontSize={11} stroke="none" fill="#1565c0" fontWeight={700} pointerEvents="none">{p.sim.fluidMotor[s.id] === 1 ? '↻' : '↺'}</text>
