@@ -57,7 +57,7 @@ export const labelled = (c: Ctx, label: string) => c.doc.symbols.filter((s) => s
 export function allWired(c: Ctx, list: PlacedSymbol[], skip: string[] = []): boolean {
   if (!list.length) return false
   const used = new Set(c.doc.wires.flatMap((w) => [`${w.from.symId}:${w.from.portId}`, `${w.to.symId}:${w.to.portId}`]))
-  return list.every((s) => (c.defs[s.defId]?.ports ?? []).every((p) => skip.includes(p.id) || used.has(`${s.id}:${p.id}`)))
+  return list.every((s) => (c.defs[s.defId]?.ports ?? []).every((p) => skip.includes(p.id) || /^PE$/i.test(p.label ?? '') || used.has(`${s.id}:${p.id}`)))
 }
 
 /** Réseaux de fils : deux bornes reliées par des fils (sans traverser de composant) ont la même racine. */

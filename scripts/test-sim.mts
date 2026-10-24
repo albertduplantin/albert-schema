@@ -704,5 +704,17 @@ function rig(doc: any) {
   const a0 = gr.on(gr.run([], [], 50), 'H1'), a1 = (() => { gr.run([], [s1], 50); return gr.on(gr.run([], [s1], 200), 'H1') })()
   check('relais statique : la sortie suit l’entrée commandée par un interrupteur', [a0, a1], [false, true])
 }
+// ── sens de rotation d'un moteur : l'inverseur de sens change l'ordre des phases
+{
+  const d = T.reversingStarter(base), g = rig(d)
+  const M = g.idOf('M1')
+  const dirOf = (press: string[]) => { g.run(press.map((l) => g.idOf(l)), [], 100); const r = g.run(press.map((l) => g.idOf(l)), [], 600); return r.rotation[M] }
+  const fwd = dirOf(['S2'])
+  g.run([g.idOf('S1')], [], 100); g.run([], [], 100)
+  const rev = dirOf(['S3'])
+  check('inverseur de sens : KM1 et KM2 donnent des sens de rotation opposés', [fwd !== undefined, rev !== undefined, fwd === -rev], [true, true, true])
+  const r0 = g.run([g.idOf('S1')], [], 100)
+  check('moteur à l’arrêt : pas de sens de rotation', r0.rotation[M], undefined)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

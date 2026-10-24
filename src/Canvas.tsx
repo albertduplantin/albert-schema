@@ -30,13 +30,13 @@ function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | nul
 }
 
 /** Rotor : trois pales qui tournent dans le cercle du moteur. */
-function Rotor({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+function Rotor({ cx, cy, r, dir = 1 }: { cx: number; cy: number; r: number; dir?: 1 | -1 }) {
   const R = r * 0.78
   return (
     <g transform={`translate(${cx} ${cy})`} pointerEvents="none">
       <circle r={R + 1} fill="#fff" fillOpacity={0.82} stroke="none" />
       <g stroke="#1f8f3a" strokeWidth={1.8} strokeLinecap="round" fill="none">
-        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.8s" repeatCount="indefinite" />
+        <animateTransform attributeName="transform" type="rotate" from={dir === 1 ? '0' : '360'} to={dir === 1 ? '360' : '0'} dur="0.8s" repeatCount="indefinite" />
         <path d={`M0 0L${R} 0M0 0L${-R / 2} ${R * 0.866}M0 0L${-R / 2} ${-R * 0.866}`} />
         <circle r={R} strokeOpacity={0.35} strokeWidth={1} />
       </g>
@@ -819,7 +819,8 @@ export default function Canvas(p: Props) {
                   )}
                   {model?.k === 'switch' && (model.pos3 || model.sel) && p.sim && <text x={def.w + 3} y={9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{model.sel ? String(p.sim.pos3?.[s.id] ?? 1) : ['0', '1', '2'][p.sim.pos3?.[s.id] ?? 0]}</text>}
                   {model?.k === 'source' && !isSourceBlock(def.id) && s.volts ? <text x={def.w / 2} y={def.h + 8} fontSize={6.5} textAnchor="middle" stroke="none" fill="currentColor" pointerEvents="none">{s.volts} V</text> : null}
-                  {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} />}
+                  {lit && model?.k === 'load' && model.spin && <Rotor {...model.spin} dir={p.sim?.rotation?.[s.id] ?? 1} />}
+                  {lit && model?.k === 'load' && model.role === 'motor' && p.sim?.rotation?.[s.id] && <text x={def.w + 3} y={def.h / 2} fontSize={11} stroke="none" fill="#1f8f3a" fontWeight={700} pointerEvents="none">{p.sim.rotation[s.id] === 1 ? '↻' : '↺'}</text>}
                 </g>
                 {def.ports.map((pt) => {
                   const text = terms[s.id]?.[pt.id] ?? pt.label

@@ -123,7 +123,7 @@ Object.assign(ALIASES, {
   src1: 'sim-src1', simL: 'sim-l', simN: 'sim-n', switch: Q('380_signaling_operating/21_selector_switches/010_switch_1pos'),
   pb: Q('380_signaling_operating/20_push_buttons/poussoir'), pbnf: Q('380_signaling_operating/20_push_buttons/poussoir_nf'),
   lamp: Q('380_signaling_operating/11_optical_signaling/lampe2'), coil: Q('310_relays_contactors_contacts/01_coils/bobine3'),
-  tcoil: Q('310_relays_contactors_contacts/01_coils/bobine_tempo_travail'),
+  tcoil: Q('310_relays_contactors_contacts/01_coils/bobine_tempo_travail'), qmot: Q('200_fuses_protective_gears/11_circuit_breakers/disjonct-m_3f'), kpow: Q('310_relays_contactors_contacts/02_contacts_cross_referencing/02_power_contacts/com_puiss4'), mot3: Q('391_consumers_actuators/10_engines/moteur_tri_2'), mot6: Q('391_consumers_actuators/10_engines/induction_motor_6_terminals'),
   k: Q('310_relays_contactors_contacts/02_contacts_cross_referencing/01_auxiliary_contacts/con_simple'),
   knf: Q('310_relays_contactors_contacts/02_contacts_cross_referencing/01_auxiliary_contacts/con_simple_nf'),
   limit: Q('390_sensors_instruments/41_limit_switches/fin_de_course_came_2_no'),
@@ -201,9 +201,60 @@ const brokenLatch = (base: Doc): Doc => {
   return d
 }
 
+const isPowerK: P = (c, s) => { const m = model(c, s); return m?.k === 'switch' && m.ctl === 'coil' && power(s) }
+const isMotor: P = (c, s) => { const m = model(c, s); return m?.k === 'load' && m.role === 'motor' }
+const isMotor6: P = (c, s) => { const m = model(c, s); return m?.k === 'load' && m.role === 'motor' && !!m.windings }
+const isBreaker3: P = (c, s) => /11_circuit_breakers|12_magneto/.test(s.defId) && (model(c, s)?.k === 'switch')
+const MOT3 = Q('391_consumers_actuators/10_engines/moteur_tri_2')
+const MOT6 = Q('391_consumers_actuators/10_engines/induction_motor_6_terminals')
+const QMOT = Q('200_fuses_protective_gears/11_circuit_breakers/disjonct-m_3f')
+const KPOW = Q('310_relays_contactors_contacts/02_contacts_cross_referencing/02_power_contacts/com_puiss4')
+const EARTH = Q('110_network_supplies/terre')
 const lampOn = (r: { energized: Set<string> }, c: Ctx) => all(c, isLamp).some((l) => r.energized.has(l.id))
 const ids = (c: Ctx, p: P) => all(c, p).map((s) => s.id)
 const simTest = (id: string, title: L, hint: L, steps: SimStep[]): GStep => ({ id, title, hint, done: (c) => scenario(c, steps) })
+
+/** Départ moteur à deux sens de marche : puissance (Q1, KM1 direct, KM2 deux phases croisées) et commande verrouillée. */
+const reverseSolution = (base: Doc): Doc =>
+  build(base,
+    [['src', 'sim-src3', 100, 30], ['q', QMOT, 120, 110, 'Q1'], ['k1', KPOW, 120, 230, 'KM1'], ['k2', KPOW, 240, 230, 'KM2'], ['m', MOT3, 120, 340, 'M1'], ['pem', EARTH, 220, 410, ''],
+      ['s1', PBN, 420, 110, 'S1'], ['s2', PB, 420, 210, 'S2'], ['a1', K, 500, 200, 'KM1'], ['i2', KN, 430, 290, 'KM2'], ['c1', COIL, 410, 360, 'KM1'],
+      ['s3', PB, 580, 210, 'S3'], ['a2', K, 660, 200, 'KM2'], ['i1', KN, 590, 290, 'KM1'], ['c2', COIL, 570, 360, 'KM2']],
+    [['src', 'a', 'q', 't5'], ['src', 'b', 'q', 't4'], ['src', 'c', 'q', 't3'],
+      ['q', 't1', 'k1', 't0'], ['q', 't0', 'k1', 't2'], ['q', 't2', 'k1', 't4'],
+      ['q', 't1', 'k2', 't0'], ['q', 't0', 'k2', 't2'], ['q', 't2', 'k2', 't4'],
+      ['k1', 't1', 'm', 't0'], ['k1', 't3', 'm', 't2'], ['k1', 't5', 'm', 't1'],
+      ['k2', 't1', 'm', 't0'], ['k2', 't3', 'm', 't1'], ['k2', 't5', 'm', 't2'], ['m', 't3', 'pem', 't0'],
+      ['src', 'a', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'a1', 't0'], ['s2', 't1', 'i2', 't0'], ['a1', 't1', 'i2', 't0'], ['i2', 't1', 'c1', 't0'], ['c1', 't1', 'src', 'd'],
+      ['s1', 't1', 's3', 't0'], ['s1', 't1', 'a2', 't0'], ['s3', 't1', 'i1', 't0'], ['a2', 't1', 'i1', 't0'], ['i1', 't1', 'c2', 't0'], ['c2', 't1', 'src', 'd']])
+
+/** Démarrage étoile-triangle : KM1 ligne, KM2 étoile, KM3 triangle, temporisation KT de 5 s ; moteur 400/690 V. */
+const starDeltaSolution = (base: Doc): Doc => {
+  const d = build(base,
+    [['src', 'sim-src3', 100, 30], ['q', QMOT, 120, 110, 'Q1'], ['k1', KPOW, 120, 230, 'KM1'], ['m', MOT6, 240, 340, 'M1'], ['pem', EARTH, 380, 440, ''],
+      ['k3', KPOW, 120, 360, 'KM3'], ['k2', KPOW, 400, 340, 'KM2'],
+      ['s1', PBN, 620, 110, 'S1'], ['s2', PB, 620, 210, 'S2'], ['ka', K, 700, 200, 'KM1'],
+      ['c1', COIL, 610, 320, 'KM1'], ['kt', TCOIL, 730, 320, 'KT'],
+      ['ktn', KN, 860, 300, 'KT'], ['k3n', KN, 860, 380, 'KM3'], ['c2', COIL, 850, 460, 'KM2'],
+      ['kto', K, 980, 300, 'KT'], ['k2n', KN, 980, 380, 'KM2'], ['c3', COIL, 970, 460, 'KM3']],
+    [['src', 'a', 'q', 't5'], ['src', 'b', 'q', 't4'], ['src', 'c', 'q', 't3'],
+      ['q', 't1', 'k1', 't0'], ['q', 't0', 'k1', 't2'], ['q', 't2', 'k1', 't4'],
+      ['k1', 't1', 'm', 't2'], ['k1', 't3', 'm', 't4'], ['k1', 't5', 'm', 't3'],
+      // triangle : U1–W2, V1–U2, W1–V2
+      ['m', 't2', 'k3', 't0'], ['m', 't4', 'k3', 't2'], ['m', 't3', 'k3', 't4'], ['k3', 't1', 'm', 't1'], ['k3', 't3', 'm', 't0'], ['k3', 't5', 'm', 't6'],
+      // étoile : U2, V2, W2 réunies
+      ['m', 't0', 'k2', 't0'], ['m', 't6', 'k2', 't2'], ['m', 't1', 'k2', 't4'], ['k2', 't1', 'k2', 't3'], ['k2', 't3', 'k2', 't5'],
+      ['m', 't5', 'pem', 't0'],
+      ['src', 'a', 's1', 't0'], ['s1', 't1', 's2', 't0'], ['s1', 't1', 'ka', 't0'],
+      ['s2', 't1', 'c1', 't0'], ['ka', 't1', 'c1', 't0'], ['s2', 't1', 'kt', 't0'], ['s2', 't1', 'ktn', 't0'], ['s2', 't1', 'kto', 't0'],
+      ['ktn', 't1', 'k3n', 't0'], ['k3n', 't1', 'c2', 't0'], ['kto', 't1', 'k2n', 't0'], ['k2n', 't1', 'c3', 't0'],
+      ['c1', 't1', 'src', 'd'], ['kt', 't1', 'src', 'd'], ['c2', 't1', 'src', 'd'], ['c3', 't1', 'src', 'd']])
+  for (const x of d.symbols) {
+    if (x.defId === TCOIL) x.delay = 5
+    if (x.defId === MOT6) x.volts = 400
+  }
+  return d
+}
 
 const ELECTRICAL: GExercise[] = [
   // ───────────────────────── électrique, niveau 1
@@ -993,6 +1044,125 @@ const HYDRAULIC: GExercise[] = [
   },
 ]
 
-export const GUIDED: GExercise[] = [...ELECTRICAL, ...PNEUMATIC, ...HYDRAULIC]
+
+const labelled = (c: Ctx, tag: string) => c.doc.symbols.filter((s) => s.label === tag)
+
+// ───────────────────────── électrique, puissance : inverseur de sens et démarrage étoile-triangle
+for (const [p, fr, en] of [
+  [isBreaker3, 'disjoncteur-moteur', 'motor circuit breaker'], [isPowerK, 'contacteur de puissance', 'power contactor'], [isMotor, 'moteur', 'motor'], [isMotor6, 'moteur à 6 bornes', '6-terminal motor'],
+] as [P, string, string][]) NAMES.set(p, [fr, en])
+
+/** Repères attendus : l'étape se coche quand chacun est porté par un symbole ; les repères absents sont listés. */
+const tagStep = (id: string, title: L, hint: L, tags: string[]): GStep => ({
+  id, title, hint,
+  done: (c) => tags.every((t) => labelled(c, t).length > 0),
+  missing: (c) => tags.filter((t) => labelled(c, t).length === 0).map((t) => (c.lang === 'fr' ? 'Repère absent : ' : 'Missing tag: ') + t),
+})
+const byTag = (tag: string, p?: P) => (c: Ctx) => labelled(c, tag).filter((s) => !p || p(c, s)).map((s) => s.id)
+const onTag = (r: { energized: Set<string> }, c: Ctx, tag: string, p?: P) => labelled(c, tag).some((s) => (!p || p(c, s)) && r.energized.has(s.id))
+const simTestFn = (id: string, title: L, hint: L, make: () => SimStep[]): GStep => ({ id, title, hint, done: (c) => scenario(c, make()) })
+
+const reverseSteps = (): SimStep[] => {
+  let a: 1 | -1 | undefined
+  const motorOn = (r: { energized: Set<string> }, c: Ctx) => ids(c, isMotor).some((i) => r.energized.has(i))
+  const rot = (r: { rotation: Record<string, 1 | -1> }, c: Ctx) => ids(c, isMotor).map((i) => r.rotation[i]).find((v) => v !== undefined)
+  return [
+    { ok: (r, c) => !motorOn(r, c) },
+    { press: byTag('S2'), wait: 600, ok: (r, c) => { a = rot(r, c); return motorOn(r, c) && a !== undefined } },
+    { wait: 600, ok: (r, c) => motorOn(r, c) && rot(r, c) === a },
+    { press: byTag('S3'), wait: 600, ok: (r, c) => motorOn(r, c) && rot(r, c) === a && !onTag(r, c, 'KM2', isCoil) },
+    { press: byTag('S1'), wait: 600, ok: (r, c) => !motorOn(r, c) },
+    { wait: 300, ok: (r, c) => !motorOn(r, c) },
+    { press: byTag('S3'), wait: 600, ok: (r, c) => motorOn(r, c) && a !== undefined && rot(r, c) === -a },
+  ]
+}
+
+const starDeltaSteps = (): SimStep[] => {
+  const motor = (c: Ctx) => ids(c, isMotor6)[0]
+  const near = (v: number | undefined, t: number) => v !== undefined && Math.abs(v - t) <= 3
+  return [
+    { ok: (r, c) => !r.energized.has(motor(c)) },
+    { press: byTag('S2'), wait: 800, ok: (r, c) => r.energized.has(motor(c)) && onTag(r, c, 'KM1', isCoil) && onTag(r, c, 'KM2', isCoil) && !onTag(r, c, 'KM3', isCoil) && near(r.volts[motor(c)], 231) && !r.badVoltage[motor(c)] },
+    { wait: 800, ok: (r, c) => r.energized.has(motor(c)) && onTag(r, c, 'KM2', isCoil) },
+    { wait: 6000, ok: (r, c) => r.energized.has(motor(c)) && onTag(r, c, 'KM1', isCoil) && !onTag(r, c, 'KM2', isCoil) && onTag(r, c, 'KM3', isCoil) && near(r.volts[motor(c)], 400) && !r.badVoltage[motor(c)] },
+    { press: byTag('S1'), wait: 600, ok: (r, c) => !r.energized.has(motor(c)) && !onTag(r, c, 'KM1', isCoil) && !onTag(r, c, 'KM3', isCoil) },
+  ]
+}
+
+const POWER_EX: GExercise[] = [
+  {
+    id: 'e-reverse', domain: 'electrical', level: 3, minutes: 45,
+    title: L('Inverseur de sens de marche d’un moteur (puissance et commande)', 'Motor reversing starter (power and control)'),
+    summary: L('Deux contacteurs, deux phases permutées et un verrouillage : le moteur tourne dans les deux sens.', 'Two contactors, two swapped phases and an interlock: the motor turns both ways.'),
+    brief: [
+      L('Cahier des charges : un moteur triphasé doit pouvoir tourner dans les deux sens. Un bouton S2 le démarre dans un sens, un bouton S3 dans l’autre, S1 l’arrête.', 'Brief: a three-phase motor must be able to turn both ways. Button S2 starts it one way, button S3 the other, S1 stops it.'),
+      L('Pour inverser le sens, on permute deux des trois phases arrivant au moteur : c’est le rôle du second contacteur. Les deux contacteurs ne doivent jamais coller ensemble, sinon deux phases sont court-circuitées : un contact NF de chacun verrouille l’autre.', 'To reverse the direction, two of the three phases reaching the motor are swapped: that is the second contactor’s job. The two contactors must never pull in together, otherwise two phases are short-circuited: an NC contact of each locks out the other.'),
+    ],
+    parts: [
+      L('Puissance : une source triphasée, un disjoncteur-moteur Q1, deux contacteurs de puissance KM1 (sens 1) et KM2 (deux phases permutées), un moteur triphasé M1.', 'Power: a three-phase source, a motor circuit breaker Q1, two power contactors KM1 (direction 1) and KM2 (two phases swapped), a three-phase motor M1.'),
+      L('Commande : S1 arrêt (NF), S2 marche sens 1 (NO), S3 marche sens 2 (NO) ; KM1 et KM2 ont chacun une bobine, un contact NO d’auto-maintien et un contact NF de verrouillage placé devant la bobine de l’autre.', 'Control: S1 stop (NC), S2 start direction 1 (NO), S3 start direction 2 (NO); KM1 and KM2 each have a coil, a NO latching contact and an NC interlock contact placed in front of the other one’s coil.'),
+    ],
+    expect: [
+      L('Au repos : le moteur est à l’arrêt.', 'At rest: the motor is stopped.'),
+      L('J’appuie sur S2 : KM1 s’enclenche, le moteur tourne dans un sens (la flèche ↻ ou ↺ s’affiche), et il continue quand je relâche.', 'I press S2: KM1 pulls in, the motor turns one way (an arrow ↻ or ↺ shows), and it keeps going when I release.'),
+      L('Pendant qu’il tourne, j’appuie sur S3 : rien ne change, KM2 reste coupée (verrouillage).', 'While it turns, I press S3: nothing changes, KM2 stays off (interlock).'),
+      L('J’appuie sur S1 : le moteur s’arrête.', 'I press S1: the motor stops.'),
+      L('J’appuie sur S3 : KM2 s’enclenche et le moteur tourne dans le sens contraire (la flèche s’inverse).', 'I press S3: KM2 pulls in and the motor turns the opposite way (the arrow reverses).'),
+    ],
+    solution: reverseSolution,
+    steps: [
+      needStep('place', L('Posez la puissance (source, Q1, deux contacteurs, moteur) et la commande (S1, S2, S3, deux bobines, contacts)', 'Place the power (source, Q1, two contactors, motor) and the control (S1, S2, S3, two coils, contacts)'),
+        L('Source : {{src1:loc}}. Disjoncteur-moteur : {{qmot:loc}}. Contacteur de puissance : {{kpow:loc}}. Moteur : {{mot3:loc}}. Commande : comme pour le verrouillage de deux contacteurs.', 'Source: {{src1:loc}}. Motor breaker: {{qmot:loc}}. Power contactor: {{kpow:loc}}. Motor: {{mot3:loc}}. Control: as for the two-contactor interlock.'),
+        [['supply', 1], [isBreaker3, 1], [isPowerK, 2], [isMotor, 1], [isNCBtn, 1], [isNOBtn, 2], [isCoil, 2], [isNOk, 2], [isNCk, 2]]),
+      tagStep('tags', L('Repères : S1, S2, S3, KM1 et KM2', 'Tags: S1, S2, S3, KM1 and KM2'),
+        L('S1 arrêt, S2 sens 1, S3 sens 2. KM1 sur sa bobine, ses contacts de puissance et ses contacts auxiliaires ; KM2 de même.', 'S1 stop, S2 direction 1, S3 direction 2. KM1 on its coil, its power contacts and its auxiliary contacts; KM2 likewise.'), ['S1', 'S2', 'S3', 'KM1', 'KM2']),
+      stepPlace('wire', L('Câblez la puissance (KM2 permute deux phases) et la commande verrouillée', 'Wire the power (KM2 swaps two phases) and the interlocked control'),
+        L('Puissance : source → Q1 → KM1 et KM2 en parallèle → moteur. Sur KM2, croisez deux fils (par exemple L2 et L3) entre le contacteur et le moteur. Commande : comme l’exercice sur le verrouillage.', 'Power: source → Q1 → KM1 and KM2 in parallel → motor. On KM2, cross two wires (for example L2 and L3) between the contactor and the motor. Control: as in the interlock exercise.'),
+        (c) => sourceWired(c) && wired(c, [isBreaker3, isPowerK, isMotor, isNCBtn, isNOBtn, isCoil, isNOk, isNCk])),
+      simStep(),
+      simTestFn('run', L('Le moteur tourne dans les deux sens, avec verrouillage', 'The motor turns both ways, with interlock'),
+        L('Observez la flèche à côté du moteur : ↻ direct, ↺ inverse. Si les deux sens sont identiques, vérifiez que KM2 permute bien deux phases.', 'Watch the arrow next to the motor: ↻ direct, ↺ reverse. If both directions are the same, check that KM2 really swaps two phases.'), reverseSteps),
+    ],
+  },
+  {
+    id: 'e-stardelta', domain: 'electrical', level: 3, minutes: 60,
+    title: L('Démarrage étoile-triangle d’un moteur', 'Star-delta motor starting'),
+    summary: L('Trois contacteurs et une temporisation : le moteur démarre sous tension réduite puis passe en triangle.', 'Three contactors and a timer: the motor starts at reduced voltage then switches to delta.'),
+    brief: [
+      L('Cahier des charges : pour limiter l’appel de courant, un moteur de 400 V en triangle démarre d’abord en étoile (chaque enroulement reçoit 231 V, soit 400 V divisé par √3), puis, au bout de 5 secondes, passe en triangle (400 V par enroulement).', 'Brief: to limit the starting current, a 400 V-in-delta motor first starts in star (each winding gets 231 V, i.e. 400 V divided by √3), then after 5 seconds switches to delta (400 V per winding).'),
+      L('Trois contacteurs : KM1 alimente le moteur, KM2 forme l’étoile (il relie les trois fins d’enroulement entre elles), KM3 forme le triangle. KM2 et KM3 ne doivent jamais être enclenchés ensemble : chacun verrouille l’autre. La temporisation KT passe de l’un à l’autre.', 'Three contactors: KM1 feeds the motor, KM2 forms the star (it joins the three winding ends together), KM3 forms the delta. KM2 and KM3 must never be in together: each locks out the other. The timer KT switches from one to the other.'),
+    ],
+    parts: [
+      L('Puissance : source triphasée, disjoncteur-moteur Q1, trois contacteurs de puissance KM1 (ligne), KM2 (étoile), KM3 (triangle), moteur à 6 bornes M1 réglé à 400 V.', 'Power: three-phase source, motor circuit breaker Q1, three power contactors KM1 (line), KM2 (star), KM3 (delta), 6-terminal motor M1 set to 400 V.'),
+      L('Commande : S1 arrêt (NF), S2 marche (NO), bobine KM1 avec auto-maintien, bobine temporisée KT (5 s), contact NF de KT puis NF de KM3 devant la bobine KM2, contact NO de KT puis NF de KM2 devant la bobine KM3.', 'Control: S1 stop (NC), S2 start (NO), coil KM1 with latching, timed coil KT (5 s), KT NC contact then KM3 NC in front of coil KM2, KT NO contact then KM2 NC in front of coil KM3.'),
+    ],
+    expect: [
+      L('Au repos : tout est coupé.', 'At rest: everything is off.'),
+      L('J’appuie sur S2 : KM1, KM2 et la temporisation KT s’enclenchent ; le moteur démarre en étoile (231 V par enroulement) ; KM3 reste coupé.', 'I press S2: KM1, KM2 and timer KT pull in; the motor starts in star (231 V per winding); KM3 stays off.'),
+      L('Je relâche S2 : tout reste enclenché (auto-maintien de KM1).', 'I release S2: everything stays in (KM1 latching).'),
+      L('Au bout de 5 s : KM2 retombe, KM3 s’enclenche, le moteur passe en triangle (400 V par enroulement). KM2 et KM3 ne sont jamais enclenchés en même temps.', 'After 5 s: KM2 drops, KM3 pulls in, the motor goes to delta (400 V per winding). KM2 and KM3 are never in together.'),
+      L('J’appuie sur S1 : tout retombe et le moteur s’arrête.', 'I press S1: everything drops and the motor stops.'),
+    ],
+    solution: starDeltaSolution,
+    steps: [
+      needStep('place', L('Posez la puissance (source, Q1, trois contacteurs, moteur à 6 bornes) et la commande', 'Place the power (source, Q1, three contactors, 6-terminal motor) and the control'),
+        L('Moteur : {{mot6:loc}}. Bobine temporisée : {{tcoil:loc}}. Contacts : {{k:loc}} et {{knf:loc}}.', 'Motor: {{mot6:loc}}. Timed coil: {{tcoil:loc}}. Contacts: {{k:loc}} and {{knf:loc}}.'),
+        [['supply', 1], [isBreaker3, 1], [isPowerK, 3], [isMotor6, 1], [isNCBtn, 1], [isNOBtn, 1], [isCoil, 3], [isTimer, 1], [isNOk, 2], [isNCk, 3]]),
+      tagStep('tags', L('Repères : S1, S2, KM1, KM2, KM3 et KT', 'Tags: S1, S2, KM1, KM2, KM3 and KT'),
+        L('Chaque contacteur porte son repère sur sa bobine et sur ses contacts (puissance et auxiliaires). KT : la bobine temporisée et ses deux contacts.', 'Each contactor carries its tag on its coil and its contacts (power and auxiliary). KT: the timed coil and its two contacts.'), ['S1', 'S2', 'KM1', 'KM2', 'KM3', 'KT']),
+      stepPlace('settings', L('Réglez KT sur 5 s et la tension du moteur sur 400 V', 'Set KT to 5 s and the motor voltage to 400 V'),
+        L('Bobine KT : champ « Temporisation (s) » = 5. Moteur : champ « Tension nominale » = 400 (tension d’un enroulement, c’est-à-dire celle du couplage triangle).', 'Coil KT: “Delay (s)” = 5. Motor: “Rated voltage” = 400 (the voltage of one winding, i.e. of the delta connection).'),
+        (c) => all(c, isTimer).some((s) => (s.delay ?? DEFAULT_DELAY_S) === 5) && all(c, isMotor6).some((s) => s.volts === 400)),
+      stepPlace('wire', L('Câblez : KM1 sur U1 V1 W1 ; KM3 en triangle (U1–W2, V1–U2, W1–V2) ; KM2 en étoile (U2, V2, W2 réunies) ; puis la commande', 'Wire: KM1 on U1 V1 W1; KM3 as delta (U1–W2, V1–U2, W1–V2); KM2 as star (U2, V2, W2 joined); then the control'),
+        L('KM3 relie chaque début d’enroulement à la fin de l’enroulement suivant. KM2 réunit les trois fins d’enroulement entre elles : ses trois sorties sont reliées ensemble.', 'KM3 connects each winding start to the end of the next winding. KM2 joins the three winding ends together: its three outputs are wired together.'),
+        (c) => sourceWired(c) && wired(c, [isBreaker3, isPowerK, isMotor6, isNCBtn, isNOBtn, isCoil, isTimer, isNOk, isNCk])),
+      simStep(),
+      simTestFn('run', L('Étoile à l’appui, triangle au bout de 5 s, arrêt par S1', 'Star on pressing, delta after 5 s, stop with S1'),
+        L('Mode simulation, vitesse ×5 : le chronogramme montre KM2 qui retombe pendant que KM3 s’enclenche. La tension de l’enroulement passe de 231 V à 400 V.', 'In simulation, speed ×5: the timing chart shows KM2 dropping as KM3 pulls in. The winding voltage goes from 231 V to 400 V.'), starDeltaSteps),
+    ],
+  },
+]
+
+export const GUIDED: GExercise[] = [...ELECTRICAL, ...POWER_EX, ...PNEUMATIC, ...HYDRAULIC]
 export const guidedById = (id: string) => GUIDED.find((g) => g.id === id)
 void count; void syms

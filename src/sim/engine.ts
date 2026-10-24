@@ -62,6 +62,8 @@ export interface SimResult {
   /** vérins : position de 0 (rentré) à 1 (sorti) */
   /** sélecteurs à trois positions : position courante (0 = centre, ouvert) */
   pos3: Record<string, number>
+  /** moteurs triphasés alimentés : sens de rotation, +1 direct (L1, L2, L3 de gauche à droite), −1 inverse */
+  rotation: Record<string, 1 | -1>
   cylPos: Record<string, number>
   /** distributeurs : vrai = case actionnée */
   valveA: Record<string, boolean>
@@ -698,7 +700,21 @@ export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previo
     if (m.k === 'load' && m.windings) v = out.windingV[s.id] // tension réelle aux bornes d'un enroulement (étoile : tension simple)
     if (v === undefined) continue
     volts[s.id] = v
-    if (s.volts && (v < s.volts * 0.85 || v > s.volts * 1.15)) badVoltage[s.id] = { applied: v, rated: s.volts }
+    // un moteur à enroulements séparés accepte aussi la tension d'un démarrage en étoile : tension nominale / √3
+    const starStart = m.k === 'load' && !!m.windings && !!s.volts && Math.abs(v - s.volts / Math.sqrt(3)) <= 0.07 * s.volts
+    if (s.volts && !starStart && (v < s.volts * 0.85 || v > s.volts * 1.15)) badVoltage[s.id] = { applied: v, rated: s.volts }
+  }
+  // sens de rotation des moteurs triphasés : ordre des phases sur les trois bornes, de gauche à droite (+1 : sens direct L1-L2-L3)
+  const rotation: Record<string, 1 | -1> = {}
+  const PH = ['L1', 'L2', 'L3']
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    if (m?.k !== 'load' || m.role !== 'motor' || !out.energized.has(s.id)) continue
+    const ports = (m.windings ? m.windings.map((w) => w[0]) : m.ports).map((id) => defs[s.defId].ports.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => !!p)
+    if (ports.length !== 3) continue
+    const idx = [...ports].sort((a, b) => a.x - b.x).map((p) => PH.indexOf(basePot(out.potOf(s.id, p.id) ?? '')))
+    if (idx.some((i) => i < 0) || new Set(idx).size !== 3) continue
+    rotation[s.id] = (idx[1] - idx[0] + 3) % 3 === 1 ? 1 : -1
   }
   // fluide : état final, positions des vérins et pression aux orifices
   const fl = solveFluid({ doc, defs, memory, coilOn: out.coilOn, pressed: inp.pressed, toggled: inp.toggled })
@@ -720,7 +736,7 @@ export function simulate(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previo
   }
   const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.fluid && !defs[s.defId]?.decor).map((s) => s.id)
   return {
-    state: memory, energized, closed: out.closed, pos3: out.pos3, potentialOf, shorts: out.shorts, unstable, unsupported,
+    state: memory, energized, closed: out.closed, pos3: out.pos3, rotation, potentialOf, shorts: out.shorts, unstable, unsupported,
     pendingMs: ctx.pending.length || fluidPending.length ? Math.min(...ctx.pending, ...fluidPending) : null,
     ...(() => { const f = currentFlow(doc, defs, out); return { current: f.dir, amps: f.amps } })(),
     volts,
