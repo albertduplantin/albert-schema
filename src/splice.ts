@@ -32,7 +32,8 @@ const key = (symId: string, portId: string) => `${symId}:${portId}`
 /**
  * Insère les symboles `ids` dans les fils qu'ils recouvrent : quand deux bornes d'un symbole se trouvent sur le tracé d'un même
  * fil, celui-ci est coupé en deux et raccordé à ces bornes (disjoncteur posé sur trois fils, bornier, lampe, contact…).
- * Les coudes imposés du fil d'origine sont répartis de part et d'autre.
+ * Les coudes imposés du fil d'origine sont répartis de part et d'autre. Des fils superposés (même tracé) sont tous coupés et
+ * raccordés aux mêmes bornes.
  */
 export function spliceSymbols(doc: Doc, ids: string[]): Doc {
   const syms = new Map(doc.symbols.map((s) => [s.id, s]))
@@ -55,7 +56,7 @@ export function spliceSymbols(doc: Doc, ids: string[]): Doc {
       const len = totalLength(path)
       const hits = ports
         .map((p) => ({ ...p, d: along(path, p.pos) }))
-        .filter((p) => p.d !== null && p.d > 1 && p.d < len - 1 && !used.has(key(id, p.id)))
+        .filter((p) => p.d !== null && p.d > 1 && p.d < len - 1)
         .sort((a, b) => (a.d as number) - (b.d as number))
       if (hits.length < 2) continue
       const [first, second] = hits
@@ -70,8 +71,7 @@ export function spliceSymbols(doc: Doc, ids: string[]): Doc {
       if (v2.length) w2.via = v2
       else delete w2.via
       wires = wires.flatMap((x) => (x.id === w.id ? [w1, w2] : [x]))
-      used.add(key(id, first.id))
-      used.add(key(id, second.id))
+      // pas de « used » ici : des fils superposés (phases en parallèle, même tracé) sont tous coupés et raccordés aux mêmes bornes
       changed = true
     }
   }

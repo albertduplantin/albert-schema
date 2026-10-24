@@ -188,5 +188,19 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   const m4 = applyFixToDoc(m3, low.fix, SYMBOL_MAP)
   check('Contrôle : après correction, plus d’erreur de calibre', !checkDoc(m4, SYMBOL_MAP, 'fr').some((x: any) => /inférieur au courant nominal du moteur/.test(x.text)))
 }
+// ── insertion d'un composant sur des fils superposés : tous sont coupés et reconnectés
+{
+  const { spliceSymbols } = await import(ROOT + '/src/splice.ts')
+  const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  const L = Q('380_signaling_operating/11_optical_signaling/lampe2')
+  const d = T.build(base, [['a', 'sim-l', 100, 30], ['l1', L, 100, 300, 'H1'], ['l2', L, 100, 300, 'H2'], ['f', Q('200_fuses_protective_gears/10_fuses/pojistka1p'), 100, 150, 'F1']],
+    [['a', 'a', 'l1', 't0'], ['a', 'a', 'l2', 't0']])
+  const fuse = d.symbols.find((x: any) => x.label === 'F1').id
+  const out = spliceSymbols(d, [fuse])
+  const onFuse = (port: string) => out.wires.filter((w: any) => (w.from.symId === fuse && w.from.portId === port) || (w.to.symId === fuse && w.to.portId === port)).length
+  check('fils superposés : les deux fils sont coupés (4 fils au total)', out.wires.length === 4, String(out.wires.length))
+  check('fils superposés : chaque borne du composant reçoit les deux fils', onFuse('t0') === 2 && onFuse('t1') === 2, `${onFuse('t0')},${onFuse('t1')}`)
+  check('fils superposés : plus aucun fil direct source → lampe', !out.wires.some((w: any) => w.from.symId !== fuse && w.to.symId !== fuse))
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
