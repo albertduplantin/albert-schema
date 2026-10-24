@@ -150,5 +150,38 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   r = g3.run([], [V3], 100); r = g3.run([], [V3], 3000)
   check('hydraulique : filtre et clapet passant en série : le vérin sort', r.cylPos[C3], 1)
 }
+
+// ── limiteur de débit et RDU : vitesse du vérin
+{
+  const H = (x: string) => lib.symbols.find((s: any) => s.id === 'qet:30_hydraulic/' + x)
+  const [tank, pump, valve, cyl] = [H('21_tanks/bache_a_l_air_libre'), H('61_pumps/pompe_hydr_2'), H('31_control_valves/13_4-2/distributeur_4-2'), H('51_cylinders/verin-asymetrique-doubl-effet')]
+  const lim = SYMBOL_MAP['flow-limiter-h'], rdu = SYMBOL_MAP['flow-rdu-h']
+  check('limiteur de débit et RDU : présents dans la bibliothèque hydraulique et pneumatique', [!!lim, !!rdu, !!SYMBOL_MAP['flow-limiter-p'], !!SYMBOL_MAP['flow-rdu-p']], [true, true, true, true])
+  const mk = (part: any, open?: number) => {
+    const d = T.build(base, [specFor('tank', tank, 300, 330, ''), specFor('pump', pump, 150, 200, ''), specFor('v', valve, 330, 190, ''), specFor('load', cyl, 500, 60, 'A1'), ...(part ? [specFor('x', part, 420, 120, 'Q1')] : [])],
+      [['pump', pump.fluid.in, 'tank', 't0'], ['pump', pump.fluid.out, 'v', 't0'], ['v', 't1', 'tank', 't0'], ['v', 't3', 'load', cyl.fluid.rod],
+        ...(part ? [['v', 't2', 'x', 'l'], ['x', 'r', 'load', cyl.fluid.cap]] : [['v', 't2', 'load', cyl.fluid.cap]])])
+    if (part && open) d.symbols.find((s: any) => s.label === 'Q1').rated = { open }
+    const g = rig(d)
+    return { g, V: d.symbols.find((s: any) => s.defId === valve.id).id, C: d.symbols.find((s: any) => s.defId === cyl.id).id }
+  }
+  /** position du vérin `ms` après le début de la sortie, ou du retour (après une sortie complète) */
+  const stroke = (part: any, open: number | undefined, extend: boolean, ms: number) => {
+    const { g, V, C } = mk(part, open)
+    g.run(); g.run([], [V], 50)
+    if (extend) return g.run([], [V], ms).cylPos[C]
+    g.run([], [V], 6000) // sortie complète
+    g.run([], [], 20)
+    return g.run([], [], ms).cylPos[C]
+  }
+  const free = stroke(null, undefined, true, 600)
+  const half = stroke(lim, 50, true, 600)
+  check('limiteur à 50 % : la sortie est environ deux fois plus lente', [Math.round(free * 10) / 10, Math.round(half * 10) / 10], [0.5, 0.3])
+  const slowRetract = stroke(lim, 50, false, 600)
+  const fastRetract = stroke(rdu, 50, false, 600)
+  check('RDU : retour libre par le clapet (plus rapide que le limiteur simple)', fastRetract < slowRetract, true)
+  const rduOut = stroke(rdu, 50, true, 600)
+  check('RDU : la sortie est étranglée comme avec un limiteur', Math.round(rduOut * 10) / 10, 0.3)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests pneumatiques passent')
 process.exit(fails ? 1 : 0)

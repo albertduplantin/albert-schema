@@ -1,7 +1,7 @@
 import type { Doc, SymbolDef } from '../types'
 
 /** Mémoire de simulation (voir engine.ts) : `p` et `dir` servent aux vérins. */
-export type FluidMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number }>
+export type FluidMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number; v?: number }>
 
 /** Course complète d'un vérin, en secondes. */
 export const STROKE_S = 1.2
@@ -50,13 +50,15 @@ export interface FluidOut {
   motor: Record<string, -1 | 0 | 1>
   /** sens de déplacement de chaque vérin : +1 sortie, -1 rentrée, 0 arrêt */
   cylDir: Record<string, -1 | 0 | 1>
+  /** vitesse relative de chaque vérin en mouvement (1 = sans étranglement), limitée par les limiteurs de débit de son alimentation et de son échappement */
+  cylSpeed: Record<string, number>
 }
 
 /** Position d'un vérin (0 = rentré, 1 = sorti) à l'instant `now`. */
 export function cylPos(m: FluidMemory[string] | undefined, now: number, rest = 0): number {
   if (!m || m.p === undefined) return rest
   const d = m.dir ?? 0
-  return Math.min(1, Math.max(0, m.p + (d * (now - m.since)) / (STROKE_S * 1000)))
+  return Math.min(1, Math.max(0, m.p + (d * (m.v ?? 1) * (now - m.since)) / (STROKE_S * 1000)))
 }
 
 /** Repères de commande d'un électrodistributeur : « YV1 » ou « YV1/YV2 » (bobine côté A, bobine côté B). */
@@ -82,7 +84,7 @@ export function solveFluid(x: FluidIn): FluidOut {
     return set.has('P') && set.has('R') ? 'X' : set.has('P') ? 'P' : set.has('R') ? 'R' : null
   }
   /** réseau d'air d'après les positions des distributeurs et les liaisons des clapets, hors celles de `exclude` (pour lire la pression de ses entrées sans qu'il la fausse) */
-  const buildNet = (exclude?: string): Net => {
+  const buildNet = (exclude?: string, split = false): Net => {
     const uf = new UF()
     for (const w of doc.wires) uf.union(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId))
     const pots = new Map<string, Set<string>>()
@@ -96,6 +98,7 @@ export function solveFluid(x: FluidIn): FluidOut {
       if (!f) continue
       if (f.k === 'valve') for (const [a, b] of valveA[s.id] ? f.act : valveB[s.id] ? f.actB ?? f.rest : f.rest) uf.union(key(s.id, a), key(s.id, b))
       else if (f.k === 'flink') for (const p of f.ports.slice(1)) uf.union(key(s.id, f.ports[0]), key(s.id, p))
+      else if (f.k === 'fthrottle') { if (!split) uf.union(key(s.id, f.a), key(s.id, f.b)) } // `split` : réseau où les limiteurs séparent, pour calculer les vitesses
       else if (f.k === 'fnet') for (const [a, b] of f.links) uf.union(key(s.id, a), key(s.id, b))
       else if (f.k === 'check' || f.k === 'logic') {
         if (s.id !== exclude) for (const [a, b] of gates.get(s.id) ?? []) uf.union(a, b)
@@ -213,5 +216,46 @@ export function solveFluid(x: FluidIn): FluidOut {
       motor[s.id] = (f.rev ? -d : d) as -1 | 0 | 1
     }
   }
-  return { pot: (symId, portId) => potOf(key(symId, portId)), valveA, valveB, pswitch, motor, cylDir }
+  // vitesse des vérins : meilleur chemin (plus grand débit relatif) de la source à la chambre alimentée et de la chambre à l'échappement
+  const cylSpeed: Record<string, number> = {}
+  const throttles = doc.symbols.filter((s) => defs[s.defId]?.fluid?.k === 'fthrottle')
+  if (throttles.length) {
+    const split = buildNet(undefined, true)
+    const root = (k: string) => split.uf.find(k)
+    const edges: { from: string; to: string; f: number }[] = []
+    for (const s of throttles) {
+      const f = defs[s.defId]!.fluid
+      if (f?.k !== 'fthrottle') continue
+      const open = Math.min(1, Math.max(0.05, (s.rated?.open ?? 50) / 100))
+      const [ra, rb] = [root(key(s.id, f.a)), root(key(s.id, f.b))]
+      edges.push({ from: ra, to: rb, f: open }, { from: rb, to: ra, f: f.oneWay ? 1 : open })
+    }
+    const nodes = new Set(edges.flatMap((e) => [e.from, e.to]))
+    const has = (n: string, v: string) => split.pots.get(n)?.has(v)
+    const fromP = new Map<string, number>() // débit relatif atteignable depuis une source
+    const toR = new Map<string, number>() // débit relatif atteignable vers l'échappement
+    for (const n of nodes) { if (has(n, 'P')) fromP.set(n, 1); if (has(n, 'R')) toR.set(n, 1) }
+    for (let i = 0; i < nodes.size + 1; i++) {
+      let changed = false
+      for (const e of edges) {
+        const a = fromP.get(e.from)
+        if (a !== undefined && Math.min(a, e.f) > (fromP.get(e.to) ?? 0)) { fromP.set(e.to, Math.min(a, e.f)); changed = true }
+        const b = toR.get(e.to)
+        if (b !== undefined && Math.min(b, e.f) > (toR.get(e.from) ?? 0)) { toR.set(e.from, Math.min(b, e.f)); changed = true }
+      }
+      if (!changed) break
+    }
+    for (const s of doc.symbols) {
+      const f = defs[s.defId]?.fluid
+      if (f?.k !== 'cyl' || !cylDir[s.id]) continue
+      const dir = cylDir[s.id]
+      const cap = root(key(s.id, f.cap)), rod = f.rod ? root(key(s.id, f.rod)) : undefined
+      const [supply, exhaust] = dir > 0 ? [cap, rod ?? cap] : [rod ?? cap, cap]
+      // simple effet : la chambre unique est alimentée (sortie) ou vidangée (rappel par ressort)
+      const sup = f.single ? (dir > 0 === (f.single === 'push') ? cap : undefined) : supply
+      const exh = f.single ? (dir > 0 === (f.single === 'push') ? undefined : cap) : exhaust
+      cylSpeed[s.id] = Math.min(sup !== undefined ? fromP.get(sup) ?? 1 : 1, exh !== undefined ? toR.get(exh) ?? 1 : 1)
+    }
+  }
+  return { pot: (symId, portId) => potOf(key(symId, portId)), valveA, valveB, pswitch, motor, cylDir, cylSpeed }
 }

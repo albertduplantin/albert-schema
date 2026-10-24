@@ -31,7 +31,7 @@ export interface SimInputs {
 }
 
 /** Mémoire de simulation : état de chaque relais (par repère) et instant du dernier changement. */
-export type SimMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number }>
+export type SimMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number; v?: number }>
 
 export interface SimResult {
   /** mémoire à réinjecter au calcul suivant */
@@ -689,9 +689,10 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     }
     for (const [id, dir] of Object.entries(fl.cylDir)) {
       const m = memory['§C:' + id]
-      if ((m?.dir ?? 0) !== dir) {
+      const v = dir === 0 ? 1 : Math.round((fl.cylSpeed[id] ?? 1) * 100) / 100
+      if ((m?.dir ?? 0) !== dir || (dir !== 0 && (m?.v ?? 1) !== v)) {
         const f = defs[doc.symbols.find((c) => c.id === id)?.defId ?? '']?.fluid
-        memory['§C:' + id] = { on: dir > 0, since: now, p: cylPos(m, now, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0), dir }
+        memory['§C:' + id] = { on: dir > 0, since: now, p: cylPos(m, now, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0), dir, v }
         changed = true
       }
     }
@@ -764,7 +765,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     const pos = cylPos(m, now, f.single === 'pull' ? 1 : 0)
     cyl[s.id] = pos
     const dir = m?.dir ?? 0
-    if (dir !== 0 && pos > 0 && pos < 1) fluidPending.push(Math.max(1, (dir > 0 ? 1 - pos : pos) * STROKE_S * 1000), 60)
+    if (dir !== 0 && pos > 0 && pos < 1) fluidPending.push(Math.max(1, ((dir > 0 ? 1 - pos : pos) * STROKE_S * 1000) / (m?.v ?? 1)), 60)
     else if (dir !== 0 && ((dir > 0 && pos <= 0) || (dir < 0 && pos >= 1))) fluidPending.push(60)
   }
   const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.fluid && !defs[s.defId]?.decor).map((s) => s.id)

@@ -1,13 +1,14 @@
 import { electrical } from './electrical'
 import { pneumatic, hydraulic } from './fluid'
 import { simSources } from './simulation'
+import { flowParts } from './flow'
 import { SOURCES_MENU, SOURCES_NAME, organizeSources } from './sources'
 import type { Domain, SymbolDef } from '../types'
 
 /** Symboles dessinés à la main : conservés pour les anciens fichiers, masqués de la palette. */
 const legacy: SymbolDef[] = [...electrical, ...pneumatic, ...hydraulic].map((s) => ({ ...s, legacy: true }))
 
-export const SYMBOLS: SymbolDef[] = [...legacy, ...simSources]
+export const SYMBOLS: SymbolDef[] = [...legacy, ...simSources, ...flowParts]
 export const SYMBOL_MAP: Record<string, SymbolDef> = Object.fromEntries(SYMBOLS.map((s) => [s.id, s]))
 export const CATEGORIES: Record<Domain, { id: string; name: { fr: string; en: string } }[]> = {
   electrical: [],

@@ -827,6 +827,7 @@ export default function Canvas(p: Props) {
                     <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6} fill={col} fillOpacity={bad ? 0.3 : 0.4} stroke={col} strokeWidth={bad ? 2 : 1.2} strokeDasharray={bad ? '4 2' : undefined} />
                   )
                 })()}
+                {def.fluid?.k === 'fthrottle' && <text x={b.x1 + (b.x2 - b.x1) / 2} y={b.y1 - 2} textAnchor="middle" fontSize={8} stroke="none" fill="#555" pointerEvents="none">{s.rated?.open ?? 50} %</text>}
                 {p.sim?.tripped.has(s.id) && <text x={b.x2 + 3} y={b.y1 + 9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{kindOf(def) === 'fuse' ? p.lang === 'fr' ? 'FONDU' : 'BLOWN' : p.lang === 'fr' ? 'DÉCLENCHÉ' : 'TRIPPED'}</text>}
                 {p.sim && model === undefined && def.fluid?.k === 'valve' && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={p.sim.valveA[s.id] ? '#35c759' : '#fff'} stroke={p.sim.valveA[s.id] ? '#1f8f3a' : '#888'} strokeWidth={0.8} />

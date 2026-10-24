@@ -3,7 +3,7 @@ import { RATINGS } from './transformer'
 import { motorCurrent as motorCurrentImpl } from './sim/estimate'
 
 /** Famille d'appareil, qui détermine les caractéristiques que l'on peut renseigner. */
-export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer' | 'rcd' | 'disconnector'
+export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer' | 'rcd' | 'disconnector' | 'throttle'
 
 export function kindOf(def: SymbolDef | undefined): Kind | null {
   if (!def) return null
@@ -18,6 +18,7 @@ export function kindOf(def: SymbolDef | undefined): Kind | null {
     if (/20_disconnecting/.test(id)) return 'disconnector'
     return null
   }
+  if (def.fluid?.k === 'fthrottle') return 'throttle'
   if (m?.k === 'load') return m.role === 'motor' ? 'motor' : 'consumer'
   if (m?.k === 'coil') return 'consumer'
   return null
@@ -37,6 +38,7 @@ export interface FieldDef {
 
 const IN_LIST = RATINGS
 const F = {
+  open: { key: 'open', label: { fr: 'Ouverture (%)', en: 'Opening (%)' }, help: { fr: 'Réglage du limiteur de débit : 100 % = pas d’étranglement, 10 % = très étranglé. Plus l’ouverture est faible, plus le vérin traversé par ce débit est lent (la vitesse est proportionnelle à l’ouverture).', en: 'Flow limiter setting: 100 % = no restriction, 10 % = heavily throttled. The smaller the opening, the slower the cylinder fed through it (speed is proportional to the opening).' }, list: [10, 25, 50, 75, 100] } as FieldDef,
   calibre: { key: 'in', label: { fr: 'Calibre (A)', en: 'Rating (A)' }, help: { fr: 'Courant assigné In de la protection : le courant maximal qu’elle supporte en permanence. Il doit être au moins égal au courant d’emploi et ne pas dépasser le courant admissible du câble (Ib ≤ In ≤ Iz).', en: "Rated current In of the protection: the maximum current it carries continuously. It must be at least the operating current and not exceed the cable's current rating (Ib ≤ In ≤ Iz)." }, list: IN_LIST } as FieldDef,
   ac3: { key: 'in', label: { fr: 'Courant assigné AC-3 (A)', en: 'Rated current AC-3 (A)' }, help: { fr: 'Courant maximal que le contacteur peut établir et couper pour un moteur à cage en catégorie AC-3. Il doit être au moins égal au courant nominal du moteur, sinon les contacts s’usent et se soudent.', en: 'Maximum current the contactor can make and break for a squirrel-cage motor in utilisation category AC-3. It must be at least the motor rated current, otherwise the contacts wear and weld.' }, list: [6, 9, 12, 18, 25, 32, 40, 50, 65, 80, 95] } as FieldDef,
   curveB: { key: 'curve', label: { fr: 'Courbe de déclenchement', en: 'Trip curve' }, help: { fr: 'Seuil du déclencheur magnétique (CEI 60898-1) : B = 3 à 5 × In (câbles longs, charges résistives) ; C = 5 à 10 × In (usage général) ; D = 10 à 20 × In (moteurs, transformateurs, fort appel de courant) ; K = 8 à 14 × In ; Z = 2 à 3 × In (électronique).', en: 'Magnetic trip threshold (IEC 60898-1): B = 3–5 × In (long cables, resistive loads); C = 5–10 × In (general use); D = 10–20 × In (motors, transformers, high inrush); K = 8–14 × In; Z = 2–3 × In (electronics).' }, list: ['B', 'C', 'D', 'K', 'Z'], text: true } as FieldDef,
@@ -64,6 +66,7 @@ export const FIELDS: Record<Kind, FieldDef[]> = {
   consumer: [F.watts],
   rcd: [F.calibre, F.idn],
   disconnector: [F.calibre],
+  throttle: [F.open],
 }
 
 /** Champs d'un appareil : ceux de sa famille, plus la sensibilité différentielle pour un disjoncteur différentiel. */

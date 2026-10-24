@@ -60,6 +60,8 @@ export type FluidModel =
   | { k: 'fgauge'; ports: string[] }
   /** pressostat : un contact électrique de même repère se ferme quand l'orifice est sous pression */
   | { k: 'fpress'; port: string }
+  /** limiteur de débit : le passage de `a` vers `b` est étranglé (dans les deux sens, sauf `oneWay` : retour libre par un clapet) ; l'ouverture se règle dans les propriétés */
+  | { k: 'fthrottle'; a: string; b: string; oneWay?: boolean }
   /** pompe : l'orifice de refoulement `out` n'est sous pression que si l'aspiration `in` est reliée à une bâche */
   | { k: 'fpump'; out: string; in: string }
   /** liaisons fixes entre orifices (pièces élémentaires, raccords, filtres) */
@@ -119,6 +121,8 @@ export interface Ratings {
   in?: number
   /** courbe de déclenchement (B, C, D…), type de fusible (gG, aM) ou classe de déclenchement */
   curve?: string
+  /** ouverture d'un limiteur de débit (%), 100 = pas d'étranglement */
+  open?: number
   /** pouvoir de coupure (kA) */
   icu?: number
   /** sensibilité différentielle IΔn (mA) */

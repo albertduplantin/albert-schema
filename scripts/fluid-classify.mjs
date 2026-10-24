@@ -23,6 +23,11 @@ export function classifyFluid({ id, nameFr, ports }) {
   if (has(/5010161060_silencer|5010161061_silencer|502070_relief\/\d+_silencer|50101820_sil_vacuum/)) return { k: 'fsink', ports: ids(ports) }
 
   // ── traversées : traitement d'air et restricteurs de débit à deux orifices
+  // limiteurs de débit : réglables (deux sens) ou unidirectionnels avec clapet de retour libre (étranglement de gauche à droite)
+  if (has(/50101610_flow\/(5010161050|5010161051|5010161052)_/) && ports.length === 2) {
+    const [l, r] = [...ports].sort(byX)
+    return { k: 'fthrottle', a: l.id, b: r.id, ...(has(/5010161050_/) ? { oneWay: true } : {}) }
+  }
   if (has(/501012_treatment\//) || has(/501014_filter_regulator_lubricator\//) || has(/50101610_flow\/50101610(5\d)_/)) {
     const through = ports.filter((p) => p.dir === 'left' || p.dir === 'right')
     if (has(/501012_treatment\//) && /sécheur|filtre|refroidissement|chauffage|lubrificateur|Contrôle|séparation|eau/i.test(nameFr) && through.length === 2) return { k: 'flink', ports: ids(through) }
