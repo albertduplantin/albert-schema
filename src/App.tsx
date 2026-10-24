@@ -1,3 +1,4 @@
+import { matchesQuery } from './searchTerms'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addVersion, loadVersions, removeVersion, type Version } from './versions'
 import Combo from './Combo'
@@ -749,6 +750,8 @@ function Editor() {
       else if (ctrl && k === 'd') { e.preventDefault(); duplicate() }
       else if (ctrl && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
       else if (ctrl && k === 'y') { e.preventDefault(); redo() }
+      else if (ctrl && e.shiftKey && k === 'c') { e.preventDefault(); copyStyle() }
+      else if (ctrl && e.shiftKey && k === 'v') { e.preventDefault(); pasteStyle() }
       else if (ctrl && k === 'c') copySel()
       else if (ctrl && k === 'v') paste()
       else if (ctrl && k === 's') { e.preventDefault(); saveJson(doc); say(tr(lang, 'toastSaved')) }
@@ -825,7 +828,7 @@ function Editor() {
       (s) =>
         !s.legacy && s.domain === domain &&
         (q
-          ? s.name[lang].toLowerCase().includes(q) || s.name.en.toLowerCase().includes(q) || s.prefix.toLowerCase() === q
+          ? matchesQuery(s, q)
           : cat === TOP ? s.top || usageCount(s.id, now) >= 1 || globalShare(s.id) >= 30 : (s.menu ?? s.cat) === cat),
     )
     if (q || cat === TOP) {
@@ -991,6 +994,72 @@ function Editor() {
       </span>
     )
   }
+  /** pinceau de style : copie le style (trait, couleur, police) d'un objet et l'applique aux objets sélectionnés du même genre */
+  const painter = useRef<{ kind: 'shape' | 'wire' | 'note'; style: Record<string, unknown> } | null>(null)
+  const copyStyle = () => {
+    const sh = (doc.shapes ?? []).find((x) => sel.includes(x.id)), w = doc.wires.find((x) => sel.includes(x.id)), n = (doc.notes ?? []).find((x) => sel.includes(x.id))
+    if (sh) painter.current = { kind: 'shape', style: { stroke: sh.stroke, width: sh.width, color: sh.color, fill: sh.fill, arrow: sh.arrow } }
+    else if (w) painter.current = { kind: 'wire', style: { color: w.color, width: w.width, dash: w.dash } }
+    else if (n) painter.current = { kind: 'note', style: { size: n.size, font: n.font, bold: n.bold, italic: n.italic } }
+    else return
+    say(lang === 'fr' ? 'Style copié : Ctrl+Maj+V pour l’appliquer à la sélection.' : 'Style copied: Ctrl+Shift+V applies it to the selection.')
+  }
+  const pasteStyle = () => {
+    const pt = painter.current
+    if (!pt || !sel.length) return
+    commit((d) => ({
+      ...d,
+      shapes: pt.kind === 'shape' ? (d.shapes ?? []).map((x) => (sel.includes(x.id) ? { ...x, ...pt.style } : x)) : d.shapes,
+      wires: pt.kind === 'wire' ? d.wires.map((x) => (sel.includes(x.id) ? { ...x, ...pt.style } : x)) : d.wires,
+      notes: pt.kind === 'note' ? (d.notes ?? []).map((x) => (sel.includes(x.id) ? { ...x, ...pt.style } : x)) : d.notes,
+    }))
+  }
+  /** modification groupée : plusieurs symboles sélectionnés, les champs communs s'appliquent à tous */
+  const msyms = sel.length > 1 ? doc.symbols.filter((x) => sel.includes(x.id)) : []
+  const patchMany = (fn: (s: PlacedSymbol) => Partial<PlacedSymbol>) =>
+    update((d) => ({ ...d, symbols: d.symbols.map((s) => (sel.includes(s.id) ? { ...s, ...fn(s) } : s)) }))
+  const common = <T,>(get: (s: PlacedSymbol) => T): T | undefined => (msyms.every((s) => get(s) === get(msyms[0])) ? get(msyms[0]) : undefined)
+  const multiForm = (() => {
+    if (msyms.length < 2) return null
+    const fr = lang === 'fr'
+    const kinds = new Set(msyms.map((s) => kindOf(SYMBOL_MAP[s.defId])))
+    const kind = kinds.size === 1 ? [...kinds][0] : null
+    const def0 = SYMBOL_MAP[msyms[0].defId]
+    const hasVolts = msyms.every((s) => { const m = SYMBOL_MAP[s.defId].sim; return m?.k === 'coil' || m?.k === 'load' || m?.k === 'transformer' })
+    const setR = (key: string, raw: string, text?: boolean) =>
+      patchMany((s) => {
+        const next = { ...(s.rated ?? {}) } as Record<string, unknown>
+        if (text ? raw.trim() === '' : !(Number(raw) > 0)) delete next[key]
+        else next[key] = text ? raw.trim() : Number(raw)
+        return { rated: Object.keys(next).length ? (next as Ratings) : undefined }
+      })
+    return (
+      <div className="form" onFocus={checkpoint}>
+        <div className="kind">{msyms.length} {t('sym')} — {fr ? 'modification groupée' : 'bulk edit'}</div>
+        <label>{t('description')}<input value={common((s) => s.desc) ?? ''} placeholder={common((s) => s.desc) === undefined ? (fr ? '— valeurs différentes —' : '— different values —') : ''} onChange={(e) => patchMany(() => ({ desc: e.target.value }))} /></label>
+        {hasVolts && (
+          <label>{t('voltsRated')}
+            <Combo options={[12, 24, 48, 110, 230, 400]} type="number" min={0} placeholder={common((s) => s.volts) === undefined ? (fr ? 'différentes' : 'different') : '—'} value={common((s) => s.volts) ?? ''}
+              onChange={(e) => patchMany(() => ({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined }))} />
+          </label>
+        )}
+        {kind && (
+          <fieldset className="ratings">
+            <legend>{t('ratings')}</legend>
+            {fieldsFor(def0).map((f) => {
+              const v = common((s) => String(s.rated?.[f.key] ?? ''))
+              return (
+                <label key={f.key}>{fieldLabel(f, lang)}
+                  <Combo options={f.list ?? []} type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'} placeholder={v === undefined ? (fr ? 'différentes' : 'different') : undefined}
+                    value={v ?? ''} onChange={(e) => setR(f.key, e.target.value, f.text)} />
+                </label>
+              )
+            })}
+          </fieldset>
+        )}
+      </div>
+    )
+  })()
   const wireAdvice = useMemo(() => (selWire ? computeWireAdvice(selWire, all, SYMBOL_MAP, lang) : undefined), [selWire, all, lang])
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
@@ -1229,6 +1298,8 @@ function Editor() {
             <button onClick={autoColors} title={t('autoColorsHelp')}>{t('autoColors')}</button>
             <p className="menu-title">{t('annotate')}</p>
             <button onClick={addNote} title={t('note')}>T {t('note')}</button>
+            <button onClick={copyStyle} disabled={!sel.length}>🖌 {lang === 'fr' ? 'Copier le style' : 'Copy style'}<kbd>Ctrl+Maj+C</kbd></button>
+            <button onClick={pasteStyle} disabled={!sel.length}>🖌 {lang === 'fr' ? 'Appliquer le style' : 'Apply style'}<kbd>Ctrl+Maj+V</kbd></button>
             <button onClick={saveBlock} disabled={!sel.length}>{t('blockSave')}</button>
             {blocks.length === 0 && <p className="muted small menu-note">{t('blockNone')}</p>}
             <button className="keep" onClick={() => blocksRef.current?.click()}>{t('blocksImport')}</button>
@@ -1560,7 +1631,7 @@ function Editor() {
             )}
           </div>
         ) : (
-          <p className="muted">{sel.length > 1 ? `${sel.length} ${t('sym')}` : t('nothingSelected')}</p>
+          msyms.length > 1 ? multiForm : <p className="muted">{sel.length > 1 ? `${sel.length} ${t('sym')}` : t('nothingSelected')}</p>
         )}
 
         <h3>{t('sheet')}</h3>

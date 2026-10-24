@@ -301,5 +301,15 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   for (const x of renamed.symbols) if (x.label === 'KM1') x.label = 'K9'
   check('conseils : un repère absent est signalé', run.missing(c(renamed)).some((x: string) => /Repère absent : KM1/.test(x)), JSON.stringify(run.missing(c(renamed))))
 }
+// ── recherche par fonction
+{
+  const { matchesQuery } = await import(ROOT + '/src/searchTerms.ts')
+  const { SYMBOLS } = await import(ROOT + '/src/symbols/index.ts')
+  const found = (q: string) => SYMBOLS.filter((s: any) => !s.legacy && s.domain === 'electrical' && matchesQuery(s, q))
+  check('recherche « protéger » : trouve des fusibles et disjoncteurs', found('protéger').some((s: any) => /fusible|fuse/i.test(s.name.fr + s.name.en)) && found('protéger').some((s: any) => /disjoncteur/i.test(s.name.fr)), String(found('protéger').length))
+  check('recherche « temporiser » : trouve des éléments temporisés', found('temporiser').length > 0, '0')
+  check('recherche « lampe » : toujours par nom', found('lampe').length > 0 && found('lampe').every((s: any) => /lamp/i.test(s.name.fr + s.name.en + (s.group?.fr ?? ''))), String(found('lampe').length))
+  check('recherche à plusieurs mots : « bouton urgence »', found('bouton urgence').length > 0, '0')
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)
