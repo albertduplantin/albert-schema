@@ -2,6 +2,7 @@ import { electrical } from './electrical'
 import { pneumatic, hydraulic } from './fluid'
 import { simSources } from './simulation'
 import { flowParts } from './flow'
+import { staticSvg } from './fluidDraw'
 import { SOURCES_MENU, SOURCES_NAME, organizeSources } from './sources'
 import type { Domain, SymbolDef } from '../types'
 
@@ -37,6 +38,8 @@ export function loadLibrary(): Promise<void> {
         SYMBOLS.push(s)
         SYMBOL_MAP[s.id] = s
       }
+      // distributeurs et vérins : dessin dynamique, dont la vignette de palette (position de repos)
+      for (const s of lib.symbols) { const svg = staticSvg(s); if (svg) s.svg = svg }
       organizeSources(SYMBOLS)
       // un seul menu pour toutes les sources : les catégories « sources réseau » et « générateurs et sources » y sont fondues
       const merged = new Set(['10_electric_10_allpole/110_network_supplies', '10_electric_10_allpole/392_generators_sources'])

@@ -1,3 +1,5 @@
+import { FluidShape } from './FluidShape'
+import { isDynamic } from './symbols/fluidDraw'
 import { kindOf } from './ratings'
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { termsWithTopology } from './transformer'
@@ -49,7 +51,7 @@ function Rotor({ cx, cy, r, dir = 1 }: { cx: number; cy: number; r: number; dir?
 const POT_COLOR: Record<string, string> = {
   L: '#d62728', L1: '#d62728', L2: '#e67e00', L3: '#2e9b2e', N: '#1f5fd1', LI: '#d62728', NI: '#1f5fd1', '+': '#d62728', '-': '#1f5fd1',
   // fluide : pression (P), échappement (R), fuite (X)
-  P: '#1e88e5', R: '#90a4ae', X: '#e53935',
+  P: '#e53935', R: '#1e88e5', X: '#fb8c00',
 }
 const SECONDARY_COLORS = ['#8e24aa', '#00897b', '#6d4c41', '#ef6c00', '#3949ab', '#7cb342']
 /** Couleur d'un fil selon son potentiel : réseau, source continue, ou n-ième borne du secondaire d'un transformateur. */
@@ -829,10 +831,10 @@ export default function Canvas(p: Props) {
                 })()}
                 {def.fluid?.k === 'fthrottle' && <text x={b.x1 + (b.x2 - b.x1) / 2} y={b.y1 - 2} textAnchor="middle" fontSize={8} stroke="none" fill="#555" pointerEvents="none">{s.rated?.open ?? 50} %</text>}
                 {p.sim?.tripped.has(s.id) && <text x={b.x2 + 3} y={b.y1 + 9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{kindOf(def) === 'fuse' ? p.lang === 'fr' ? 'FONDU' : 'BLOWN' : p.lang === 'fr' ? 'DÉCLENCHÉ' : 'TRIPPED'}</text>}
-                {p.sim && model === undefined && def.fluid?.k === 'valve' && (
+                {p.sim && model === undefined && def.fluid?.k === 'valve' && !isDynamic(def) && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={p.sim.valveA[s.id] ? '#35c759' : '#fff'} stroke={p.sim.valveA[s.id] ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
-                {p.sim && def.fluid?.k === 'valve' && def.fluid.three && p.sim.valveB[s.id] && (
+                {p.sim && def.fluid?.k === 'valve' && def.fluid.three && p.sim.valveB[s.id] && !isDynamic(def) && (
                   <circle cx={b.x1 - 4} cy={b.y1 + 4} r={3} fill="#ff9800" stroke="#e65100" strokeWidth={0.8} />
                 )}
                 {p.sim && (def.fluid?.k === 'fgauge' || def.fluid?.k === 'fpress') && (() => {
@@ -844,7 +846,7 @@ export default function Canvas(p: Props) {
                 {p.sim && def.fluid?.k === 'fmotor' && (p.sim.fluidMotor[s.id] ?? 0) !== 0 && (
                   <text x={b.x2 + 3} y={b.y1 + 9} fontSize={11} stroke="none" fill="#1565c0" fontWeight={700} pointerEvents="none">{p.sim.fluidMotor[s.id] === 1 ? '↻' : '↺'}</text>
                 )}
-                {p.sim && def.fluid?.k === 'cyl' && p.sim.cylPos[s.id] !== undefined && (() => {
+                {p.sim && def.fluid?.k === 'cyl' && !isDynamic(def) && p.sim.cylPos[s.id] !== undefined && (() => {
                   const f = def.fluid
                   const c = portPos(s, f.cap)
                   const r = f.rod ? portPos(s, f.rod) : null
@@ -873,7 +875,7 @@ export default function Canvas(p: Props) {
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
                 <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={bladeVars(s.id, model, p.sim)}>
-                  <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />
+                  {isDynamic(def) ? <FluidShape s={s} def={def} sim={p.sim ?? null} /> : <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />}
                   {model?.k === 'source' && isSourceBlock(def.id) && (
                     <g stroke="none" fill="currentColor" pointerEvents="none">
                       <text x={def.w / 2} y={11} fontSize={8} textAnchor="middle" fontWeight={700}>{sourceCaption(s, def)}</text>

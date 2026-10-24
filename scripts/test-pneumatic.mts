@@ -183,5 +183,20 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   const rduOut = stroke(rdu, 50, true, 600)
   check('RDU : la sortie est étranglée comme avec un limiteur', Math.round(rduOut * 10) / 10, 0.3)
 }
+
+// ── dessin dynamique : chambres colorées, piston, cases du distributeur
+{
+  const { cylinderSvg, valveSvg, isDynamic, valveIndex, staticSvg } = await import(ROOT + '/src/symbols/fluidDraw.ts')
+  const dc = CYL
+  const rects = (svg: string) => [...svg.matchAll(/<rect x="([\d.-]+)"[^>]*fill="rgba\((\d+),(\d+),(\d+)/g)].map((m) => ({ x: Number(m[1]), rgb: m.slice(2, 5).join(',') }))
+  const a = cylinderSvg(dc, { p: 0, potCap: 'P', potRod: 'R' }), b = cylinderSvg(dc, { p: 1, potCap: 'P', potRod: 'R' })
+  check('dessin du vérin : chambre sous pression rouge, chambre à l’échappement bleue', [a.includes('rgba(229,57,53'), a.includes('rgba(30,136,229')], [true, true])
+  check('dessin du vérin : la tige sort avec le piston', a !== b && b.length > 0 && rects(a).length > 0, true)
+  const v = byEnd('502010702010_5_3_way')
+  check('distributeur à trois positions : dessin dynamique, trois cases, case active selon la commande', [isDynamic(v), valveIndex(v.fluid, false, false), valveIndex(v.fluid, true, false), valveIndex(v.fluid, false, true)], [true, 1, 0, 2])
+  const rest = valveSvg(v, { pos: 1, pot: () => null }), act = valveSvg(v, { pos: 0, pot: (id: string) => (id === v.fluid.act[0][0] ? 'P' : null) })
+  check('distributeur : la case active change le dessin et la pression colore les liaisons', [rest !== act, act.includes('#e53935'), (rest.match(/<rect/g) ?? []).length], [true, true, 5]) // 3 cases + 2 électroaimants
+  check('palette : vignette statique générée pour distributeurs et vérins', [!!staticSvg(v), !!staticSvg(dc)], [true, true])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests pneumatiques passent')
 process.exit(fails ? 1 : 0)

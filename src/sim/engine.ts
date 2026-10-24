@@ -765,7 +765,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     const pos = cylPos(m, now, f.single === 'pull' ? 1 : 0)
     cyl[s.id] = pos
     const dir = m?.dir ?? 0
-    if (dir !== 0 && pos > 0 && pos < 1) fluidPending.push(Math.max(1, ((dir > 0 ? 1 - pos : pos) * STROKE_S * 1000) / (m?.v ?? 1)), 60)
+    if (dir !== 0 && pos > 0 && pos < 1) fluidPending.push(Math.max(1, ((dir > 0 ? 1 - pos : pos) * STROKE_S * 1000) / (m?.v ?? 1)), 33)
     else if (dir !== 0 && ((dir > 0 && pos <= 0) || (dir < 0 && pos >= 1))) fluidPending.push(60)
   }
   const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.fluid && !defs[s.defId]?.decor).map((s) => s.id)
