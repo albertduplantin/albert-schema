@@ -140,7 +140,7 @@ export function classify({ id, nameFr, nameEn, ports }) {
     // sélecteurs et commutateurs rotatifs : deux bornes = interrupteur à deux positions ; trois bornes = inverseur
     // (1-0-2 et trois positions : centre ouvert, `pos3`) ; les sélecteurs à plusieurs contacts ne sont pas modélisés
     if (/position|rotatif|rotary|tournant|1-0-2|a cle|à clé|\bcle\b/.test(name + ' ' + file)) {
-      if (ports.length === 2) return contact('toggle', true)
+      if (ports.length === 2) return { k: 'switch', poles: pairPoles(ports), ctl: 'toggle', nc: false } // le nom « 2 positions » ne désigne pas ici un inverseur
       const co = ports.length === 3 ? changeoverPorts(ports) : null
       if (!co) return null
       const pos3 = /1-0-2|3 positions|3_pos|3pos|trois positions/.test(name + ' ' + file)
