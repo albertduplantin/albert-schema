@@ -209,8 +209,8 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   for (const d of [CYL, v52, v52, CYL, v52, SRC, SINK]) { const l = nextFluidLabel(doc, d, SYMBOL_MAP); seq.push(String(l)); doc = put(doc, d, l ?? '') }
   check('repérage automatique : 1A1, 1V1, 1V2, puis un 2e vérin ouvre le circuit 2 (2A1, 2V1) ; source et silencieux sans repère', seq, ['1A1', '1V1', '1V2', '2A1', '2V1', '', ''])
   check('repérage : alimentation en circuit 0 (conditionnement 0Z1, pompe 0P1)', [nextFluidLabel(base, SYMBOL_MAP['qet:30_hydraulic/61_pumps/pompe_hydr_2'], SYMBOL_MAP), nextFluidLabel(base, byEnd('81_filters/filtre'), SYMBOL_MAP)], ['0P1', '0Z1'])
-  check('bobines d’un distributeur 1V1 : 1V1+ ou 1Y1 (A), 1V1− ou 1Y2 (B) ; 1V2 : 1Y3 et 1Y4', [solenoidNames('1V1'), solenoidNames('1V2')[0][1], solenoidNames('YV1/YV2')], [[['1V1+', '1Y1'], ['1V1-', '1Y2']], '1Y3', [['YV1'], ['YV2']]])
-  check('lecture d’un repère ISO', parseIso('2s3'), { n: 2, code: 'S', k: 3 })
+  check('bobines d’un distributeur 1V1 : 1V1+ ou 1Y1 (A), 1V1− ou 1Y2 (B) ; 1V2 : 1Y3 et 1Y4', [solenoidNames('1V1'), solenoidNames('1V2')[0][1], solenoidNames('YV1/YV2')], [[['1V1+', '1Y1', '1YV14', '1YV1'], ['1V1-', '1Y2', '1YV12']], '1Y3', [['YV1'], ['YV2']]])
+  check('lecture d’un repère ISO', [parseIso('2s3'), parseIso('1A')], [{ n: 2, code: 'S', k: 3 }, { n: 1, code: 'A', k: 1 }])
   // renumérotation d'après le câblage : le distributeur relié au 2e vérin prend le circuit 2
   const f = v52.fluid
   const P = f.rest[0][0], A = f.rest[0][1], B = f.rest[1][0]

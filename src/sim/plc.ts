@@ -127,7 +127,7 @@ export function checkExpr(src: string): string | null {
 function resolver(names: Record<string, string>): (n: string) => string {
   const back = new Map<string, string>()
   for (const [addr, nm] of Object.entries(names)) if (nm.trim()) back.set(nm.trim().toLowerCase(), addr.toUpperCase())
-  return (n) => back.get(n.toLowerCase()) ?? n.toUpperCase()
+  return (n) => back.get(n.toLowerCase()) ?? n.toUpperCase().replace(/^%/, '') // « %I0.1 » (Schneider) = « I0.1 »
 }
 
 const inIndex = (a: string) => { const m = /^I0?\.(\d)$/.exec(a); return m ? Number(m[1]) : -1 }

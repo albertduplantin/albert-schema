@@ -27,10 +27,11 @@ export function isoCode(def: SymbolDef | undefined): IsoCode | null {
   }
 }
 
-const re = /^(\d+)([A-Z])(\d+)$/
+const re = /^(\d+)([A-Z])(\d*)$/
+/** Lit un repère : « 1A1 », ou « 1A » (écriture des sujets d'examen français quand il n'y a qu'un vérin par circuit, numéro 1 sous-entendu). */
 export const parseIso = (label: string): { n: number; code: string; k: number } | null => {
   const m = re.exec(label.trim().toUpperCase())
-  return m ? { n: Number(m[1]), code: m[2], k: Number(m[3]) } : null
+  return m ? { n: Number(m[1]), code: m[2], k: m[3] ? Number(m[3]) : 1 } : null
 }
 
 /** Numéro du circuit courant : celui du dernier actionneur posé, 1 s'il n'y en a pas encore. */
@@ -74,7 +75,8 @@ export function solenoidNames(label: string): [string[], string[]] {
   const m = /^(\d*)V(\d+)$/.exec(one)
   if (m) {
     const k = Number(m[2])
-    return [[one + '+', `${m[1]}Y${2 * k - 1}`], [one + '-', `${m[1]}Y${2 * k}`]]
+    // « 1V1 » : bobines 1V1+ / 1V1−, 1Y1 / 1Y2, ou 1YV14 / 1YV12 (commandes 14 et 12 du distributeur, écriture des sujets d'examen)
+    return [[one + '+', `${m[1]}Y${2 * k - 1}`, `${m[1]}YV${k}4`, `${m[1]}YV${k}`], [one + '-', `${m[1]}Y${2 * k}`, `${m[1]}YV${k}2`]]
   }
   return [[one, one + '+'], [one + '-']]
 }
