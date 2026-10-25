@@ -121,7 +121,7 @@ export const pneumaticAuto = (base: Doc): Doc => {
 /**
  * Cycle A+ B+ A- B- commandé par un automate programmable (Grafcet), écrit comme dans les sujets d'examen : deux vérins repérés 1A et 2A,
  * deux distributeurs 5/2 bistables 1V1 et 2V1 dont les bobines sont 1YV14 / 1YV12 (A+ / A-) et 2YV14 / 2YV12 (B+ / B-),
- * détecteurs de position a0 a1 (vérin A) et b0 b1 (vérin B), bouton de départ de cycle dcy.
+ * détecteurs de position 1S1 1S2 (vérin A) et 2S1 2S2 (vérin B), bouton de départ de cycle S1. Les mnémoniques du programme sont les repères des organes.
  */
 export const pneumaticPlc = (base: Doc): Doc => {
   const V52 = FV('5020106020_elec/502010602030_5_2_way_030')
@@ -141,8 +141,8 @@ export const pneumaticPlc = (base: Doc): Doc => {
   const [s2, l2] = chain(2, 280, '2A')
   const d = build(base,
     [...s1, ...s2, ['air', SRC, 330, 420, ''],
-      ['es', 'sim-src1', 700, 40], ['b', PB, 640, 120, 'dcy'],
-      ['d11', LS, 720, 120, 'a0'], ['d12', LS, 800, 120, 'a1'], ['d21', LS, 880, 120, 'b0'], ['d22', LS, 960, 120, 'b1'],
+      ['es', 'sim-src1', 700, 40], ['b', PB, 640, 120, 'S1'],
+      ['d11', LS, 720, 120, '1S1'], ['d12', LS, 800, 120, '1S2'], ['d21', LS, 880, 120, '2S1'], ['d22', LS, 960, 120, '2S2'],
       ['p', 'plc-8e8s-relay', 700, 330, 'API1'],
       ['k1', COIL, 700, 480, '1YV14'], ['k2', COIL, 800, 480, '1YV12'], ['k3', COIL, 900, 480, '2YV14'], ['k4', COIL, 1000, 480, '2YV12']],
     [...l1, ...l2,
@@ -156,11 +156,11 @@ export const pneumaticPlc = (base: Doc): Doc => {
   for (const s of d.symbols) {
     if (s.defId === 'sim-src1') { s.dc = true; s.volts = 24 }
     if (s.defId === COIL) s.volts = 24
-    const det: Record<string, { cyl: string; at: number }> = { a0: { cyl: '1A', at: 0 }, a1: { cyl: '1A', at: 1 }, b0: { cyl: '2A', at: 0 }, b1: { cyl: '2A', at: 1 } }
+    const det: Record<string, { cyl: string; at: number }> = { '1S1': { cyl: '1A', at: 0 }, '1S2': { cyl: '1A', at: 1 }, '2S1': { cyl: '2A', at: 0 }, '2S2': { cyl: '2A', at: 1 } }
     if (det[s.label]) s.det = det[s.label]
     if (s.defId === 'plc-8e8s-relay') {
       s.plc = {
-        names: { 'I0.0': 'dcy', 'I0.1': 'a0', 'I0.2': 'a1', 'I0.3': 'b0', 'I0.4': 'b1', 'Q0.0': '1YV14', 'Q0.1': '1YV12', 'Q0.2': '2YV14', 'Q0.3': '2YV12' },
+        names: { 'I0.0': 'S1', 'I0.1': '1S1', 'I0.2': '1S2', 'I0.3': '2S1', 'I0.4': '2S2', 'Q0.0': '1YV14', 'Q0.1': '1YV12', 'Q0.2': '2YV14', 'Q0.3': '2YV12' },
         steps: [
           { id: 0, init: true, actions: [], comment: 'attente' },
           { id: 1, actions: [{ kind: 'N', var: '1YV14' }], comment: 'A sort' },
@@ -169,7 +169,7 @@ export const pneumaticPlc = (base: Doc): Doc => {
           { id: 4, actions: [{ kind: 'N', var: '2YV12' }], comment: 'B rentre' },
         ],
         transitions: [
-          { from: [0], to: [1], cond: 'dcy ET a0 ET b0' }, { from: [1], to: [2], cond: 'a1' }, { from: [2], to: [3], cond: 'b1' }, { from: [3], to: [4], cond: 'a0' }, { from: [4], to: [0], cond: 'b0' },
+          { from: [0], to: [1], cond: 'S1 ET 1S1 ET 2S1' }, { from: [1], to: [2], cond: '1S2' }, { from: [2], to: [3], cond: '2S2' }, { from: [3], to: [4], cond: '1S1' }, { from: [4], to: [0], cond: '2S1' },
         ],
         ladder: [],
       }

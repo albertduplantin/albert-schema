@@ -53,6 +53,16 @@ try {
   await sleep(500)
   check('exemple « relais 24 V » chargé', (await doc()).symbols?.length > 10)
 
+  // ── bibliothèque redimensionnable à la souris
+  const w0 = await page.evaluate(() => document.querySelector('aside.palette').getBoundingClientRect().width)
+  const rz = await page.evaluate(() => { const r = document.querySelector('.palette .resizer').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 200 } })
+  await page.mouse.move(rz.x, rz.y); await page.mouse.down(); await page.mouse.move(rz.x + 160, rz.y, { steps: 6 }); await page.mouse.up()
+  await sleep(200)
+  const w1 = await page.evaluate(() => document.querySelector('aside.palette').getBoundingClientRect().width)
+  check('bibliothèque : élargie à la souris', w1 > w0 + 100, `${w0} → ${w1}`)
+  await page.evaluate(() => document.querySelector('.palette .resizer').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })))
+  await sleep(150)
+  check('bibliothèque : double-clic sur la poignée = taille d’origine', Math.abs((await page.evaluate(() => document.querySelector('aside.palette').getBoundingClientRect().width)) - w0) < 3)
   // ── formes : cadre en pointillés, redimensionnement, annulation
   await menu(1); await click(/Cadre en pointillés/, '.toolbar .menu-list button')
   await page.mouse.move(790, 345); await page.mouse.down(); await page.mouse.move(890, 480, { steps: 5 }); await page.mouse.up(); await sleep(300)
@@ -115,7 +125,7 @@ try {
   await sleep(800)
   await p3.evaluate(() => [...document.querySelectorAll('button')].find((x) => /Simuler/.test(x.textContent))?.click())
   await sleep(500)
-  const s1 = await p3.evaluate(() => { const d = JSON.parse(localStorage.getItem('albertschema.doc')); const g = document.querySelector(`[data-sym="${d.symbols.find((x) => x.label === 'dcy').id}"]`); const q = [...g.querySelectorAll('path,rect,line')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 3 && r.height > 3).sort((a, b) => b.width * b.height - a.width * a.height)[0]; return { x: q.x + q.width / 2, y: q.y + q.height / 2 } })
+  const s1 = await p3.evaluate(() => { const d = JSON.parse(localStorage.getItem('albertschema.doc')); const g = document.querySelector(`[data-sym="${d.symbols.find((x) => x.label === 'S1').id}"]`); const q = [...g.querySelectorAll('path,rect,line')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 3 && r.height > 3).sort((a, b) => b.width * b.height - a.width * a.height)[0]; return { x: q.x + q.width / 2, y: q.y + q.height / 2 } })
   await p3.mouse.move(s1.x, s1.y); await p3.mouse.down(); await sleep(250); await p3.mouse.up()
   await sleep(600)
   check('exemple automate : chambres du vérin colorées en rouge (pression) pendant le cycle', await p3.evaluate(() => !!document.querySelector('svg.canvas rect[fill^="rgba(229"]')))

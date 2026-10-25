@@ -62,7 +62,7 @@ export function tokenize(src: string): Tok[] {
     const ed = /^(?:([↑↓])\s*|([RF])\s*\(\s*)([A-Za-z_][\w.]*)\s*\)?/.exec(src.slice(i))
     if (ed && (ed[1] || /\(/.test(ed[0]))) { out.push({ t: 'edge', v: `${ed[1] === '↓' || ed[2] === 'F' ? 'F' : 'R'}|${ed[3]}` }); i += ed[0].length; continue }
     if ('./*&+|!¬'.includes(c) && !(c === '.' && /\d/.test(src[i + 1] ?? '') && /[\w]/.test(src[i - 1] ?? ''))) { out.push({ t: WORDS[c], v: c }); i++; continue }
-    const w = /^[A-Za-z_À-ſ][\w.À-ſ]*|^\d+/.exec(src.slice(i))
+    const w = /^\d+[A-Za-z_À-ſ][\w.À-ſ]*|^[A-Za-z_À-ſ][\w.À-ſ]*|^\d+/.exec(src.slice(i))
     if (!w) throw new Error('caractère inattendu : ' + c)
     const up = w[0].toUpperCase()
     if (WORDS[up]) out.push({ t: WORDS[up], v: up })

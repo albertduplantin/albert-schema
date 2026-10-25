@@ -486,8 +486,44 @@ const behaviour = (sym) => {
   const preferred = (s) => (usedByCode.includes(s.id.replace(/\.elmt$/, '').split('/').pop()) ? 1 : 0)
   for (const s of [...pneu].sort((a, b) => preferred(b) - preferred(a) || b.score - a.score)) {
     if (!s.fluid && !s.sim) { s.legacy = true; noSim++; continue }
-    const key = s.name.fr.trim() + '§' + behaviour(s)
-    if (keep.has(key)) { s.legacy = true; dup++ } else keep.set(key, s.id)
+    const bh = behaviour(s)
+    const key = /^(valve|cyl)\|/.test(bh ?? '') ? bh : s.name.fr.trim() + '§' + bh // distributeurs et vérins : un seul symbole par comportement, quel que soit son nom
+    if (keep.has(key) && !preferred(s)) { s.legacy = true; dup++ } else if (!keep.has(key)) keep.set(key, s.id)
+  }
+  // noms lisibles pour les distributeurs et les vérins (les noms d'origine sont des codes : « 5/2E [elec_pneu]-[airspring] »)
+  const ctl = { elec: ['électrique', 'electric'], man: ['manuelle', 'manual'], pneu: ['pneumatique', 'pneumatic'] }
+  for (const x of pneu.filter((q) => !q.legacy)) {
+    const f = x.fluid
+    if (f?.k === 'valve') {
+      const fp = x.ports.filter((p) => p.dir === 'up' || p.dir === 'down')
+      const down = fp.filter((p) => p.dir === 'down').sort((a, b) => a.x - b.x)
+      const ways = fp.length, positions = f.three ? 3 : 2
+      let nc = ''
+      let ncEn = ''
+      if (!f.three && (ways === 2 || ways === 3) && down[0]) {
+        const open = f.rest.some((l) => l.includes(down[0].id))
+        nc = open ? ', normalement ouvert' : ', normalement fermé'
+        ncEn = open ? ', normally open' : ', normally closed'
+      }
+      if (ways === 0) { x.name = { fr: 'Vanne d’arrêt manuelle (ouverte au repos)', en: 'Manual shut-off valve (open at rest)' }; continue }
+      const [a, aEn] = ctl[f.a]
+      let how, howEn
+      if (f.b === 'spring') { how = `commande ${a}, rappel par ressort`; howEn = `${aEn} control, spring return` }
+      else if (f.b === 'none') { how = `commande ${a} à verrouillage`; howEn = `${aEn} control, detent` }
+      else if (f.b === f.a) { how = `commande ${a} des deux côtés`; howEn = `${aEn} control on both sides` }
+      else { how = `commande ${a} d’un côté, ${ctl[f.b][0]} de l’autre`; howEn = `${aEn} control one side, ${ctl[f.b][1]} the other` }
+      let centre = '', centreEn = ''
+      if (f.three) {
+        const closed = f.rest.length === 0, P = f.act[0]?.[0], pressure = f.rest.some((pr) => pr.includes(P))
+        centre = closed ? ', centre fermé' : pressure ? ', centre sous pression' : ', centre à l’échappement'
+        centreEn = closed ? ', closed centre' : pressure ? ', pressure centre' : ', exhaust centre'
+      }
+      x.name = { fr: `Distributeur ${ways}/${positions}${nc}${centre} — ${how}`, en: `${ways}/${positions} valve${ncEn}${centreEn} — ${howEn}` }
+    } else if (f?.k === 'cyl') {
+      x.name = !f.rod
+        ? (f.single === 'push' ? { fr: 'Vérin simple effet, rappel par ressort', en: 'Single-acting cylinder, spring return' } : { fr: 'Vérin simple effet, sortie par ressort', en: 'Single-acting cylinder, spring extend' })
+        : { fr: 'Vérin double effet', en: 'Double-acting cylinder' }
+    }
   }
   // noms encore identiques : on précise la position centrale des distributeurs 5/3 et le rappel des vérins simple effet, sinon on ne garde que le premier
   const visible = () => pneu.filter((x) => !x.legacy)
@@ -535,7 +571,7 @@ symbols.sort(
 // « Les plus utilisés » : meilleurs scores par domaine, 3 symboles au plus par groupe
 for (const d of Object.keys(categories)) {
   // tourniquet entre familles (la plus utilisée d'abord) pour éviter qu'une seule famille monopolise la liste
-  const pool = symbols.filter((s) => s.domain === d && s.score >= 80 && !s.cat.includes('11_singlepole'))
+  const pool = symbols.filter((s) => s.domain === d && !s.legacy && s.score >= 80 && !s.cat.includes('11_singlepole'))
   const byGroup = new Map()
   for (const s of pool.sort((a, b) => b.score - a.score)) {
     const k = groupKey(s)

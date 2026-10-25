@@ -261,6 +261,13 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   for (const s of vis) names.set(s.name.fr, (names.get(s.name.fr) ?? 0) + 1)
   check('palette pneumatique : aucun nom en double', [...names.values()].filter((n) => n > 1).length, 0)
   check('palette pneumatique : tous les symboles proposés sont simulables', vis.filter((s: any) => !s.fluid && !s.sim).map((s: any) => s.name.fr), [])
+  // un seul distributeur et un seul vérin par comportement (les variantes qui ne diffèrent que par le nom du fabricant ou le dessin d'origine sont masquées)
+  const roles = (sym: any) => { const r = new Map<string, string>(); for (const dir of ['up', 'down', 'left', 'right']) sym.ports.filter((p: any) => p.dir === dir).sort((a: any, b: any) => (dir === 'left' || dir === 'right' ? a.y - b.y : a.x - b.x)).forEach((p: any, i: number) => r.set(p.id, dir[0] + i)); return r }
+  const behav = (sym: any) => { const f = sym.fluid, r = roles(sym), R = (i: string) => r.get(i) ?? i, pr = (l: any[]) => (l ?? []).map(([a, b]) => [R(a), R(b)].sort().join('-')).sort().join(',')
+    return f.k === 'valve' ? `v|${f.a}|${f.b}|${f.three}|${pr(f.rest)}|${pr(f.act)}|${pr(f.actB)}|${f.pilotA ? R(f.pilotA) : ''}|${f.pilotB ? R(f.pilotB) : ''}` : f.k === 'cyl' ? `c|${R(f.cap)}|${f.rod ? R(f.rod) : ''}|${f.single ?? ''}` : null }
+  const seen = new Map<string, string[]>()
+  for (const sy of vis) { const k = behav(sy); if (k) seen.set(k, [...(seen.get(k) ?? []), sy.name.fr]) }
+  check('palette pneumatique : un seul distributeur ou vérin par comportement', [...seen.values()].filter((v) => v.length > 1).map((v) => v[0]), [])
   check('palette pneumatique : les symboles masqués restent chargeables (anciens fichiers)', lib.symbols.some((s: any) => s.domain === 'pneumatic' && s.legacy), true)
 }
 

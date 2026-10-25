@@ -113,7 +113,7 @@ const prog = (): any => ({
   let mem: any = {}, now = 1000
   const run = (pressed: string[], dt: number) => { now += dt; const r = simulate(d, SYMBOL_MAP, mem, { pressed: new Set(pressed), toggled: new Set(), cut: new Set() }, now); mem = r.state; return r }
   const id = (l: string) => d.symbols.find((x: any) => x.label === l).id
-  const [A, B, S1, P] = [id('1A'), id('2A'), id('dcy'), id('API1')]
+  const [A, B, S1, P] = [id('1A'), id('2A'), id('S1'), id('API1')]
   let r = run([], 0); r = run([], 100)
   check('exemple automate : au repos, vérins rentrés et automate à l’étape 0', [r.cylPos[A], r.cylPos[B], r.plc[P]?.steps], [0, 0, [0]])
   run([S1], 50); r = run([S1], 50); run([], 50)
@@ -152,6 +152,17 @@ const prog = (): any => ({
   const rg = E.insertContact(E.newRung(), 0, 1, { var: 'b' })
   const rg2 = E.insertContact(rg, 1, 0, { var: 'c' })
   check('édition Ladder : contacts en série et branche parallèle', [rg.branches[0].length, rg2.branches.length, E.removeContact(rg2, 1, 0).branches.length], [2, 2, 1])
+}
+
+// ── mnémoniques qui reprennent les repères des organes (1S2, 1YV14…)
+{
+  const p: any = { names: { 'I0.1': '1S1', 'I0.2': '1S2', 'Q0.0': '1YV14' }, steps: [{ id: 0, init: true, actions: [] }, { id: 1, actions: [{ kind: 'N', var: '1YV14' }] }], transitions: [{ from: [0], to: [1], cond: '1S1 ET NON 1S2' }, { from: [1], to: [0], cond: '1S2' }], ladder: [] }
+  let st: any
+  const go = (i: boolean[]) => { for (let n = 0; n < 4; n++) st = scan(p, st, i, 100).state; return st }
+  go([false, true, false])
+  check('mnémoniques de type 1S1 ET NON 1S2 : l’étape 1 s’active et commande 1YV14', [st.steps, st.out[0]], [[1], true])
+  go([false, false, true])
+  check('mnémonique 1S2 : retour à l’étape 0', [st.steps, st.out[0]], [[0], false])
 }
 void emptyProgram
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests d’automate passent')

@@ -1175,6 +1175,25 @@ function Editor() {
     return out
   }, [all])
   const cylinderLabels = useMemo(() => [...new Set(all.symbols.filter((s) => SYMBOL_MAP[s.defId]?.fluid?.k === 'cyl' && s.label).map((s) => s.label))], [all])
+  // largeur de la bibliothèque et des propriétés : réglable à la souris, mémorisée
+  const [palW, setPalW] = useState(() => { try { return Math.min(640, Math.max(180, Number(localStorage.getItem('albertschema.palW')) || 250)) } catch { return 250 } })
+  const [propsW, setPropsW] = useState(() => { try { return Math.min(640, Math.max(200, Number(localStorage.getItem('albertschema.propsW')) || 260)) } catch { return 260 } })
+  useEffect(() => { try { localStorage.setItem('albertschema.palW', String(palW)) } catch { /* ignoré */ } }, [palW])
+  useEffect(() => { try { localStorage.setItem('albertschema.propsW', String(propsW)) } catch { /* ignoré */ } }, [propsW])
+  const resizing = useRef<{ which: 'pal' | 'props'; x: number; w: number } | null>(null)
+  const startResize = (e: React.PointerEvent, which: 'pal' | 'props') => {
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    resizing.current = { which, x: e.clientX, w: which === 'pal' ? palW : propsW }
+    e.preventDefault()
+  }
+  const moveResize = (e: React.PointerEvent) => {
+    const r = resizing.current
+    if (!r) return
+    const dx = e.clientX - r.x
+    if (r.which === 'pal') setPalW(Math.min(640, Math.max(180, r.w + dx)))
+    else setPropsW(Math.min(640, Math.max(200, r.w - dx)))
+  }
+  const endResize = () => { resizing.current = null }
   // automate : panneau de programmation (Grafcet et langage à contacts)
   const [plcEdit, setPlcEdit] = useState<string | null>(null)
   const [plcWin, setPlcWin] = usePlcWin()
@@ -1379,7 +1398,7 @@ function Editor() {
   )
 
   return (
-    <div className={'app' + (simMode ? ' simmode' : '')}>
+    <div className={'app' + (simMode ? ' simmode' : '')} style={{ ['--pal-w' as string]: palW + 'px', ['--props-w' as string]: propsW + 'px' }}>
       <header className="toolbar" role="toolbar">
         <span className="brand"><span className="vis" aria-hidden="true" />Albert<b>Schema</b><span className="studio"> Studio</span></span>
 
@@ -1537,6 +1556,8 @@ function Editor() {
       </header>
 
       <aside className="palette">
+        <div className="resizer r" role="separator" aria-orientation="vertical" aria-label={lang === 'fr' ? 'Redimensionner la bibliothèque (double-clic : taille d’origine)' : 'Resize the library (double-click: default size)'} data-tip={lang === 'fr' ? 'Glissez pour élargir la bibliothèque de composants ; double-clic : taille d’origine' : 'Drag to widen the component library; double-click: default size'}
+          onPointerDown={(e) => startResize(e, 'pal')} onPointerMove={moveResize} onPointerUp={endResize} onDoubleClick={() => setPalW(250)} />
         <div className="tabs" role="tablist">
           {DOMAINS.map((d) => (
             <button key={d} role="tab" aria-selected={d === domain} className={d === domain ? 'on' : ''} onClick={() => setDomain(d)}>{t(d)}</button>
@@ -1637,6 +1658,8 @@ function Editor() {
       </main>
 
       <aside className="props">
+        <div className="resizer l" role="separator" aria-orientation="vertical" aria-label={lang === 'fr' ? 'Redimensionner les propriétés' : 'Resize the properties'} data-tip={lang === 'fr' ? 'Glissez pour élargir les propriétés ; double-clic : taille d’origine' : 'Drag to widen the properties; double-click: default size'}
+          onPointerDown={(e) => startResize(e, 'props')} onPointerMove={moveResize} onPointerUp={endResize} onDoubleClick={() => setPropsW(260)} />
         {guidedEx && <GuidedPanel ex={guidedEx} done={guidedEx.steps.map((_, i) => !!stepsDone[i])} missing={guidedEx.steps.map((_, i) => stepsMissing[i] ?? [])} lang={lang} onClose={() => chooseGuided(null)} onSolution={guidedSolution} onRestart={guidedRestart} onList={() => setShowGuided(true)} onLink={copyExerciseLink} />}
         {sim && !sel.length ? (
           <>
