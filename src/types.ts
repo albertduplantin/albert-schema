@@ -168,6 +168,8 @@ export interface PlacedSymbol {
   nameText?: string
   /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
   terms?: Record<string, string>
+  /** détecteur posé sur un vérin : repère du vérin (1A1) et position le long de la course (0 = rentré, 1 = sorti) où le contact se ferme */
+  det?: { cyl: string; at: number }
   /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */
   labelOff?: { x: number; y: number }
 }

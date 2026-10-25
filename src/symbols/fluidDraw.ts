@@ -1,4 +1,5 @@
 import type { PortDef, SymbolDef } from '../types'
+import { solenoidNames } from '../fluidNames'
 
 /**
  * Dessin dynamique des distributeurs et des vérins pneumatiques et hydrauliques (inspiré des simulateurs de circuits fluides) :
@@ -36,6 +37,8 @@ export interface ValveView {
   /** bobine ou commande A / B alimentée */
   a?: boolean
   b?: boolean
+  /** repère du distributeur : sert à afficher le nom des électroaimants (1V1+ et 1V1−) */
+  label?: string
 }
 
 /** Case active d'un distributeur selon son état. */
@@ -112,20 +115,26 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   const pl = pilot('left'), pr = pilot('right')
   const yl = f.a === 'pneu' && pl ? pl.y : y0 + ch / 2
   const yr = f.b === 'pneu' && pr ? pr.y : y0 + ch / 2
-  if (f.a === 'elec') out += solenoid(xl, -1, !!view.a, yl)
+  const [namesA, namesB] = solenoidNames(view.label ?? '')
+  const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="6" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
+  if (f.a === 'elec') out += solenoid(xl, -1, !!view.a, yl) + tag(xl - 6.5, yl - 8, namesA[0])
   else if (f.a === 'man') out += `<path d="M${n(xl)} ${n(yl)}H${n(xl - 4)}" stroke="currentColor"/><rect x="${n(xl - 13)}" y="${n(yl - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xl - 11)} ${n(yl - 2)}H${n(xl - 6)}M${n(xl - 8.5)} ${n(yl - 2)}V${n(yl + 3)}" stroke="currentColor" fill="none"/>`
   else if (f.a === 'pneu') out += pilotShape(xl, -1, pl, yl)
   if (f.b === 'spring') {
     const pts = [0, 2, 4, 7, 10, 13, 16, 18].map((d, i) => `${n(xr + d)} ${n(yr + (i % 2 ? 4 : -4) * (i === 0 || i === 7 ? 0 : 1))}`)
     out += `<path d="M${pts.join('L')}" fill="none" stroke="currentColor"/>`
-  } else if (f.b === 'elec') out += solenoid(xr, 1, !!view.b, yr)
+  } else if (f.b === 'elec') out += solenoid(xr, 1, !!view.b, yr) + tag(xr + 6.5, yr - 8, namesB[0])
   else if (f.b === 'pneu') out += pilotShape(xr, 1, pr, yr)
   return out
 }
 
 // ───────────────────────── vérins
 
+export interface Detector { label: string; at: number; on: boolean }
+
 export interface CylView {
+  /** détecteurs de position posés sur le vérin */
+  detectors?: Detector[]
   /** position de la tige : 0 = rentrée, 1 = sortie */
   p: number
   potCap: Pot
@@ -180,12 +189,17 @@ export function cylinderSvg(def: SymbolDef, view: CylView): string {
   // piston, tige et embout
   const tip = pc + sign * (len - 4 + 14)
   out += `<rect x="${n(pc - 2)}" y="${n(g.yb + 1)}" width="4" height="${n(g.bh - 2)}" fill="currentColor" stroke="currentColor"/>`
-  out += `<path d="M${n(pc)} ${n(ym - 1.8)}H${n(tip)}M${n(pc)} ${n(ym + 1.8)}H${n(tip)}M${n(tip)} ${n(ym - 5)}V${n(ym + 5)}" stroke="currentColor" stroke-width="1.3" fill="none"/>`
+  out += `<rect x="${n(Math.min(pc, tip))}" y="${n(ym - 2.4)}" width="${n(Math.abs(tip - pc))}" height="4.8" fill="#cfd8dc" stroke="currentColor" stroke-width="1.1"/><path d="M${n(tip)} ${n(ym - 6)}V${n(ym + 6)}" stroke="currentColor" stroke-width="2" fill="none"/>`
   out += `<path d="M${n(rodEnd)} ${n(g.yb)}V${n(ym - 1.8)}M${n(rodEnd)} ${n(ym + 1.8)}V${n(g.yb + g.bh)}" stroke="currentColor" stroke-width="2.4" fill="none"/>`
   // orifices : tuyaux jusqu'au corps, colorés par leur pression
   const stub = (x: number, pot: Pot) => {
     const c = stroke(pot)
     return `<path d="M${n(x)} ${n(def.h)}V${n(g.yb + g.bh)}" stroke="${c}" stroke-width="${c === 'currentColor' ? 1.4 : 2}" fill="none"/>`
+  }
+  // détecteurs de position : repère sur le corps, allumé quand le piston passe devant
+  for (const d of view.detectors ?? []) {
+    const x = capEnd + sign * (4 + (len - 8) * Math.min(1, Math.max(0, d.at)))
+    out += `<rect x="${n(x - 3)}" y="${n(g.yb + g.bh)}" width="6" height="5" fill="${d.on ? '#43a047' : 'var(--bg)'}" stroke="currentColor"/><text x="${n(x)}" y="${n(g.yb + g.bh + 12)}" font-size="6" text-anchor="middle" fill="currentColor" stroke="none">${d.label}</text>`
   }
   out += stub(g.capX, view.potCap)
   if (g.rodX !== undefined) out += stub(g.rodX, view.potRod)

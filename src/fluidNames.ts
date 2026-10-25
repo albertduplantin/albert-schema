@@ -1,0 +1,120 @@
+import type { Doc, PlacedSymbol, SymbolDef } from './types'
+
+/**
+ * Repérage normalisé des composants pneumatiques et hydrauliques (ISO 1219-2 / EN 81346-2, usage Festo Didactic et enseignement français) :
+ *   repère = n° de circuit + code du composant + n° du composant, par exemple 1A1, 1V1, 1V2, 2S1, 0Z1
+ *   0 = alimentation commune (groupe de conditionnement 0Z1, vanne d'arrêt 0V1, pressostat 0S1, pompe 0P1, bâche 0Z1)
+ *   1, 2… = chaîne de commande d'un actionneur : 1A1 est son vérin, 1V1 son distributeur, 1V2 son régulateur de débit, 1S1 et 1S2 ses détecteurs de position
+ * Les bobines d'un électrodistributeur 1V1 se repèrent 1V1+ (côté gauche, commande A) et 1V1− (côté droit, commande B) ; la forme 1Y1 / 1Y2 est aussi reconnue.
+ */
+export interface IsoCode { code: string; zero: boolean }
+
+/** Code lettre du composant et appartenance à l'alimentation commune (circuit 0) ; null = pas de repère (raccords, silencieux, sources). */
+export function isoCode(def: SymbolDef | undefined): IsoCode | null {
+  const f = def?.fluid
+  if (!def || !f) return null
+  switch (f.k) {
+    case 'cyl': return { code: 'A', zero: false }
+    case 'fmotor': return { code: 'M', zero: false }
+    case 'fsink': return def.domain === 'hydraulic' ? { code: 'Z', zero: true } : null // bâche ; un silencieux n'est pas repéré
+    case 'fpump': return { code: 'P', zero: true }
+    case 'fpress': return { code: 'S', zero: true }
+    case 'fgauge': return { code: 'P', zero: true }
+    case 'flink': return /501011_tank|501012_treatment|501013_control|501014_filter|81_filters|71_exchangers|21_tanks/.test(def.id) ? { code: 'Z', zero: true } : null
+    case 'valve': return f.a === 'man' && f.b === 'none' && f.manual === 'toggle' && def.ports.length === 2 ? { code: 'V', zero: true } : { code: 'V', zero: false } // vanne d'arrêt : 0V1
+    case 'check': case 'logic': case 'fthrottle': return { code: 'V', zero: false }
+    default: return null
+  }
+}
+
+const re = /^(\d+)([A-Z])(\d+)$/
+export const parseIso = (label: string): { n: number; code: string; k: number } | null => {
+  const m = re.exec(label.trim().toUpperCase())
+  return m ? { n: Number(m[1]), code: m[2], k: Number(m[3]) } : null
+}
+
+/** Numéro du circuit courant : celui du dernier actionneur posé, 1 s'il n'y en a pas encore. */
+function currentCircuit(doc: Doc, defs: Record<string, SymbolDef>): number {
+  let n = 0
+  for (const s of doc.symbols) {
+    const iso = isoCode(defs[s.defId])
+    const p = parseIso(s.label)
+    if (iso?.code === 'A' && p) n = Math.max(n, p.n)
+  }
+  return Math.max(1, n)
+}
+
+/**
+ * Repère suivant pour un composant fluide : un nouvel actionneur ouvre le circuit suivant (1A1, 2A1…), les autres composants prennent le circuit en cours
+ * et le premier numéro libre pour leur code (1V1, 1V2…). Retourne null si le composant n'est pas concerné (électrique ou sans repère).
+ */
+export function nextFluidLabel(doc: Doc, def: SymbolDef, defs: Record<string, SymbolDef>): string | null {
+  if (def.domain === 'electrical' || !def.fluid) return null
+  const iso = isoCode(def)
+  if (!iso) return ''
+  let circuit = iso.zero ? 0 : currentCircuit(doc, defs)
+  if (iso.code === 'A' || iso.code === 'M') {
+    circuit = 1 + Math.max(0, ...doc.symbols.map((s) => (isoCode(defs[s.defId])?.code === 'A' || isoCode(defs[s.defId])?.code === 'M' ? parseIso(s.label)?.n ?? 0 : 0)))
+  }
+  let k = 0
+  for (const s of doc.symbols) {
+    const p = parseIso(s.label)
+    if (p && p.n === circuit && p.code === iso.code) k = Math.max(k, p.k)
+  }
+  return `${circuit}${iso.code}${k + 1}`
+}
+
+/** Noms des bobines qui commandent un distributeur : [côté A, côté B]. « YV1/YV2 » (ancien usage) ; « 1V1 » donne 1V1+ ou 1Y1 (A) et 1V1− ou 1Y2 (B). */
+export function solenoidNames(label: string): [string[], string[]] {
+  const norm = (v: string) => v.replace(/\s+/g, '').toUpperCase().replace(/−/g, '-')
+  const parts = label.split(/[\s/,;]+/).filter(Boolean)
+  if (parts.length >= 2) return [[norm(parts[0])], [norm(parts[1])]]
+  const one = norm(label)
+  if (!one) return [[], []]
+  const m = /^(\d*)V(\d+)$/.exec(one)
+  if (m) {
+    const k = Number(m[2])
+    return [[one + '+', `${m[1]}Y${2 * k - 1}`], [one + '-', `${m[1]}Y${2 * k}`]]
+  }
+  return [[one, one + '+'], [one + '-']]
+}
+
+/** Renumérote tous les composants fluides d'après le câblage : chaque actionneur ouvre un circuit, ses distributeurs et régulateurs le suivent, l'alimentation est le circuit 0. */
+export function renumberFluid(doc: Doc, defs: Record<string, SymbolDef>): Doc {
+  const by = new Map(doc.symbols.map((s) => [s.id, s]))
+  const adj = new Map<string, Set<string>>()
+  for (const w of doc.wires) {
+    for (const [a, b] of [[w.from.symId, w.to.symId], [w.to.symId, w.from.symId]]) (adj.get(a) ?? adj.set(a, new Set()).get(a)!).add(b)
+  }
+  const isoOf = (s: PlacedSymbol) => isoCode(defs[s.defId])
+  const actuators = doc.symbols.filter((s) => { const c = isoOf(s)?.code; return c === 'A' || c === 'M' }).sort((a, b) => a.y - b.y || a.x - b.x)
+  const circuitOf = new Map<string, number>()
+  actuators.forEach((a, i) => circuitOf.set(a.id, i + 1))
+  // les composants de commande héritent du circuit de l'actionneur le plus proche (en nombre de liaisons), sans traverser l'alimentation
+  const queue = [...actuators.map((a) => a.id)]
+  while (queue.length) {
+    const id = queue.shift()!
+    const n = circuitOf.get(id)!
+    for (const nb of adj.get(id) ?? []) {
+      const s = by.get(nb)
+      if (!s || circuitOf.has(nb)) continue
+      const iso = isoOf(s)
+      if (!iso || iso.zero || iso.code === 'A') continue
+      circuitOf.set(nb, n)
+      queue.push(nb)
+    }
+  }
+  const counters = new Map<string, number>()
+  const labels = new Map<string, string>()
+  const order = [...doc.symbols].sort((a, b) => a.y - b.y || a.x - b.x)
+  for (const s of order) {
+    const iso = isoOf(s)
+    if (!iso) continue
+    const n = iso.zero ? 0 : circuitOf.get(s.id) ?? currentCircuit({ ...doc, symbols: doc.symbols.filter((x) => labels.has(x.id)).map((x) => ({ ...x, label: labels.get(x.id)! })) }, defs)
+    const key = `${n}${iso.code}`
+    const k = (counters.get(key) ?? 0) + 1
+    counters.set(key, k)
+    labels.set(s.id, `${key}${k}`)
+  }
+  return { ...doc, symbols: doc.symbols.map((s) => (labels.has(s.id) ? { ...s, label: labels.get(s.id)! } : s)) }
+}

@@ -1,4 +1,5 @@
 import { matchesQuery } from './searchTerms'
+import { nextFluidLabel, renumberFluid, solenoidNames } from './fluidNames'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addVersion, loadVersions, removeVersion, type Version } from './versions'
 import Combo from './Combo'
@@ -99,6 +100,8 @@ function nextTerminalLabel(doc: Doc): string {
 const nextLabel = (doc: Doc, defId: string) => {
   const def = SYMBOL_MAP[defId]
   const prefix = def.prefix
+  const iso = nextFluidLabel(doc, def, SYMBOL_MAP) // composants pneumatiques et hydrauliques : repérage ISO 1219-2 (1A1, 1V1, 0Z1…)
+  if (iso !== null) return iso
   if (!prefix) return ''
   if (isTerminal(defId)) return nextTerminalLabel(doc)
   // un contact commandé par bobine reprend le repère de la dernière bobine posée (même relais)
@@ -809,6 +812,7 @@ function Editor() {
       const order = [...d.symbols].sort((a, b) => a.x - b.x || a.y - b.y)
       const labels = new Map<string, string>()
       for (const s of order) {
+        if (SYMBOL_MAP[s.defId]?.domain !== 'electrical' && SYMBOL_MAP[s.defId]?.fluid) continue // composants fluides : repérés plus bas d'après le câblage
         if (isTerminal(s.defId)) {
           // une borne garde son bornier (X1, X2…) et se renumérote à l'intérieur : X1.1, X1.2…
           const strip = s.label ? stripOf(s.label) : 'X1'
@@ -820,7 +824,7 @@ function Editor() {
         counters[p] = (counters[p] ?? 0) + 1
         labels.set(s.id, p + counters[p])
       }
-      return { ...d, symbols: d.symbols.map((s) => ({ ...s, label: labels.get(s.id)! })) }
+      return renumberFluid({ ...d, symbols: d.symbols.map((s) => (labels.has(s.id) ? { ...s, label: labels.get(s.id)! } : s)) }, SYMBOL_MAP)
     })
     say(t('toastNumbered'))
   }
@@ -1143,11 +1147,34 @@ function Editor() {
       </div>
     )
   })()
+  /** bobines possibles pour les électrodistributeurs du schéma : 1V1+, 1V1−… (proposées dans le champ « repère » d'une bobine) */
+  const solenoidChoices = useMemo(() => {
+    const out: string[] = []
+    for (const s of all.symbols) {
+      const f = SYMBOL_MAP[s.defId]?.fluid
+      if (f?.k !== 'valve' || !s.label) continue
+      const [a, b] = solenoidNames(s.label)
+      if (f.a === 'elec' && a[0]) out.push(a[0])
+      if (f.b === 'elec' && b[0]) out.push(b[0])
+    }
+    return out
+  }, [all])
+  /** détecteurs de position posés sur les vérins (par repère de vérin normalisé), dessinés sur le vérin */
+  const detectors = useMemo(() => {
+    const out: Record<string, { id: string; label: string; at: number; nc: boolean }[]> = {}
+    for (const s of all.symbols) {
+      if (!s.det?.cyl) continue
+      const m = SYMBOL_MAP[s.defId]?.sim
+      ;(out[s.det.cyl.replace(/\s+/g, '').toUpperCase()] ??= []).push({ id: s.id, label: s.label, at: s.det.at, nc: m?.k === 'switch' && m.nc })
+    }
+    return out
+  }, [all])
+  const cylinderLabels = useMemo(() => [...new Set(all.symbols.filter((s) => SYMBOL_MAP[s.defId]?.fluid?.k === 'cyl' && s.label).map((s) => s.label))], [all])
   const wireAdvice = useMemo(() => (selWire ? computeWireAdvice(selWire, all, SYMBOL_MAP, lang) : undefined), [selWire, all, lang])
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
-            <label data-tip={t('helpLabel')}>{t('label')}{tip('helpLabel')}<input value={selSym.label} onChange={(e) => { if (isTerminal(selSym.defId)) setActiveStrip(e.target.value); patchSym({ label: e.target.value }) }} />{isTerminal(selSym.defId) && <span className="advice">💡 {t('stripHint')}</span>}</label>
+            <label data-tip={t('helpLabel')}>{t('label')}{tip('helpLabel')}<Combo options={SYMBOL_MAP[selSym.defId].sim?.k === 'coil' ? solenoidChoices : []} value={selSym.label} onChange={(e) => { if (isTerminal(selSym.defId)) setActiveStrip(e.target.value); patchSym({ label: e.target.value }) }} />{isTerminal(selSym.defId) && <span className="advice">💡 {t('stripHint')}</span>}</label>
             <label data-tip={t('helpDesc')}>{t('description')}{tip('helpDesc')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
             {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
               const def = SYMBOL_MAP[selSym.defId]
@@ -1235,6 +1262,19 @@ function Editor() {
                   value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                 {advLine('volts', selSym.volts)}
               </label>
+            )}
+            {(() => { const d = SYMBOL_MAP[selSym.defId]; return d.sim?.k === 'switch' && d.sim.ctl === 'toggle' && /390_sensors_instruments|41_limit_switches/.test(d.id) })() && (
+              <fieldset className="ratings" data-tip={lang === 'fr' ? 'Pose ce capteur sur un vérin pneumatique ou hydraulique : le contact se ferme quand le piston atteint la position réglée. Un repère sur le vérin montre où il est placé.' : 'Mounts this sensor on a pneumatic or hydraulic cylinder: the contact closes when the piston reaches the set position. A mark on the cylinder shows where it sits.'}>
+                <legend>{lang === 'fr' ? 'Détecteur de vérin' : 'Cylinder sensor'}</legend>
+                <label>{lang === 'fr' ? 'Vérin détecté (repère)' : 'Cylinder (tag)'}
+                  <Combo options={cylinderLabels} value={selSym.det?.cyl ?? ''} placeholder="1A1" onChange={(e) => patchSym({ det: e.target.value.trim() ? { cyl: e.target.value, at: selSym.det?.at ?? 0 } : undefined })} />
+                </label>
+                {selSym.det && (
+                  <label>{lang === 'fr' ? 'Position le long de la course (%) — 0 = rentré, 100 = sorti' : 'Position along the stroke (%) — 0 = retracted, 100 = extended'}
+                    <input type="range" min={0} max={100} step={5} value={Math.round(selSym.det.at * 100)} onChange={(e) => patchSym({ det: { ...selSym.det!, at: Number(e.target.value) / 100 } })} /> {Math.round(selSym.det.at * 100)} %
+                  </label>
+                )}
+              </fieldset>
             )}
             {(() => { const m = SYMBOL_MAP[selSym.defId].sim; return (m?.k === 'coil' && !!m.timer) || (m?.k === 'switch' && !!m.delay) })() && (
               <label data-tip={t('helpDelay')}>{t('delay')}{tip('helpDelay')}
@@ -1522,7 +1562,7 @@ function Editor() {
 
       <main className="stage">
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
-          commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel}
+          commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel} detectors={detectors}
           onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
           {pageTabs.map((pg, i) => (

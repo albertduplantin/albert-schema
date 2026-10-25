@@ -101,6 +101,8 @@ interface Props {
   /** outil de dessin actif (rectangle, ellipse, ligne), style des nouvelles formes, et fin de l'outil après le tracé */
   dark?: boolean
   tool?: Shape['kind'] | null
+  /** détecteurs posés sur les vérins, par repère de vérin normalisé */
+  detectors?: Record<string, { id: string; label: string; at: number; nc: boolean }[]>
   /** outil de mesure : deux clics donnent la distance et les écarts en mm (papier) */
   measure?: boolean
   toolStyle?: Partial<Shape>
@@ -875,7 +877,7 @@ export default function Canvas(p: Props) {
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
                 <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={bladeVars(s.id, model, p.sim)}>
-                  {isDynamic(def) ? <FluidShape s={s} def={def} sim={p.sim ?? null} /> : <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />}
+                  {isDynamic(def) ? <FluidShape s={s} def={def} sim={p.sim ?? null} detectors={s.label ? p.detectors?.[s.label.replace(/\s+/g, '').toUpperCase()]?.map((d) => ({ label: d.label, at: d.at, on: !!p.sim?.closed[d.id] })) : undefined} /> : <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />}
                   {model?.k === 'source' && isSourceBlock(def.id) && (
                     <g stroke="none" fill="currentColor" pointerEvents="none">
                       <text x={def.w / 2} y={11} fontSize={8} textAnchor="middle" fontWeight={700}>{sourceCaption(s, def)}</text>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PlacedSymbol, SymbolDef } from './types'
 import type { SimResult } from './sim/engine'
-import { cylinderSvg, cylRest, valveIndex, valveSvg } from './symbols/fluidDraw'
+import { cylinderSvg, cylRest, valveIndex, valveSvg, type Detector } from './symbols/fluidDraw'
 
 /** Valeur qui rejoint progressivement sa cible : le tiroir d'un distributeur glisse, le piston d'un vérin avance au lieu de sauter. */
 function useEased(target: number, rate: number): number {
@@ -27,7 +27,7 @@ function useEased(target: number, rate: number): number {
 }
 
 /** Distributeur ou vérin dessiné dynamiquement : cases qui glissent, piston qui avance, chambres rouges (pression) ou bleues (échappement). */
-export function FluidShape({ s, def, sim }: { s: PlacedSymbol; def: SymbolDef; sim: SimResult | null }) {
+export function FluidShape({ s, def, sim, detectors }: { s: PlacedSymbol; def: SymbolDef; sim: SimResult | null; detectors?: Detector[] }) {
   const f = def.fluid
   const pot = (id: string) => sim?.potentialOf[`${s.id}:${id}`]
   const valveTarget = f?.k === 'valve' ? valveIndex(f, !!sim?.valveA[s.id], !!sim?.valveB[s.id]) : 1
@@ -35,7 +35,7 @@ export function FluidShape({ s, def, sim }: { s: PlacedSymbol; def: SymbolDef; s
   const vpos = useEased(valveTarget, 9) // une case en environ 0,11 s
   const cpos = useEased(cylTarget, 2.2)
   let html = ''
-  if (f?.k === 'valve') html = valveSvg(def, { pos: vpos, pot: (id) => (sim ? pot(id) : null), a: sim ? !!sim.valveA[s.id] : false, b: sim ? !!sim.valveB[s.id] : false })
-  else if (f?.k === 'cyl') html = cylinderSvg(def, { p: cpos, potCap: sim ? pot(f.cap) : null, potRod: sim && f.rod ? pot(f.rod) : null })
+  if (f?.k === 'valve') html = valveSvg(def, { pos: vpos, pot: (id) => (sim ? pot(id) : null), a: sim ? !!sim.valveA[s.id] : false, b: sim ? !!sim.valveB[s.id] : false, label: s.label })
+  else if (f?.k === 'cyl') html = cylinderSvg(def, { detectors, p: cpos, potCap: sim ? pot(f.cap) : null, potRod: sim && f.rod ? pot(f.rod) : null })
   return <g dangerouslySetInnerHTML={{ __html: html.replace(/var\(--bg\)/g, '#fff') }} />
 }

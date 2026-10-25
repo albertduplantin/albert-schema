@@ -165,6 +165,17 @@ function actuated(s: PlacedSymbol, m: Extract<SimModel, { k: 'switch' }>, x: Ctx
     case 'momentary':
       return x.inp.pressed.has(s.id)
     default:
+      if (s.det?.cyl) {
+        // détecteur posé sur un vérin : le contact se ferme quand le piston est à la position réglée (aux extrémités : vérin rentré ou sorti)
+        const cyl = x.doc.symbols.find((c) => x.defs[c.defId]?.fluid?.k === 'cyl' && c.label && devKey(c.label) === devKey(s.det!.cyl))
+        if (cyl) {
+          const f = x.defs[cyl.defId].fluid
+          const p = cylPos(x.memory['§C:' + cyl.id], x.now, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0)
+          const at = Math.min(1, Math.max(0, s.det.at))
+          return at <= 0.02 ? p <= 0.02 : at >= 0.98 ? p >= 0.98 : Math.abs(p - at) <= 0.06
+        }
+        return false
+      }
       if (s.label) {
         // fin de course lié à un vérin : « A1+ » se ferme vérin A1 sorti, « A1- » vérin rentré
         const lm = /^(.+?)\s*([+-])$/.exec(s.label)

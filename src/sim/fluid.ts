@@ -1,4 +1,5 @@
 import type { Doc, SymbolDef } from '../types'
+import { solenoidNames } from '../fluidNames'
 
 /** Mémoire de simulation (voir engine.ts) : `p` et `dir` servent aux vérins. */
 export type FluidMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number; v?: number }>
@@ -62,10 +63,7 @@ export function cylPos(m: FluidMemory[string] | undefined, now: number, rest = 0
 }
 
 /** Repères de commande d'un électrodistributeur : « YV1 » ou « YV1/YV2 » (bobine côté A, bobine côté B). */
-export const valveCoils = (label: string): [string, string] => {
-  const [a, b] = label.split(/[\s/,;]+/).filter(Boolean)
-  return [a ? devKey(a) : '', b ? devKey(b) : '']
-}
+export const valveCoils = (label: string): [string[], string[]] => solenoidNames(label)
 
 export function solveFluid(x: FluidIn): FluidOut {
   const { doc, defs } = x
@@ -120,12 +118,13 @@ export function solveFluid(x: FluidIn): FluidOut {
       const f = defs[s.defId]?.fluid
       if (f?.k !== 'valve') continue
       const [la, lb] = valveCoils(s.label)
+      const coilA = la.some((n) => x.coilOn[n]), coilB = lb.some((n) => x.coilOn[n])
       const aOn =
-        (f.a === 'elec' && ((!!la && !!x.coilOn[la]) || x.toggled.has(s.id))) || // commande manuelle de secours : un clic sur l'électrovanne la actionne
+        (f.a === 'elec' && (coilA || x.toggled.has(s.id))) || // commande manuelle de secours : un clic sur l'électrovanne la actionne
 
         (f.a === 'man' && (x.pressed.has(s.id) || x.toggled.has(s.id))) ||
         (f.a === 'pneu' && !!f.pilotA && pilotP.has(key(s.id, f.pilotA)))
-      const bOn = (f.b === 'elec' && !!lb && !!x.coilOn[lb]) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
+      const bOn = (f.b === 'elec' && coilB) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
       const mem = x.memory['§V:' + s.id]?.on ?? false
       if (f.three) {
         // trois positions, centrées par ressorts : la commande A (ou B) seule déplace le tiroir, les deux ensemble le laissent au centre
