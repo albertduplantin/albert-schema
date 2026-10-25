@@ -143,7 +143,8 @@ export function solveFluid(x: FluidIn): FluidOut {
       if (f.k === 'check') {
         // bloqué quand l'aval est sous pression et l'amont non
         const pf = pressureIn(net, key(s.id, f.from)), pt = pressureIn(net, key(s.id, f.to))
-        next.set(s.id, pt === 'P' && pf !== 'P' ? [] : [[key(s.id, f.from), key(s.id, f.to)]])
+        const piloted = !!f.pilot && pressureIn(net, key(s.id, f.pilot)) === 'P'
+        next.set(s.id, pt === 'P' && pf !== 'P' && !piloted ? [] : [[key(s.id, f.from), key(s.id, f.to)]])
       } else {
         const [a, b] = f.ins
         const pa = pressureIn(net, key(s.id, a)), pb = pressureIn(net, key(s.id, b))

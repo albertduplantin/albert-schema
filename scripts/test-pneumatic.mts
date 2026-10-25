@@ -253,5 +253,15 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   r = g.run([], [g.idOf('S1')], 3000)
   check('détecteurs sur le vérin : sorti → seul le détecteur de fin de course est fermé', on(r), [false, false, true])
 }
+
+// ── palette pneumatique : aucun doublon de nom, tout symbole proposé est simulable
+{
+  const vis = lib.symbols.filter((s: any) => s.domain === 'pneumatic' && !s.legacy)
+  const names = new Map<string, number>()
+  for (const s of vis) names.set(s.name.fr, (names.get(s.name.fr) ?? 0) + 1)
+  check('palette pneumatique : aucun nom en double', [...names.values()].filter((n) => n > 1).length, 0)
+  check('palette pneumatique : tous les symboles proposés sont simulables', vis.filter((s: any) => !s.fluid && !s.sim).map((s: any) => s.name.fr), [])
+  check('palette pneumatique : les symboles masqués restent chargeables (anciens fichiers)', lib.symbols.some((s: any) => s.domain === 'pneumatic' && s.legacy), true)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests pneumatiques passent')
 process.exit(fails ? 1 : 0)

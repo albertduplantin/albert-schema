@@ -23,6 +23,41 @@ export function classifyFluid({ id, nameFr, ports }) {
   if (has(/5010161060_silencer|5010161061_silencer|502070_relief\/\d+_silencer|50101820_sil_vacuum/)) return { k: 'fsink', ports: ids(ports) }
 
   // ── traversées : traitement d'air et restricteurs de débit à deux orifices
+  // ── régulateurs de pression : les deux orifices principaux sont reliés (la pression réglée n'est pas calculée) ; l'orifice de manomètre ou de consigne n'est pas relié
+  if (has(/501013_control\/(50101330|50101331|50101340|50101341)_/) && ports.length === 4) {
+    const l = ports.find((p) => p.dir === 'left'), r = ports.find((p) => p.dir === 'right')
+    return l && r ? { k: 'flink', ports: [l.id, r.id] } : null
+  }
+  if (has(/501013_control\/(50101370|50101371|50101372|50101380|50101381)_/) && ports.length === 3) {
+    const d = ports.filter((p) => p.dir === 'down')
+    return d.length === 2 ? { k: 'flink', ports: ids(d) } : null
+  }
+  // filtre avec aimant et unité d'entretien complète : passage entre les orifices de gauche et de droite
+  if (has(/501012_treatment\/50101208_/) && ports.length === 3) {
+    const r = ports.find((p) => p.dir === 'right'), l = ports.find((p) => p.dir === 'left')
+    return r && l ? { k: 'flink', ports: [r.id, l.id] } : null
+  }
+  if (has(/501014_filter_regulator_lubricator\/50101430_/) && ports.length === 4) {
+    const r = ports.find((p) => p.dir === 'right'), l = ports.find((p) => p.dir === 'left' && p.y === r?.y)
+    return r && l ? { k: 'flink', ports: [r.id, l.id] } : null
+  }
+  // raccords rapides à clapet, diviseurs de débit, broches rotatives à trois passages, câbles : liaisons directes
+  if (has(/501015_pipes_connections\/(50101532|50101534)_/) && ports.length === 3) return { k: 'flink', ports: ids(ports) }
+  if (has(/(50101610_flow\/5010161040|502070_relief\/50207000)_/) && ports.length === 3) return { k: 'flink', ports: ids(ports) }
+  if (has(/501015_pipes_connections\/50101503_/) && ports.length === 6) {
+    const links = []
+    for (const l of ports.filter((p) => p.dir === 'left')) { const r = ports.find((p) => p.dir === 'right' && p.y === l.y); if (r) links.push([l.id, r.id]) }
+    return links.length ? { k: 'fnet', links } : null
+  }
+  if (has(/501015_pipes_connections\/(50101510|50101540|50101541)_/) && ports.length === 2) return { k: 'flink', ports: ids(ports) }
+  // soupape tarée : n'ouvre qu'au-delà de sa pression de tarage, que la simulation ne calcule pas : elle reste fermée
+  if (has(/501015_pipes_connections\/50101543_/)) return { k: 'fgauge', ports: ids(ports) }
+  // clapets pilotés (déblocage par l'orifice de commande, en haut ou en bas)
+  if (has(/50101610_flow\/(5010161020|5010161021|5010161030|5010161031)_/) && ports.length === 3) {
+    const l = ports.find((p) => p.dir === 'left'), r = ports.find((p) => p.dir === 'right'), pi = ports.find((p) => p.dir === 'up' || p.dir === 'down')
+    return l && r && pi ? { k: 'check', from: r.id, to: l.id, pilot: pi.id } : null
+  }
+
   // limiteurs de débit : réglables (deux sens) ou unidirectionnels avec clapet de retour libre (étranglement de gauche à droite)
   if (has(/50101610_flow\/(5010161050|5010161051|5010161052)_/) && ports.length === 2) {
     const [l, r] = [...ports].sort(byX)
@@ -46,6 +81,7 @@ export function classifyFluid({ id, nameFr, ports }) {
     }
     return null
   }
+
 
 
   // ── réservoirs : tous les orifices sont reliés au même volume
@@ -101,7 +137,7 @@ export function classifyFluid({ id, nameFr, ports }) {
   }
 
   // ── distributeurs à trois positions centrées par ressorts (5/3 et 3/3) : case de gauche = commande A, de droite = commande B
-  if (has(/5020_velves\/502010_control\/(50201070_5_3_way|50201030_3_3_way)/)) {
+  if (has(/5020_velves\/(502010_control\/(50201070_5_3_way|50201030_3_3_way)|502030_prop\/5020304|502030_prop\/5020305)/)) {
     const m = /^(\d)\/3([a-z]*)\s*\[([a-z_]*)\]-\[([a-z_]*)\]/i.exec(nameFr.trim())
     if (!m) return null
     const ways = Number(m[1])

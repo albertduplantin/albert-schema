@@ -451,6 +451,71 @@ const rank = (id) => {
 }
 for (const d of Object.keys(categories)) categories[d].sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id))
 
+// ── pneumatique : on masque (sans les supprimer, pour les anciens fichiers) les symboles qui ne se simulent pas et les doublons.
+// Un doublon est un symbole de même nom et de même comportement (mêmes liaisons entre orifices repérés par leur position) : seul le dessin ou la disposition des bornes diffère.
+const usedByCode = (() => {
+  try { return ['src/guidedData.ts', 'src/templates.ts', 'src/symbols/flow.ts'].map((f) => readFileSync(f, 'utf8')).join('\n') } catch { return '' }
+})()
+const portRole = (sym) => {
+  const role = new Map()
+  for (const dir of ['up', 'down', 'left', 'right']) {
+    const list = sym.ports.filter((p) => p.dir === dir).sort((a, b) => (dir === 'left' || dir === 'right' ? a.y - b.y : a.x - b.x))
+    list.forEach((p, i) => role.set(p.id, dir[0] + i))
+  }
+  return role
+}
+const behaviour = (sym) => {
+  const f = sym.fluid
+  if (!f) return null
+  const r = portRole(sym)
+  const R = (id) => r.get(id) ?? id
+  const pairs = (l) => (l ?? []).map(([a, b]) => [R(a), R(b)].sort().join('-')).sort().join(',')
+  switch (f.k) {
+    case 'valve': return `valve|${f.a}|${f.b}|${f.three ? 3 : 2}|${pairs(f.rest)}|${pairs(f.act)}|${pairs(f.actB)}|${f.pilotA ? R(f.pilotA) : ''}|${f.pilotB ? R(f.pilotB) : ''}|${f.manual ?? ''}`
+    case 'cyl': return `cyl|${R(f.cap)}|${f.rod ? R(f.rod) : ''}|${f.single ?? ''}`
+    case 'check': return `check|${R(f.from)}|${R(f.to)}|${f.pilot ? R(f.pilot) : ''}`
+    case 'logic': return `logic|${f.op}|${R(f.out)}`
+    case 'fthrottle': return `thr|${R(f.a)}|${R(f.b)}|${f.oneWay ? 1 : 0}`
+    default: return `${f.k}|${sym.ports.map((p) => R(p.id)).sort().join(',')}`
+  }
+}
+{
+  const pneu = symbols.filter((s) => s.domain === 'pneumatic')
+  let noSim = 0, dup = 0
+  const keep = new Map()
+  const preferred = (s) => (usedByCode.includes(s.id.replace(/\.elmt$/, '').split('/').pop()) ? 1 : 0)
+  for (const s of [...pneu].sort((a, b) => preferred(b) - preferred(a) || b.score - a.score)) {
+    if (!s.fluid && !s.sim) { s.legacy = true; noSim++; continue }
+    const key = s.name.fr.trim() + '§' + behaviour(s)
+    if (keep.has(key)) { s.legacy = true; dup++ } else keep.set(key, s.id)
+  }
+  // noms encore identiques : on précise la position centrale des distributeurs 5/3 et le rappel des vérins simple effet, sinon on ne garde que le premier
+  const visible = () => pneu.filter((x) => !x.legacy)
+  const byName = new Map()
+  for (const x of visible()) byName.set(x.name.fr, [...(byName.get(x.name.fr) ?? []), x])
+  for (const group of byName.values()) {
+    if (group.length < 2) continue
+    for (const x of group) {
+      const f = x.fluid
+      let fr = '', en = ''
+      if (f?.k === 'valve' && f.three) {
+        const closed = f.rest.length === 0, P = f.act[0]?.[0], pressure = f.rest.some((pr) => pr.includes(P))
+        fr = closed ? ' — centre fermé' : pressure ? ' — centre sous pression' : ' — centre à l’échappement'
+        en = closed ? ' — closed centre' : pressure ? ' — pressure centre' : ' — exhaust centre'
+      } else if (f?.k === 'cyl' && f.single) {
+        fr = f.single === 'push' ? ' — rentre par ressort' : ' — sort par ressort'
+        en = f.single === 'push' ? ' — spring return' : ' — spring extend'
+      }
+      if (fr) { x.name = { fr: x.name.fr + fr, en: x.name.en + en } }
+    }
+  }
+  const seenName = new Map()
+  for (const x of [...visible()].sort((a, b) => preferred(b) - preferred(a) || b.score - a.score)) {
+    if (seenName.has(x.name.fr)) { x.legacy = true; dup++ } else seenName.set(x.name.fr, x.id)
+  }
+  console.log(`pneumatique : ${noSim} symboles non simulables et ${dup} doublons masqués, ${visible().length} symboles proposés`)
+}
+
 // Tri des symboles : catégorie, puis groupes du plus au moins utilisé, puis symboles par score
 const catIndex = (s) => categories[s.domain].findIndex((c) => c.id === s.cat)
 const groupKey = (s) => s.cat + '|' + (s.group?.fr ?? '')

@@ -55,7 +55,7 @@ export type FluidModel =
   | { k: 'flink'; ports: string[] }
   | { k: 'cyl'; cap: string; rod?: string; single?: 'push' | 'pull' }
   /** clapet anti-retour : l'air passe de `from` vers `to`, jamais en sens inverse */
-  | { k: 'check'; from: string; to: string }
+  | { k: 'check'; from: string; to: string; /** clapet piloté : une pression sur cet orifice le débloque dans les deux sens */ pilot?: string }
   /** fonction logique : sélecteur de circuit (OU) ou soupape à deux pressions (ET) ; `out` n'est sous pression que si la condition est remplie */
   | { k: 'logic'; op: 'or' | 'and'; ins: [string, string]; out: string }
   /** appareil de mesure ou bouchon : n'établit aucune liaison, sa pression est seulement affichée */
