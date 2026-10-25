@@ -120,11 +120,11 @@ export function solveFluid(x: FluidIn): FluidOut {
       const [la, lb] = valveCoils(s.label, defs[s.defId])
       const coilA = la.some((n) => x.coilOn[n]), coilB = lb.some((n) => x.coilOn[n])
       const aOn =
-        (f.a === 'elec' && (coilA || x.toggled.has(s.id))) || // commande manuelle de secours : un clic sur l'électrovanne la actionne
+        (f.a === 'elec' && (coilA || x.toggled.has(s.id) || x.pressed.has(s.id))) || // commande manuelle de secours : un clic sur l'électrovanne la actionne
 
         (f.a === 'man' && (x.pressed.has(s.id) || x.toggled.has(s.id))) ||
         (f.a === 'pneu' && !!f.pilotA && pilotP.has(key(s.id, f.pilotA)))
-      const bOn = (f.b === 'elec' && coilB) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
+      const bOn = (f.b === 'elec' && (coilB || x.pressed.has(s.id + ':B'))) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
       const mem = x.memory['§V:' + s.id]?.on ?? false
       if (f.three) {
         // trois positions, centrées par ressorts : la commande A (ou B) seule déplace le tiroir, les deux ensemble le laissent au centre

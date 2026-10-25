@@ -8,8 +8,15 @@ const { ownDrawing } = await import('../src/symbols/own/index.ts')
 
 const raw = JSON.parse(readFileSync(new URL('../data/library-raw.json', import.meta.url), 'utf8'))
 let dyn = 0, own = 0
+// symboles propres à l'application (absents de la collection d'origine)
+const { extraSymbols } = await import('../src/symbols/own/extra.ts')
+for (const e of extraSymbols) raw.symbols.push({ ...e, own: true })
+const ids = JSON.parse(readFileSync(new URL('../api/_ids.json', import.meta.url), 'utf8'))
+for (const e of extraSymbols) if (!ids.includes(e.id)) ids.push(e.id)
+writeFileSync(new URL('../api/_ids.json', import.meta.url), JSON.stringify(ids))
 for (const s of raw.symbols) {
   s.own = undefined
+  if (extraSymbols.some((e: any) => e.id === s.id)) { s.own = true; own++; continue }
   if (s.legacy) continue
   // distributeurs et vérins fluides : dessinés par l'application d'après leur modèle
   if (s.fluid && isDynamic(s)) {

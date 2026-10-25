@@ -403,6 +403,13 @@ export default function Canvas(p: Props) {
       let handled = true
       if (s && p.sim?.tripped.has(s.id) && !e.altKey) p.onSimToggle(s.id) // protection déclenchée : un clic la réarme
       else if (s && e.altKey && (m?.k === 'switch' || m?.k === 'load' || m?.k === 'coil')) p.onSimFault?.((m.k === 'switch' ? 'stuck:' : 'short:') + s.id)
+      else if (s && (SYMBOL_MAP[s.defId].fluid as { k: string; a?: string } | undefined)?.k === 'valve' && (SYMBOL_MAP[s.defId].fluid as { a?: string }).a === 'elec') {
+        // électrodistributeur : on maintient le clic sur une électrovanne ; à droite ou à gauche selon la bobine visée (un monostable revient au lâcher, un bistable reste en place)
+        const side = (e.target as Element).closest('[data-sol]')?.getAttribute('data-sol')
+        const f = SYMBOL_MAP[s.defId].fluid as { b?: string }
+        const k = side === 'b' && f.b === 'elec' ? s.id + ':B' : side === 'b' || (f.b === 'elec' && !side) ? null : s.id
+        if (k) { held.current = k; p.onSimPress(k, true) } else handled = false
+      }
       else if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
       else if (s && m?.k === 'switch' && m.ctl === 'fixed') p.onSimFault?.(s.id)

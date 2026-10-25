@@ -286,5 +286,20 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   const v32no = first((s) => s.fluid?.k === 'valve' && !s.fluid.three && s.ports.length === 3 && s.fluid.act.length === 1 && !s.fluid.act[0].includes(portNumbers(s) && Object.keys(portNumbers(s)).find((k) => portNumbers(s)[k] === '1')))
   check('3/2 normalement ouvert : la commande coupe l’alimentation (10)', v32no ? pilotNumbers(v32no)[0] : '10', '10')
 }
+// ── commande manuelle des électrovannes : un clic maintenu sur la bobine de droite (A) ou de gauche (B) déplace le tiroir ; un bistable reste en place au lâcher
+{
+  const d = T.pneumaticPlc(base)
+  const g = rig(d)
+  const V = g.idOf('1V1'), C = g.idOf('1A')
+  check('exemple automate : détecteurs de fin de course à lame souple (ILS)', d.symbols.filter((s: any) => /^[12]S[12]$/.test(s.label)).every((s: any) => /ils_no$/.test(s.defId)), true)
+  let r = g.run([], [], 0); r = g.run([], [], 4000)
+  check('électrovanne : au repos le vérin reste rentré', r.cylPos[C], 0)
+  r = g.run([V], [], 100); r = g.run([V], [], 4000)
+  check('électrovanne : clic maintenu sur la bobine A → le vérin sort', r.cylPos[C], 1)
+  r = g.run([], [], 100); r = g.run([], [], 4000)
+  check('électrovanne bistable : bobine relâchée → le tiroir reste en place', r.cylPos[C], 1)
+  r = g.run([V + ':B'], [], 100); r = g.run([V + ':B'], [], 4000)
+  check('électrovanne : clic maintenu sur la bobine B → le vérin rentre', r.cylPos[C], 0)
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests pneumatiques passent')
 process.exit(fails ? 1 : 0)

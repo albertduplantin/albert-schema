@@ -104,8 +104,8 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   // commandes aux deux extrémités du tiroir (elles accompagnent les cases)
   const xl = centre(0) - cw / 2, xr = centre(cells.length - 1) + cw / 2
   const pilot = (dirName: 'left' | 'right') => def.ports.find((p) => p.dir === dirName)
-  const solenoid = (x: number, dir: 1 | -1, on: boolean, ym: number) =>
-    `<rect x="${n(dir < 0 ? x - 13 : x)}" y="${n(ym - 6)}" width="13" height="12" fill="${on ? '#ffd54f' : 'var(--bg)'}" stroke="currentColor"/><path d="M${n(dir < 0 ? x - 13 : x)} ${n(ym + 6)}L${n(dir < 0 ? x : x + 13)} ${n(ym - 6)}" stroke="currentColor"/>`
+  const solenoid = (x: number, dir: 1 | -1, on: boolean, ym: number, side: 'a' | 'b') =>
+    `<rect data-sol="${side}" style="cursor:pointer" x="${n(dir < 0 ? x - 13 : x)}" y="${n(ym - 6)}" width="13" height="12" fill="${on ? '#ffd54f' : 'var(--bg)'}" stroke="currentColor"/><path d="M${n(dir < 0 ? x - 13 : x)} ${n(ym + 6)}L${n(dir < 0 ? x : x + 13)} ${n(ym - 6)}" stroke="currentColor"/>`
   const pilotShape = (x: number, dir: 1 | -1, port: PortDef | undefined, ym: number) => {
     const c = stroke(port ? view.pot(port.id) : null)
     const xe = x + dir * 9 // extrémité extérieure de la flèche
@@ -125,13 +125,13 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   }
   const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="6" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
   const pilotNo = (x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="5.5" text-anchor="${anchor}" fill="currentColor" stroke="none">${t}</text>` : '')
-  if (f.a === 'elec') out += solenoid(xl, -1, !!view.a, yl) + tag(xl - 6.5, yl - 8, namesA[0]) + pilotNo(xl - 14, yl + 2, pil[0], 'end')
+  if (f.a === 'elec') out += solenoid(xl, -1, !!view.a, yl, 'a') + tag(xl - 6.5, yl - 8, namesA[0]) + pilotNo(xl - 14, yl + 2, pil[0], 'end')
   else if (f.a === 'man') out += `<path d="M${n(xl)} ${n(yl)}H${n(xl - 4)}" stroke="currentColor"/><rect x="${n(xl - 13)}" y="${n(yl - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xl - 11)} ${n(yl - 2)}H${n(xl - 6)}M${n(xl - 8.5)} ${n(yl - 2)}V${n(yl + 3)}" stroke="currentColor" fill="none"/>`
   else if (f.a === 'pneu') out += pilotShape(xl, -1, pl, yl)
   if (f.b === 'spring') {
     const pts = [0, 2, 4, 7, 10, 13, 16, 18].map((d, i) => `${n(xr + d)} ${n(yr + (i % 2 ? 4 : -4) * (i === 0 || i === 7 ? 0 : 1))}`)
     out += `<path d="M${pts.join('L')}" fill="none" stroke="currentColor"/>`
-  } else if (f.b === 'elec') out += solenoid(xr, 1, !!view.b, yr) + tag(xr + 6.5, yr - 8, namesB[0]) + pilotNo(xr + 14, yr + 2, pil[1], 'start')
+  } else if (f.b === 'elec') out += solenoid(xr, 1, !!view.b, yr, 'b') + tag(xr + 6.5, yr - 8, namesB[0]) + pilotNo(xr + 14, yr + 2, pil[1], 'start')
   else if (f.b === 'pneu') out += pilotShape(xr, 1, pr, yr)
   return out
 }

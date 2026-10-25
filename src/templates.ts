@@ -125,7 +125,7 @@ export const pneumaticAuto = (base: Doc): Doc => {
  */
 export const pneumaticPlc = (base: Doc): Doc => {
   const V52 = FV('5020106020_elec/502010602030_5_2_way_030')
-  const LS = Q('390_sensors_instruments/41_limit_switches/fin_de_course_came_2_no')
+  const LS = Q('390_sensors_instruments/41_limit_switches/ils_no') // détecteurs à lame souple (ILS) posés sur les vérins
   const COIL = Q('310_relays_contactors_contacts/01_coils/bobine3')
   const PB = Q('380_signaling_operating/20_push_buttons/poussoir')
   const chain = (n: number, x: number, cyl: string): [Spec[], Link[]] => {
