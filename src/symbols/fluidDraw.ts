@@ -1,5 +1,5 @@
 import type { PortDef, SymbolDef } from '../types'
-import { solenoidNames } from '../fluidNames'
+import { pilotNumbers, portNumbers, solenoidNames } from '../fluidNames'
 
 /**
  * Dessin dynamique des distributeurs et des vérins pneumatiques et hydrauliques (inspiré des simulateurs de circuits fluides) :
@@ -115,15 +115,23 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   const pl = pilot('left'), pr = pilot('right')
   const yl = f.a === 'pneu' && pl ? pl.y : y0 + ch / 2
   const yr = f.b === 'pneu' && pr ? pr.y : y0 + ch / 2
-  const [namesA, namesB] = solenoidNames(view.label ?? '')
+  const pil = pilotNumbers(def)
+  const [namesA, namesB] = solenoidNames(view.label ?? '', pil)
+  // numéros normalisés des orifices (1 alimentation, 2 et 4 utilisations, 3 et 5 échappements) et des commandes (14, 12, 10)
+  const nums = portNumbers(def)
+  for (const p of fp) {
+    const t = nums[p.id]
+    if (t) out += `<text x="${n(p.x + 2.5)}" y="${n(p.dir === 'up' ? -2 : H + 7)}" font-size="6" fill="currentColor" stroke="none">${t}</text>`
+  }
   const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="6" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
-  if (f.a === 'elec') out += solenoid(xl, -1, !!view.a, yl) + tag(xl - 6.5, yl - 8, namesA[0])
+  const pilotNo = (x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="5.5" text-anchor="${anchor}" fill="currentColor" stroke="none">${t}</text>` : '')
+  if (f.a === 'elec') out += solenoid(xl, -1, !!view.a, yl) + tag(xl - 6.5, yl - 8, namesA[0]) + pilotNo(xl - 14, yl + 2, pil[0], 'end')
   else if (f.a === 'man') out += `<path d="M${n(xl)} ${n(yl)}H${n(xl - 4)}" stroke="currentColor"/><rect x="${n(xl - 13)}" y="${n(yl - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xl - 11)} ${n(yl - 2)}H${n(xl - 6)}M${n(xl - 8.5)} ${n(yl - 2)}V${n(yl + 3)}" stroke="currentColor" fill="none"/>`
   else if (f.a === 'pneu') out += pilotShape(xl, -1, pl, yl)
   if (f.b === 'spring') {
     const pts = [0, 2, 4, 7, 10, 13, 16, 18].map((d, i) => `${n(xr + d)} ${n(yr + (i % 2 ? 4 : -4) * (i === 0 || i === 7 ? 0 : 1))}`)
     out += `<path d="M${pts.join('L')}" fill="none" stroke="currentColor"/>`
-  } else if (f.b === 'elec') out += solenoid(xr, 1, !!view.b, yr) + tag(xr + 6.5, yr - 8, namesB[0])
+  } else if (f.b === 'elec') out += solenoid(xr, 1, !!view.b, yr) + tag(xr + 6.5, yr - 8, namesB[0]) + pilotNo(xr + 14, yr + 2, pil[1], 'start')
   else if (f.b === 'pneu') out += pilotShape(xr, 1, pr, yr)
   return out
 }

@@ -65,8 +65,55 @@ export function nextFluidLabel(doc: Doc, def: SymbolDef, defs: Record<string, Sy
   return `${circuit}${iso.code}${k + 1}`
 }
 
-/** Noms des bobines qui commandent un distributeur : [côté A, côté B]. « YV1/YV2 » (ancien usage) ; « 1V1 » donne 1V1+ ou 1Y1 (A) et 1V1− ou 1Y2 (B). */
-export function solenoidNames(label: string): [string[], string[]] {
+type Valve = Extract<NonNullable<SymbolDef['fluid']>, { k: 'valve' }>
+
+/**
+ * Numéros normalisés des orifices d'un distributeur (ISO 5599) d'après la place des orifices sur le symbole :
+ * 1 alimentation ; 2 et 4 utilisations (2 à droite, 4 à gauche) ; 3 et 5 échappements. En hydraulique : P, T, A, B.
+ */
+export function portNumbers(def: SymbolDef): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (def.fluid?.k !== 'valve') return out
+  const fp = def.ports.filter((p) => p.dir === 'up' || p.dir === 'down')
+  const up = fp.filter((p) => p.dir === 'up').sort((a, b) => a.x - b.x)
+  const down = fp.filter((p) => p.dir === 'down').sort((a, b) => a.x - b.x)
+  const hyd = def.domain === 'hydraulic'
+  const set = (list: typeof up, names: string[]) => list.forEach((p, i) => { out[p.id] = names[i] })
+  if (up.length === 1 && down.length === 1) { set(up, [hyd ? 'A' : '2']); set(down, [hyd ? 'P' : '1']) }
+  else if (up.length === 1 && down.length === 2) { set(up, [hyd ? 'A' : '2']); set(down, hyd ? ['P', 'T'] : ['1', '3']) }
+  else if (up.length === 2 && down.length === 2) { set(up, hyd ? ['A', 'B'] : ['4', '2']); set(down, hyd ? ['P', 'T'] : ['1', '3']) }
+  else if (up.length === 2 && down.length === 3) { set(up, hyd ? ['A', 'B'] : ['4', '2']); set(down, hyd ? ['T', 'P', 'T'] : ['5', '1', '3']) }
+  return out
+}
+
+/**
+ * Numéro de commande de chaque côté d'un distributeur : 14 quand la commande relie l'orifice 1 à l'orifice 4, 12 quand elle le relie à 2,
+ * 10 quand elle coupe l'alimentation. [commande de gauche (A), commande de droite (B)].
+ */
+export function pilotNumbers(def: SymbolDef): [string | undefined, string | undefined] {
+  const f = def.fluid
+  if (f?.k !== 'valve' || def.domain === 'hydraulic') return f?.k === 'valve' ? ['14', '12'] : [undefined, undefined]
+  const nums = portNumbers(def)
+  const id1 = Object.keys(nums).find((k) => nums[k] === '1')
+  const code = (links: [string, string][]): string => {
+    const l = links.find(([a, b]) => a === id1 || b === id1)
+    const other = l ? (l[0] === id1 ? l[1] : l[0]) : undefined
+    const n = other ? nums[other] : undefined
+    return n === '2' ? '12' : n === '4' ? '14' : '10'
+  }
+  const f2 = f as Valve
+  const a = code(f2.act)
+  const b = f2.b === 'elec' || f2.b === 'pneu' ? code(f2.three ? f2.actB ?? [] : f2.rest) : undefined
+  return [a, b]
+}
+
+/**
+ * Noms des bobines qui commandent un distributeur : [côté A (gauche), côté B (droite)].
+ * Distributeur « 1V1 » : bobine 1YV14 (elle relie 1 à 4 quand elle est alimentée) et 1YV12 (1 à 2) ; 1V1+ / 1V1−, 1Y1 / 1Y2 sont aussi reconnus.
+ * Au-delà du premier distributeur d'un circuit, le numéro du distributeur est glissé devant : 1YV214.
+ * « YV1/YV2 » (ancien usage) désigne directement les deux bobines.
+ */
+export function solenoidNames(label: string, pilots?: [string | undefined, string | undefined]): [string[], string[]] {
   const norm = (v: string) => v.replace(/\s+/g, '').toUpperCase().replace(/−/g, '-')
   const parts = label.split(/[\s/,;]+/).filter(Boolean)
   if (parts.length >= 2) return [[norm(parts[0])], [norm(parts[1])]]
@@ -75,8 +122,12 @@ export function solenoidNames(label: string): [string[], string[]] {
   const m = /^(\d*)V(\d+)$/.exec(one)
   if (m) {
     const k = Number(m[2])
-    // « 1V1 » : bobines 1V1+ / 1V1−, 1Y1 / 1Y2, ou 1YV14 / 1YV12 (commandes 14 et 12 du distributeur, écriture des sujets d'examen)
-    return [[one + '+', `${m[1]}Y${2 * k - 1}`, `${m[1]}YV${k}4`, `${m[1]}YV${k}`], [one + '-', `${m[1]}Y${2 * k}`, `${m[1]}YV${k}2`]]
+    const yv = (p: string | undefined, dflt: string) => `${m[1]}YV${k > 1 ? k : ''}${p ?? dflt}`
+    const [pa, pb] = pilots ?? [undefined, undefined]
+    return [
+      [yv(pa, '14'), one + '+', `${m[1]}Y${2 * k - 1}`, `${m[1]}YV${k}4`, `${m[1]}YV${k}`],
+      [yv(pb, '12'), one + '-', `${m[1]}Y${2 * k}`, `${m[1]}YV${k}2`],
+    ]
   }
   return [[one, one + '+'], [one + '-']]
 }

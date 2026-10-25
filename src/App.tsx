@@ -1,5 +1,5 @@
 import { matchesQuery } from './searchTerms'
-import { nextFluidLabel, renumberFluid, solenoidNames } from './fluidNames'
+import { nextFluidLabel, pilotNumbers, renumberFluid, solenoidNames } from './fluidNames'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addVersion, loadVersions, removeVersion, type Version } from './versions'
 import Combo from './Combo'
@@ -1158,7 +1158,7 @@ function Editor() {
     for (const s of all.symbols) {
       const f = SYMBOL_MAP[s.defId]?.fluid
       if (f?.k !== 'valve' || !s.label) continue
-      const [a, b] = solenoidNames(s.label)
+      const [a, b] = solenoidNames(s.label, pilotNumbers(SYMBOL_MAP[s.defId]))
       if (f.a === 'elec' && a[0]) out.push(a[0])
       if (f.b === 'elec' && b[0]) out.push(b[0])
     }

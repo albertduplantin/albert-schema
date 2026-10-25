@@ -209,7 +209,7 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   for (const d of [CYL, v52, v52, CYL, v52, SRC, SINK]) { const l = nextFluidLabel(doc, d, SYMBOL_MAP); seq.push(String(l)); doc = put(doc, d, l ?? '') }
   check('repérage automatique : 1A1, 1V1, 1V2, puis un 2e vérin ouvre le circuit 2 (2A1, 2V1) ; source et silencieux sans repère', seq, ['1A1', '1V1', '1V2', '2A1', '2V1', '', ''])
   check('repérage : alimentation en circuit 0 (conditionnement 0Z1, pompe 0P1)', [nextFluidLabel(base, SYMBOL_MAP['qet:30_hydraulic/61_pumps/pompe_hydr_2'], SYMBOL_MAP), nextFluidLabel(base, byEnd('81_filters/filtre'), SYMBOL_MAP)], ['0P1', '0Z1'])
-  check('bobines d’un distributeur 1V1 : 1V1+ ou 1Y1 (A), 1V1− ou 1Y2 (B) ; 1V2 : 1Y3 et 1Y4', [solenoidNames('1V1'), solenoidNames('1V2')[0][1], solenoidNames('YV1/YV2')], [[['1V1+', '1Y1', '1YV14', '1YV1'], ['1V1-', '1Y2', '1YV12']], '1Y3', [['YV1'], ['YV2']]])
+  check('bobines d’un distributeur 1V1 : 1V1+ ou 1Y1 (A), 1V1− ou 1Y2 (B) ; 1V2 : 1Y3 et 1Y4', [solenoidNames('1V1', ['14', '12']), solenoidNames('1V2')[0].includes('1Y3'), solenoidNames('YV1/YV2')], [[['1YV14', '1V1+', '1Y1', '1YV14', '1YV1'], ['1YV12', '1V1-', '1Y2', '1YV12']], true, [['YV1'], ['YV2']]])
   check('lecture d’un repère ISO', [parseIso('2s3'), parseIso('1A')], [{ n: 2, code: 'S', k: 3 }, { n: 1, code: 'A', k: 1 }])
   // renumérotation d'après le câblage : le distributeur relié au 2e vérin prend le circuit 2
   const f = v52.fluid
@@ -262,6 +262,22 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   check('palette pneumatique : aucun nom en double', [...names.values()].filter((n) => n > 1).length, 0)
   check('palette pneumatique : tous les symboles proposés sont simulables', vis.filter((s: any) => !s.fluid && !s.sim).map((s: any) => s.name.fr), [])
   check('palette pneumatique : les symboles masqués restent chargeables (anciens fichiers)', lib.symbols.some((s: any) => s.domain === 'pneumatic' && s.legacy), true)
+}
+
+// ── numéros normalisés des orifices et des commandes
+{
+  const { portNumbers, pilotNumbers } = await import(ROOT + '/src/fluidNames.ts')
+  const v52 = byEnd('5020106020_elec/502010602010_5_2_way_010')
+  const nums = portNumbers(v52)
+  const byNum = (n: string) => Object.keys(nums).find((k) => nums[k] === n)
+  const f = v52.fluid
+  check('5/2 : orifices 1, 2, 3, 4, 5 posés d’après le symbole', Object.values(nums).sort(), ['1', '2', '3', '4', '5'])
+  check('5/2 : au repos 1 relié à 2 et 4 à 5 ; commande de gauche : 1 relié à 4', [f.rest.some(([a, b]: string[]) => [a, b].includes(byNum('1')!) && [a, b].includes(byNum('2')!)), f.act.some(([a, b]: string[]) => [a, b].includes(byNum('1')!) && [a, b].includes(byNum('4')!))], [true, true])
+  check('5/2 monostable : commande 14 à gauche, pas de commande à droite (ressort)', pilotNumbers(v52), ['14', undefined])
+  check('5/3 à deux électroaimants : 14 et 12', pilotNumbers(byEnd('502010702010_5_3_way')), ['14', '12'])
+  check('3/2 normalement fermé : la commande relie 1 à 2 (12)', pilotNumbers(v32.def)[0], '12')
+  const v32no = first((s) => s.fluid?.k === 'valve' && !s.fluid.three && s.ports.length === 3 && s.fluid.act.length === 1 && !s.fluid.act[0].includes(portNumbers(s) && Object.keys(portNumbers(s)).find((k) => portNumbers(s)[k] === '1')))
+  check('3/2 normalement ouvert : la commande coupe l’alimentation (10)', v32no ? pilotNumbers(v32no)[0] : '10', '10')
 }
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests pneumatiques passent')
 process.exit(fails ? 1 : 0)
