@@ -90,6 +90,14 @@ try {
   check('clic droit : épaisseur 3,5 et couleur rouge appliquées', d.shapes?.[0]?.width === 3.5 && d.shapes[0].color === '#c80000', JSON.stringify(d.shapes?.[0]))
   await page.keyboard.press('Escape')
 
+  // ── clic droit sur un composant : fiche « à quoi ça sert »
+  const symPos = await page.evaluate(() => { const r = document.querySelector('.canvas [data-sym]').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })
+  await page.mouse.click(symPos[0], symPos[1], { button: 'right' }); await sleep(300)
+  await page.evaluate(() => [...document.querySelectorAll('.ctx button')].find((b) => /À quoi ça sert/.test(b.textContent))?.click())
+  await sleep(300)
+  check('clic droit : fiche « à quoi ça sert » ouverte', await page.evaluate(() => /À quoi ça sert/.test(document.querySelector('.dialog .explain')?.textContent ?? '')))
+  await page.keyboard.press('Escape'); await page.evaluate(() => document.querySelector('.modal')?.click()); await sleep(200)
+
   // ── annotation sur plusieurs lignes
   await menu(1); await click(/^T Texte/, '.toolbar .menu-list button'); await sleep(300)
   const pos = await page.evaluate(() => { const r = document.querySelector('[data-note]').getBoundingClientRect(); return [r.x + 10, r.y + 6] })

@@ -1,3 +1,4 @@
+import { ExplainCard } from './ExplainCard'
 import { matchesQuery } from './searchTerms'
 import { nextFluidLabel, pilotNumbers, renumberFluid, solenoidNames } from './fluidNames'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -200,6 +201,7 @@ function Editor() {
   const [query, setQuery] = useState('')
   const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
   const [showCredits, setShowCredits] = useState(false)
+  const [explainFor, setExplainFor] = useState<string | null>(null)
   const [showFeedback, setShowFeedback] = useState(false)
   const [usageTick, setUsageTick] = useState(0) // relance le classement après chaque pose
   const [share, setShareState] = useState<ShareChoice>(getShare)
@@ -1226,6 +1228,7 @@ function Editor() {
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
+            <details className="explain-box"><summary>{lang === 'fr' ? 'À quoi ça sert ?' : 'What is it for?'}</summary><ExplainCard def={SYMBOL_MAP[selSym.defId]} lang={lang} /></details>
             <label data-tip={t('helpLabel')}>{t('label')}{tip('helpLabel')}<Combo options={SYMBOL_MAP[selSym.defId].sim?.k === 'coil' ? solenoidChoices : []} value={selSym.label} onChange={(e) => { if (isTerminal(selSym.defId)) setActiveStrip(e.target.value); patchSym({ label: e.target.value }) }} />{isTerminal(selSym.defId) && <span className="advice">💡 {t('stripHint')}</span>}</label>
             <label data-tip={t('helpDesc')}>{t('description')}{tip('helpDesc')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
             {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
@@ -1947,6 +1950,7 @@ function Editor() {
                 {doc.symbols.some((s) => s.id === menu.target) && (
                   <>
                     <button onClick={() => { openProps(menu.target!, menu.x, menu.y); setMenu(null) }}><span>⚙ {t('propsMenu')}</span><kbd>Entrée</kbd></button>
+                    <button onClick={() => { setExplainFor(doc.symbols.find((x) => x.id === menu.target)?.defId ?? null); setMenu(null) }}><span>ⓘ {lang === 'fr' ? 'À quoi ça sert ?' : 'What is it for?'}</span></button>
                     <hr />
                     <button onClick={() => { rotateSel(); setMenu(null) }}><span>{t('rotate')}</span><kbd>R</kbd></button>
                     <button onClick={() => { duplicate(); setMenu(null) }}><span>{t('duplicate')}</span><kbd>Ctrl+D</kbd></button>
@@ -1963,6 +1967,16 @@ function Editor() {
                 <button onClick={() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' })); setMenu(null) }}><span>{t('fitShort')}</span><kbd>F</kbd></button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {explainFor && SYMBOL_MAP[explainFor] && (
+        <div className="modal" onClick={() => setExplainFor(null)}>
+          <div className="dialog" role="dialog" aria-label={SYMBOL_MAP[explainFor].name[lang]} onClick={(e) => e.stopPropagation()}>
+            <h3>{SYMBOL_MAP[explainFor].name[lang]}</h3>
+            <ExplainCard def={SYMBOL_MAP[explainFor]} lang={lang} />
+            <div className="actions"><button onClick={() => setExplainFor(null)}>{t('close')}</button></div>
           </div>
         </div>
       )}
