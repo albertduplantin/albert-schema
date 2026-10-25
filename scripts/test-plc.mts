@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 const { SYMBOL_MAP, SYMBOLS } = await import('../src/symbols/index.ts')
 const T = await import('../src/templates.ts')
 const { simulate } = await import('../src/sim/engine.ts')
-const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+const lib = (await import('./lib-full.mjs')).loadFull()
 for (const s of lib.symbols) { SYMBOLS.push(s); SYMBOL_MAP[s.id] = s }
 const base: any = { version: 1, paper: 'A3', title: {}, symbols: [], wires: [] }
 const { scan, parseExpr, checkExpr, emptyProgram, varValue } = await import(ROOT + '/src/sim/plc.ts')

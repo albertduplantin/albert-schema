@@ -9,7 +9,7 @@ Aucun serveur : tout est stocké localement (localStorage + fichiers `.albert.js
 
 ## Symboles
 
-Bibliothèque issue de la collection QElectroTech (CC-BY 3.0) — voir [NOTICE.md](NOTICE.md).
+Le **noyau** (≈ 260 symboles électriques, pneumatiques et hydrauliques) est dessiné par l'application (`src/symbols/own/`). La **bibliothèque étendue** (≈ 1 100 symboles de la collection QElectroTech, CC-BY 3.0) se charge à la demande et peut être retirée du build avec `VITE_NO_EXTENDED=1` — voir [NOTICE.md](NOTICE.md).
 
 ## Classement adaptatif des symboles
 
@@ -21,7 +21,7 @@ Bibliothèque issue de la collection QElectroTech (CC-BY 3.0) — voir [NOTICE.m
 Mise en place du classement commun : dans Vercel, *Storage → Upstash Redis* (Marketplace), connecter la base au projet.
 Les variables `KV_REST_API_URL` et `KV_REST_API_TOKEN` (ou `UPSTASH_REDIS_REST_URL/TOKEN`) sont alors injectées ; redéployer.
 
-Après toute régénération de la bibliothèque : `node scripts/import-qet.mjs <qelectrotech-elements> public/qet-library.json api/_ids.json`.
+Après toute régénération de la bibliothèque : `node scripts/import-qet.mjs <qelectrotech-elements> data/library-raw.json api/_ids.json` puis `npx tsx scripts/build-library.mts` (planche de contrôle : `npx tsx scripts/symbol-sheet.mts pneumatic`).
 
 ## Simulation
 

@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { defaultTerm, duplicateTerms, editTermUnique, effectiveTerms, othersTerms, termGroups } from '../src/terminals.ts'
 
-const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+const lib = (await import('./lib-full.mjs')).loadFull()
 const defs: Record<string, any> = Object.fromEntries(lib.symbols.map((s: any) => [s.id, s]))
 const id = (end: string) => lib.symbols.find((s: any) => s.id.endsWith(end)).id
 

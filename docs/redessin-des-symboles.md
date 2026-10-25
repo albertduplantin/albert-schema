@@ -45,3 +45,6 @@ les lots 1 à 3 (≈ 80 symboles) et ne plus avoir à mentionner QElectroTech.
 2. Lot 3 (pneumatique et hydraulique : même technique que pour les distributeurs et vérins).
 3. Lot 2.
 4. Séparation de la bibliothèque étendue (fichier à part, mention automatique quand elle est utilisée).
+
+## État
+Lots 1 à 3 réalisés : le noyau compte ≈ 260 symboles dessinés par l'application ; le reste est dans la bibliothèque étendue (lot 4). Les symboles de la bibliothèque étendue ne sont pas modifiables dans l'application (pas d'éditeur de dessin) ; la licence CC-BY permet à quiconque de les modifier à condition de citer la source et d'indiquer les modifications.

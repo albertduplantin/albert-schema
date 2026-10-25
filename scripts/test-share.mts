@@ -2,7 +2,7 @@
 import { encodeDoc, decodeDoc } from '../src/share.ts'
 const { SYMBOL_MAP, SYMBOLS } = await import('../src/symbols/index.ts')
 const { readFileSync } = await import('node:fs')
-const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+const lib = (await import('./lib-full.mjs')).loadFull()
 for (const s of lib.symbols) { SYMBOLS.push(s); SYMBOL_MAP[s.id] = s }
 const T = await import('../src/templates.ts')
 const base: any = { version: 1, paper: 'A3', title: { title: 'é ç ✓' }, symbols: [], wires: [] }

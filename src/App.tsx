@@ -13,7 +13,7 @@ import { defaultVolts, sourcePots } from './sim/potentials'
 import { isTerminal, stripOf, terminalRows } from './strips'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
 import type { Doc, Instrument, Note, Shape, StrokeStyle, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
-import { CATEGORIES, loadLibrary, SYMBOLS, SYMBOL_MAP } from './symbols'
+import { CATEGORIES, extendedAvailable, extendedLoaded, loadExtended, loadLibrary, needsExtended, SYMBOLS, SYMBOL_MAP } from './symbols'
 import { tr, type Key } from './i18n'
 import { PAPER_SIZE, symBBox, uid } from './geometry'
 import { defaultInstrument } from './instruments'
@@ -66,6 +66,16 @@ function sanitize(d: Doc): Doc {
   }
   const cur = clean(d)
   return d.pages ? { ...cur, pages: d.pages.map(clean) } : cur
+}
+
+const libListeners = new Set<() => void>()
+/** Charge la bibliothèque étendue si le document utilise des symboles qu'elle seule connaît (ancien fichier, schéma partagé…). */
+async function ensureDefs(d: Doc): Promise<Doc> {
+  if (needsExtended([d, ...(d.pages ?? [])])) {
+    await loadExtended()
+    libListeners.forEach((f) => f())
+  }
+  return d
 }
 
 function loadDoc(): Doc {
@@ -250,8 +260,9 @@ function Editor() {
     if (doc.symbols.length && !window.confirm(tr(lang, 'galleryReplace'))) return
     fetch(import.meta.env.BASE_URL + 'api/examples?id=' + encodeURIComponent(ex.id))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http'))))
-      .then((d: Doc) => {
+      .then(async (d: Doc) => {
         if (d.version !== 1 || !Array.isArray(d.symbols)) throw new Error('format')
+        await ensureDefs(d)
         commit(() => sanitize(d))
         setSel([])
         setShowGallery(false)
@@ -569,7 +580,8 @@ function Editor() {
     const frag = fragmentFromHash(location.hash)
     if (!frag) return
     decodeDoc(frag)
-      .then((d) => {
+      .then(async (d) => {
+        await ensureDefs(d)
         setH({ doc: sanitize(d), past: [], future: [] })
         coilMemory.current = {}
         setSimMode(true)
@@ -849,10 +861,11 @@ function Editor() {
   }
 
   const openFile = (f: File) => {
-    f.text().then((txt) => {
+    f.text().then(async (txt) => {
       try {
         const d = JSON.parse(txt) as Doc
         if (d.version !== 1 || !Array.isArray(d.symbols)) throw new Error('format')
+        await ensureDefs(d)
         commit(() => sanitize(d))
         setSel([])
       } catch {
@@ -866,6 +879,17 @@ function Editor() {
     setSel([])
   }
 
+  // bibliothèque étendue (collection QElectroTech) : chargée à la demande, affichée seulement si l'utilisateur l'a activée
+  const [, setLibTick] = useState(0)
+  useEffect(() => { const f = () => setLibTick((n) => n + 1); libListeners.add(f); return () => { libListeners.delete(f) } }, [])
+  const [showExt, setShowExt] = useState(() => { try { return localStorage.getItem('albertschema.ext') === '1' } catch { return false } })
+  const toggleExt = async (on: boolean) => {
+    setShowExt(on)
+    try { localStorage.setItem('albertschema.ext', on ? '1' : '0') } catch { /* ignoré */ }
+    if (on) { await loadExtended(); libListeners.forEach((f) => f()) }
+  }
+  const extVisible = (s: { std?: string }) => showExt || s.std !== 'QElectroTech'
+  const cats = useMemo(() => CATEGORIES[domain].filter((c) => SYMBOLS.some((s) => s.cat === c.id && !s.legacy && extVisible(s))), [domain, showExt, extendedLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
   const cat = catByDomain[domain] || TOP
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -878,7 +902,7 @@ function Editor() {
     }
     const found = SYMBOLS.filter(
       (s) =>
-        !s.legacy && s.domain === domain &&
+        !s.legacy && extVisible(s) && s.domain === domain &&
         (q
           ? matchesQuery(s, q)
           : cat === TOP ? s.top || usageCount(s.id, now) >= 1 || globalShare(s.id) >= 30 : (s.menu ?? s.cat) === cat),
@@ -893,7 +917,7 @@ function Editor() {
     const gmax = new Map<string, number>()
     for (const s of found) gmax.set(gk(s), Math.max(gmax.get(gk(s)) ?? 0, score(s)))
     return found.sort((a, b) => gmax.get(gk(b))! - gmax.get(gk(a))! || gk(a).localeCompare(gk(b)) || score(b) - score(a))
-  }, [domain, query, lang, cat, usageTick])
+  }, [domain, query, lang, cat, usageTick, showExt, extendedLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
   const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s && !s.legacy && s.domain === domain), [recent, domain])
 
   const selSym = sel.length === 1 ? doc.symbols.find((s) => s.id === sel[0]) : undefined
@@ -1567,7 +1591,7 @@ function Editor() {
         {!query && (
           <select aria-label={t('category')} value={cat} onChange={(e) => setCatByDomain((c) => ({ ...c, [domain]: e.target.value }))}>
             <option value={TOP}>★ {t('mostUsed')}</option>
-            {CATEGORIES[domain].map((c) => <option key={c.id} value={c.id}>{c.name[lang]}</option>)}
+            {cats.map((c) => <option key={c.id} value={c.id}>{c.name[lang]}</option>)}
           </select>
         )}
         <div className="symscroll">
@@ -1590,6 +1614,12 @@ function Editor() {
           })}
         </div>
         <p className="note">{t('adaptive')} {hasUsage() && <button className="link" onClick={() => { if (confirm(t('resetConfirm'))) { resetUsage(); setUsageTick((n) => n + 1) } }}>{t('resetUsage')}</button>}</p>
+        {extendedAvailable && (
+          <label className="share" data-tip={lang === 'fr' ? 'Ajoute environ 1 100 symboles électriques, pneumatiques et hydrauliques de la collection QElectroTech (licence CC BY 3.0). Les symboles intégrés à l’application suffisent à la plupart des schémas.' : 'Adds about 1,100 electrical, pneumatic and hydraulic symbols from the QElectroTech collection (CC BY 3.0). The built-in symbols cover most diagrams.'}>
+            <input type="checkbox" checked={showExt} onChange={(e) => void toggleExt(e.target.checked)} />
+            <span>{lang === 'fr' ? 'Bibliothèque étendue (QElectroTech)' : 'Extended library (QElectroTech)'}</span>
+          </label>
+        )}
         <label className="share" title={t('shareText')}>
           <input type="checkbox" checked={share === 'yes'} onChange={(e) => chooseShare(e.target.checked ? 'yes' : 'no')} />
           <span>{t('shareLabel')}</span>
@@ -1943,13 +1973,14 @@ function Editor() {
         <div className="modal" onClick={() => setShowCredits(false)}>
           <div className="dialog" role="dialog" aria-label={t('creditsTitle')} onClick={(e) => e.stopPropagation()}>
             <h3>{t('creditsTitle')}</h3>
-            <p>{t('creditsText')}</p>
+            <p>{lang === 'fr' ? 'Les symboles intégrés à l’application sont dessinés par elle, d’après les formes normalisées (CEI 60617, ISO 1219-1).' : 'The symbols built into the application are drawn by it, following the standardised shapes (IEC 60617, ISO 1219-1).'}</p>
+            {(extendedLoaded || showExt) && <p>{t('creditsText')}</p>}
             <h3>{t('privacyTitle')}</h3>
             <p>{t('privacyText')}</p>
             <h3>{t('legalTitle')}</h3>
             <p>{t('legalText')}</p>
             <p><a href="https://github.com/albertduplantin/albert-schema" target="_blank" rel="noreferrer">{t('sourceCode')}</a> · <button className="link" onClick={() => { setShowCredits(false); setShowFeedback(true) }}>{t('contact')}</button></p>
-            <p><a href="https://qelectrotech.org" target="_blank" rel="noreferrer">qelectrotech.org</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a> · <a href="https://github.com/qelectrotech/qelectrotech-elements" target="_blank" rel="noreferrer">qelectrotech-elements</a></p>
+            {(extendedLoaded || showExt) && <p><a href="https://qelectrotech.org" target="_blank" rel="noreferrer">qelectrotech.org</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a> · <a href="https://github.com/qelectrotech/qelectrotech-elements" target="_blank" rel="noreferrer">qelectrotech-elements</a></p>}
             <div className="actions"><button onClick={() => setShowCredits(false)}>{t('close')}</button></div>
           </div>
         </div>
@@ -2069,7 +2100,7 @@ function Editor() {
                       <td>{v.auto ? t('versionAuto') : v.name}</td>
                       <td>{v.symbols}</td>
                       <td>
-                        <button className="mini" onClick={() => { if (window.confirm(tr(lang, 'versionRestoreConfirm'))) { commit(() => sanitize(v.doc)); setSel([]); setShowVersions(false) } }}>{t('versionRestore')}</button>{' '}
+                        <button className="mini" onClick={() => { if (window.confirm(tr(lang, 'versionRestoreConfirm'))) { ensureDefs(v.doc).then(() => { commit(() => sanitize(v.doc)); setSel([]); setShowVersions(false) }) } }}>{t('versionRestore')}</button>{' '}
                         <button className="mini" onClick={() => setVersions(removeVersion(v.id))}>{t('delete')}</button>
                       </td>
                     </tr>
@@ -2125,7 +2156,15 @@ export default function App() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const lang = (localStorage.getItem('albertschema.lang') as Lang) || 'fr'
   useEffect(() => {
-    loadLibrary().then(() => setState('ready'), () => setState('error'))
+    loadLibrary()
+      .then(async () => {
+        // bibliothèque étendue : activée par l'utilisateur, ou nécessaire à l'ouvrage en cours
+        try {
+          const raw = JSON.parse(localStorage.getItem(STORE) || 'null') as Doc | null
+          if (localStorage.getItem('albertschema.ext') === '1' || (raw && needsExtended([raw, ...(raw.pages ?? [])]))) await loadExtended()
+        } catch { /* stockage indisponible */ }
+      })
+      .then(() => setState('ready'), () => setState('error'))
   }, [])
   if (state === 'ready') return <Editor />
   return (

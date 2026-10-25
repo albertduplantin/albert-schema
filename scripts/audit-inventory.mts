@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 const ROOT = '..'
 const { SYMBOLS, SYMBOL_MAP } = await import(ROOT + '/src/symbols/index.ts')
-const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+const lib = (await import('./lib-full.mjs')).loadFull()
 for (const s of lib.symbols) { SYMBOLS.push(s); SYMBOL_MAP[s.id] = s }
 const { organizeSources } = await import(ROOT + '/src/symbols/sources.ts')
 organizeSources(SYMBOLS)

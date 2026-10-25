@@ -253,7 +253,7 @@ for (const dx of [40, -40, 20, 80]) {
   const { autoConnect } = await import('../src/splice.ts')
   const { portPos } = await import('../src/geometry.ts')
   const { readFileSync } = await import('node:fs')
-  const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+  const lib = (await import('./lib-full.mjs')).loadFull()
   for (const s of lib.symbols) if (!SYMBOL_MAP[s.id]) SYMBOL_MAP[s.id] = s
   const id = (re: RegExp) => lib.symbols.find((s: any) => re.test(s.id)).id
   const sym = (key: string, defId: string, x: number, y: number): any => ({ id: key, defId, x, y, rot: 0, label: '', desc: '' })
@@ -303,7 +303,7 @@ for (const dx of [40, -40, 20, 80]) {
   const { autoConnect } = await import('../src/splice.ts')
   const { portPos } = await import('../src/geometry.ts')
   const { readFileSync } = await import('node:fs')
-  const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+  const lib = (await import('./lib-full.mjs')).loadFull()
   for (const s of lib.symbols) if (!SYMBOL_MAP[s.id]) SYMBOL_MAP[s.id] = s
   const id = (re: RegExp) => lib.symbols.find((s: any) => re.test(s.id)).id
   const sym = (key: string, defId: string, x: number, y: number): any => ({ id: key, defId, x, y, rot: 0, label: '', desc: '' })

@@ -4,7 +4,7 @@ const ROOT = '..'
 const { SYMBOL_MAP, SYMBOLS } = await import(ROOT + '/src/symbols/index.ts')
 const T = await import(ROOT + '/src/templates.ts')
 const { simulate } = await import(ROOT + '/src/sim/engine.ts')
-const lib = JSON.parse(readFileSync(new URL('../public/qet-library.json', import.meta.url), 'utf8'))
+const lib = (await import('./lib-full.mjs')).loadFull()
 for (const s of lib.symbols) { SYMBOLS.push(s); SYMBOL_MAP[s.id] = s }
 const base: any = { version: 1, paper: 'A3', title: {}, symbols: [], wires: [] }
 let fails = 0
@@ -531,7 +531,7 @@ function rig(doc: any) {
   const brk = lib.symbols.filter((s: any) => /11_circuit_breakers|12_magneto|50_residual_current_circuit_breaker/.test(s.id) && s.sim && /^Disjoncteur/i.test(s.name.fr))
   const sans = brk.filter((s: any) => !fieldsFor(SYMBOL_MAP[s.id]).some((f: any) => f.key === 'curve' && f.list?.includes('D')))
   check(`disjoncteurs (${brk.length}) : tous proposent la courbe B / C / D…`, sans.map((s: any) => s.name.fr + ' ' + kindOf(SYMBOL_MAP[s.id])).join(' | '), '')
-  const gv = lib.symbols.find((s: any) => s.name.fr === 'Disjoncteur Magnéto-thermique GV 2P')
+  const gv = lib.symbols.find((s: any) => /dis_mag_term_2f-2$/.test(s.id))
   check('disjoncteur GV 2P : calibre, courbe, plage, réglage, pouvoir de coupure', fieldsFor(SYMBOL_MAP[gv.id]).map((f: any) => f.key).join(), 'in,curve,min,max,set,icu')
 }
 // ── conseils de réglage d'après le circuit et les gammes de constructeurs
