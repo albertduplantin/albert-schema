@@ -878,6 +878,18 @@ export default function Canvas(p: Props) {
                 )}
                 <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={bladeVars(s.id, model, p.sim)}>
                   {isDynamic(def) ? <FluidShape s={s} def={def} sim={p.sim ?? null} detectors={s.label ? p.detectors?.[s.label.replace(/\s+/g, '').toUpperCase()]?.map((d) => ({ label: d.label, at: d.at, on: !!p.sim?.closed[d.id] })) : undefined} /> : <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />}
+                  {model?.k === 'plc' && p.sim && (() => {
+                    const st = p.sim.plc[s.id]
+                    return (
+                      <g pointerEvents="none" stroke="#666" strokeWidth={0.5}>
+                        {def.ports.filter((q) => /^[iq]\d$/.test(q.id)).map((q) => {
+                          const on = q.id[0] === 'i' ? st?.inputs[Number(q.id[1])] : st?.out[Number(q.id[1])]
+                          return <circle key={q.id} cx={q.x} cy={q.y === 0 ? 33 : def.h - 33} r={2.6} fill={on ? '#35c759' : '#e0e0e0'} />
+                        })}
+                        <text x={def.w - 6} y={def.h / 2 + 4} fontSize={6.5} textAnchor="end" stroke="none" fontWeight={700} fill={st ? '#1f8f3a' : '#999'}>{st ? 'RUN' : 'STOP'}</text>
+                      </g>
+                    )
+                  })()}
                   {model?.k === 'source' && isSourceBlock(def.id) && (
                     <g stroke="none" fill="currentColor" pointerEvents="none">
                       <text x={def.w / 2} y={11} fontSize={8} textAnchor="middle" fontWeight={700}>{sourceCaption(s, def)}</text>

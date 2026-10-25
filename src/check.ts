@@ -38,7 +38,7 @@ export function checkDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang):
   for (const s of doc.symbols) {
     const m = defs[s.defId]?.sim
     if (!m || m.k === 'source') continue
-    const ports = m.k === 'switch' ? [...m.poles.flat(), ...(m.changeover ?? []).flat(), ...(m.sel ? [m.sel.com, ...m.sel.outs] : [])] : m.k === 'transformer' ? [...m.primary, ...m.secondary] : m.k === 'ssr' ? [...m.input, ...m.poles.flat()] : m.ports
+    const ports = m.k === 'switch' ? [...m.poles.flat(), ...(m.changeover ?? []).flat(), ...(m.sel ? [m.sel.com, ...m.sel.outs] : [])] : m.k === 'transformer' ? [...m.primary, ...m.secondary] : m.k === 'ssr' ? [...m.input, ...m.poles.flat()] : m.k === 'plc' ? [...m.supply, ...m.inputs, ...m.outputs.flatMap((o) => [o.com, o.out])] : m.ports
     const free = ports.filter((p) => !used.has(`${s.id}:${p}`))
     if (free.length === ports.length) out.push({ level: 'warn', symId: s.id, text: S(lang, `${name(s)} n'est raccordé à aucun fil.`, `${name(s)} is not connected to any wire.`) })
     else if (free.length && (m.k === 'coil' || m.k === 'load')) out.push({ level: 'warn', symId: s.id, text: S(lang, `${name(s)} : borne non raccordée.`, `${name(s)}: unconnected terminal.`) })

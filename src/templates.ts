@@ -118,6 +118,54 @@ export const pneumaticAuto = (base: Doc): Doc => {
     ])
 }
 
+/** Cycle A+ B+ A- B- commandé par un automate programmable (Grafcet) : deux vérins repérés 1A1 et 2A1, électrovannes 1V1+ et 2V1+, détecteurs de position 1S1 1S2 2S1 2S2. */
+export const pneumaticPlc = (base: Doc): Doc => {
+  const V52 = FV('5020106020_elec/502010602010_5_2_way_010')
+  const LS = Q('390_sensors_instruments/41_limit_switches/fin_de_course_came_2_no')
+  const COIL = Q('310_relays_contactors_contacts/01_coils/bobine3')
+  const PB = Q('380_signaling_operating/20_push_buttons/poussoir')
+  const chain = (n: number, x: number): [Spec[], Link[]] => [
+    [[`a${n}`, CYL, x, 80, `${n}A1`], [`v${n}`, V52, x + 20, 210, `${n}V1`], [`r${n}a`, SIL, x - 10, 310, ''], [`r${n}b`, SIL, x + 160, 310, '']],
+    [[`v${n}`, 't3', `a${n}`, 't0'], [`v${n}`, 't1', `a${n}`, 't1'], [`v${n}`, 't0', `r${n}a`, 't0'], [`v${n}`, 't2', `r${n}b`, 't0'], [`v${n}`, 't4', 'air', 't0']],
+  ]
+  const [s1, l1] = chain(1, 80)
+  const [s2, l2] = chain(2, 340)
+  const d = build(base,
+    [...s1, ...s2, ['air', SRC, 270, 400, ''],
+      ['es', 'sim-src1', 620, 40], ['b', PB, 560, 120, 'S1'],
+      ['d11', LS, 640, 120, '1S1'], ['d12', LS, 720, 120, '1S2'], ['d21', LS, 800, 120, '2S1'], ['d22', LS, 880, 120, '2S2'],
+      ['p', 'plc-8e8s-relay', 620, 330, 'API1'], ['k1', COIL, 620, 480, '1V1+'], ['k2', COIL, 780, 480, '2V1+']],
+    [...l1, ...l2,
+      ['es', 'a', 'p', 'lp'], ['es', 'b', 'p', 'm'], ['es', 'a', 'p', 'com'],
+      ['es', 'a', 'b', 't0'], ['b', 't1', 'p', 'i0'],
+      ['es', 'a', 'd11', 't0'], ['d11', 't1', 'p', 'i1'], ['es', 'a', 'd12', 't0'], ['d12', 't1', 'p', 'i2'],
+      ['es', 'a', 'd21', 't0'], ['d21', 't1', 'p', 'i3'], ['es', 'a', 'd22', 't0'], ['d22', 't1', 'p', 'i4'],
+      ['p', 'q0', 'k1', 't0'], ['k1', 't1', 'es', 'b'], ['p', 'q1', 'k2', 't0'], ['k2', 't1', 'es', 'b']])
+  for (const s of d.symbols) {
+    if (s.defId === 'sim-src1') { s.dc = true; s.volts = 24 }
+    if (s.defId === COIL) s.volts = 24
+    const det: Record<string, { cyl: string; at: number }> = { '1S1': { cyl: '1A1', at: 0 }, '1S2': { cyl: '1A1', at: 1 }, '2S1': { cyl: '2A1', at: 0 }, '2S2': { cyl: '2A1', at: 1 } }
+    if (det[s.label]) s.det = det[s.label]
+    if (s.defId === 'plc-8e8s-relay') {
+      s.plc = {
+        names: { 'I0.0': 'dcy', 'I0.1': 'a0', 'I0.2': 'a1', 'I0.3': 'b0', 'I0.4': 'b1', 'Q0.0': 'A+', 'Q0.1': 'B+' },
+        steps: [
+          { id: 0, init: true, actions: [], comment: 'attente' },
+          { id: 1, actions: [{ kind: 'N', var: 'A+' }], comment: 'A sort' },
+          { id: 2, actions: [{ kind: 'N', var: 'A+' }, { kind: 'N', var: 'B+' }], comment: 'B sort' },
+          { id: 3, actions: [{ kind: 'N', var: 'B+' }], comment: 'A rentre' },
+          { id: 4, actions: [], comment: 'B rentre' },
+        ],
+        transitions: [
+          { from: [0], to: [1], cond: 'dcy ET a0 ET b0' }, { from: [1], to: [2], cond: 'a1' }, { from: [2], to: [3], cond: 'b1' }, { from: [3], to: [4], cond: 'a0' }, { from: [4], to: [0], cond: 'b0' },
+        ],
+        ladder: [],
+      }
+    }
+  }
+  return d
+}
+
 const L = (p: string) => Q('380_signaling_operating/' + p)
 const R = (p: string) => Q('310_relays_contactors_contacts/' + p)
 

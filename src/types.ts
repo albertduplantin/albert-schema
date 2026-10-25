@@ -43,6 +43,8 @@ export type SimModel =
       /** enroulements séparés (moteur à 6 bornes) : chacun entre deux bornes ; le couplage (étoile, triangle) est fait par les fils */
       windings?: [string, string][]
     }
+  /** automate programmable : alimentation (L+, M), entrées (actives quand leur borne est alimentée), sorties à contact (commun → borne) */
+  | { k: 'plc'; supply: [string, string]; inputs: string[]; outputs: { com: string; out: string }[] }
   /** relais statique : l'entrée commande la voie de sortie sans bobine ni repère */
   | { k: 'ssr'; input: [string, string]; poles: [string, string][] }
 
@@ -168,6 +170,8 @@ export interface PlacedSymbol {
   nameText?: string
   /** numéros de bornes personnalisés : identifiant de borne → repère (remplace celui du symbole) */
   terms?: Record<string, string>
+  /** programme de l'automate (Grafcet et Ladder) */
+  plc?: import('./sim/plc').PlcProgram
   /** détecteur posé sur un vérin : repère du vérin (1A1) et position le long de la course (0 = rentré, 1 = sorti) où le contact se ferme */
   det?: { cyl: string; at: number }
   /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */

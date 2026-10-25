@@ -509,3 +509,42 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 .guided-brief h4 { margin: 8px 0 3px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ui-muted); }
 .guided-brief ul, .guided-brief ol { margin: 2px 0 4px 18px; padding: 0; }
 .guided-brief li { margin: 2px 0; }
+
+/* ── automate : panneau de programmation */
+.plc-panel { position: fixed; left: 250px; right: 260px; bottom: 0; height: 48vh; min-height: 260px; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-bottom: 0; border-radius: 10px 10px 0 0; box-shadow: 0 -4px 18px #0004; z-index: 30; display: flex; flex-direction: column; font-size: 12px; }
+.plc-panel > header { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-bottom: 1px solid var(--ui-line); }
+.plc-panel nav { display: flex; gap: 2px; }
+.plc-panel nav button { padding: 3px 10px; border: 1px solid var(--ui-line); background: transparent; color: inherit; border-radius: 6px; cursor: pointer; }
+.plc-panel nav button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.plc-panel .grow { flex: 1; }
+.plc-body { overflow: auto; padding: 8px 12px; flex: 1; }
+.plc-grafcet { display: grid; grid-template-columns: minmax(380px, 1.3fr) minmax(260px, 1fr); gap: 14px; }
+.plc-edit, .plc-view { overflow: auto; }
+.plc-view { border-left: 1px solid var(--ui-line); padding-left: 10px; }
+.plc-view svg { color: var(--ui-text); }
+.plc-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; flex-wrap: wrap; }
+.plc-row input:not([type]), .plc-row input[type='text'], .plc-row input[type='number'], .plc-row select { padding: 2px 5px; border: 1px solid var(--ui-line); border-radius: 4px; background: var(--ui-panel); color: inherit; font: inherit; min-width: 0; }
+.plc-row input.short { width: 52px; }
+.plc-row input.cond { flex: 1; min-width: 160px; }
+.plc-row input.bad { border-color: #e53935; background: #e5393511; }
+.plc-card { border: 1px solid var(--ui-line); border-radius: 6px; padding: 5px 8px; margin: 6px 0; }
+.plc-card.active { border-color: #35c759; box-shadow: 0 0 0 2px #35c75955; }
+.plc-actions { display: flex; gap: 6px; margin: 6px 0; }
+.plc-panel button { font: inherit; cursor: pointer; }
+.plc-panel .mini { padding: 1px 6px; font-size: 11px; }
+.stepno { display: inline-grid; place-items: center; min-width: 22px; height: 22px; border: 2px solid currentColor; font-size: 12px; }
+.plc-io { display: grid; grid-template-columns: repeat(3, minmax(190px, 1fr)); gap: 16px; }
+.plc-io h4, .plc-edit h4 { margin: 8px 0 3px; font-size: 12px; }
+.led { width: 9px; height: 9px; border-radius: 50%; background: #c8c8c8; border: 1px solid #777; display: inline-block; }
+.led.on { background: #35c759; border-color: #1f8f3a; box-shadow: 0 0 5px #35c759; }
+.chip { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--ui-line); border-radius: 5px; padding: 1px 3px; }
+.chip.on { background: #35c75933; border-color: #35c759; }
+.chip input { width: 82px; }
+.plc-branch { padding-left: 14px; border-left: 3px solid var(--ui-line); }
+@media (max-width: 1100px) { .plc-panel { left: 0; right: 0; } .plc-grafcet { grid-template-columns: 1fr; } }
+.plc-panel input:not([type='checkbox']):not([type='range']), .plc-panel select { width: auto; max-width: 100%; }
+.plc-panel .plc-row > input:not(.short):not(.cond) { flex: 1 1 120px; }
+.plc-panel .plc-row > select { flex: 0 0 auto; }
+.plc-panel .chip input { flex: 0 0 auto; }
+.plc-panel .plc-row button.mini { text-transform: none; letter-spacing: 0; }
+.plc-panel button { text-transform: none; letter-spacing: 0; }

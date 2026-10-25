@@ -1,4 +1,5 @@
 import { detectTrips } from './protect'
+import { emptyProgram, scan, type PlcState } from './plc'
 import { basePot, potVolts, sourcePots, withSourceVoltages } from './potentials'
 import type { Doc, PlacedSymbol, SimModel, SymbolDef, TimerKind } from '../types'
 import { cylPos, solveFluid, STROKE_S } from './fluid'
@@ -31,7 +32,7 @@ export interface SimInputs {
 }
 
 /** Mémoire de simulation : état de chaque relais (par repère) et instant du dernier changement. */
-export type SimMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number; v?: number }>
+export type SimMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number; v?: number; plc?: PlcState }>
 
 export interface SimResult {
   /** mémoire à réinjecter au calcul suivant */
@@ -72,6 +73,8 @@ export interface SimResult {
   valveA: Record<string, boolean>
   /** distributeurs à trois positions : case de droite (commande B) */
   valveB: Record<string, boolean>
+  /** automates alimentés : étapes actives, entrées et sorties en direct */
+  plc: Record<string, PlcState>
   /** moteurs pneumatiques : sens de rotation */
   fluidMotor: Record<string, -1 | 0 | 1>
 }
@@ -216,6 +219,12 @@ function solve(x: Ctx) {
       const on = !!x.memory['§S:' + s.id]?.on
       closed[s.id] = on
       if (on) for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
+      continue
+    }
+    if (m?.k === 'plc') {
+      // sorties à contact de l'automate : elles se ferment quand le programme les commande (et que l'automate est alimenté)
+      const st = x.memory['§PLC:' + s.id]?.plc
+      m.outputs.forEach((o, i) => { if (st?.out[i]) link(key(s.id, o.com), key(s.id, o.out)) })
       continue
     }
     if (m?.k !== 'switch') continue
@@ -676,10 +685,29 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     let changed = false
     const labels = new Set([...Object.keys(memory), ...Object.keys(out.coilOn)])
     for (const l of labels) {
-      if (l.startsWith('§C:') || l.startsWith('§V:') || l.startsWith('§TRIP:') || l.startsWith('§OVL:') || l.startsWith('§PS:')) continue // mémoire des circuits de fluide : gérée plus bas
+      if (l.startsWith('§C:') || l.startsWith('§V:') || l.startsWith('§TRIP:') || l.startsWith('§OVL:') || l.startsWith('§PS:') || l.startsWith('§PLC:')) continue // mémoire des circuits de fluide : gérée plus bas
       const on = !!out.coilOn[l]
       if (on !== (memory[l]?.on ?? false)) {
         memory[l] = { on, since: now }
+        changed = true
+      }
+    }
+    // automates : lecture des entrées sur les bornes alimentées, un scan du programme, sorties reprises au calcul suivant
+    for (const s of doc.symbols) {
+      const m = defs[s.defId]?.sim
+      if (m?.k !== 'plc') continue
+      const pl = out.potOf(s.id, m.supply[0]), pm = out.potOf(s.id, m.supply[1])
+      const powered = !!pl && !!pm && pl !== pm
+      const prev = memory['§PLC:' + s.id]
+      if (!powered) {
+        if (prev) { delete memory['§PLC:' + s.id]; changed = true }
+        continue
+      }
+      const ins = m.inputs.map((p) => { const v = out.potOf(s.id, p); return !!v && v !== pm })
+      const r = scan(s.plc ?? emptyProgram(), prev?.plc, ins, now)
+      ctx.pending.push(...r.pending)
+      if (!prev || JSON.stringify(prev.plc) !== JSON.stringify(r.state)) {
+        memory['§PLC:' + s.id] = { on: r.state.out.some(Boolean), since: now, plc: r.state }
         changed = true
       }
     }
@@ -779,6 +807,17 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     if (dir !== 0 && pos > 0 && pos < 1) fluidPending.push(Math.max(1, ((dir > 0 ? 1 - pos : pos) * STROKE_S * 1000) / (m?.v ?? 1)), 33)
     else if (dir !== 0 && ((dir > 0 && pos <= 0) || (dir < 0 && pos >= 1))) fluidPending.push(60)
   }
+  // automates : état en direct pour l'affichage, et prochaine échéance de temporisation (le scan est recalculé sans rien modifier)
+  const plcLive: Record<string, PlcState> = {}
+  for (const s of doc.symbols) {
+    const m = defs[s.defId]?.sim
+    const st = memory['§PLC:' + s.id]?.plc
+    if (m?.k !== 'plc' || !st) continue
+    plcLive[s.id] = st
+    const pm = out.potOf(s.id, m.supply[1])
+    const ins = m.inputs.map((p) => { const v = out.potOf(s.id, p); return !!v && v !== pm })
+    ctx.pending.push(...scan(s.plc ?? emptyProgram(), st, ins, now).pending)
+  }
   const unsupported = doc.symbols.filter((s) => !defs[s.defId]?.sim && !defs[s.defId]?.fluid && !defs[s.defId]?.decor).map((s) => s.id)
   return {
     state: memory, energized, closed: out.closed, pos3: out.pos3, rotation, tripped: new Set<string>(), potentialOf, shorts: out.shorts, unstable, unsupported,
@@ -790,6 +829,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     cylPos: cyl,
     valveA: fl.valveA,
     valveB: fl.valveB,
+    plc: plcLive,
     fluidMotor: fl.motor,
   }
 }

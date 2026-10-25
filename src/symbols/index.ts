@@ -2,6 +2,7 @@ import { electrical } from './electrical'
 import { pneumatic, hydraulic } from './fluid'
 import { simSources } from './simulation'
 import { flowParts } from './flow'
+import { plcParts } from './plc'
 import { staticSvg } from './fluidDraw'
 import { SOURCES_MENU, SOURCES_NAME, organizeSources } from './sources'
 import type { Domain, SymbolDef } from '../types'
@@ -9,7 +10,7 @@ import type { Domain, SymbolDef } from '../types'
 /** Symboles dessinés à la main : conservés pour les anciens fichiers, masqués de la palette. */
 const legacy: SymbolDef[] = [...electrical, ...pneumatic, ...hydraulic].map((s) => ({ ...s, legacy: true }))
 
-export const SYMBOLS: SymbolDef[] = [...legacy, ...simSources, ...flowParts]
+export const SYMBOLS: SymbolDef[] = [...legacy, ...simSources, ...flowParts, ...plcParts]
 export const SYMBOL_MAP: Record<string, SymbolDef> = Object.fromEntries(SYMBOLS.map((s) => [s.id, s]))
 export const CATEGORIES: Record<Domain, { id: string; name: { fr: string; en: string } }[]> = {
   electrical: [],
@@ -43,7 +44,7 @@ export function loadLibrary(): Promise<void> {
       organizeSources(SYMBOLS)
       // un seul menu pour toutes les sources : les catégories « sources réseau » et « générateurs et sources » y sont fondues
       const merged = new Set(['10_electric_10_allpole/110_network_supplies', '10_electric_10_allpole/392_generators_sources'])
-      CATEGORIES.electrical = [{ id: SOURCES_MENU, name: SOURCES_NAME }, ...CATEGORIES.electrical.filter((c) => !merged.has(c.id))]
+      CATEGORIES.electrical = [{ id: SOURCES_MENU, name: SOURCES_NAME }, { id: 'plc', name: { fr: 'Automates programmables', en: 'Programmable controllers' } }, ...CATEGORIES.electrical.filter((c) => !merged.has(c.id))]
     })
   return loading
 }

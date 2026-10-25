@@ -5,6 +5,7 @@ import { addVersion, loadVersions, removeVersion, type Version } from './version
 import Combo from './Combo'
 import { GuidedList, GuidedPanel } from './GuidedPanel'
 import { GUIDED, guidedById } from './guidedData'
+import PlcEditor from './PlcEditor'
 import { customExercise, type CustomExo } from './customEx'
 import type { GExercise } from './guided'
 import { defaultVolts, sourcePots } from './sim/potentials'
@@ -18,7 +19,7 @@ import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
 import Feedback from './Feedback'
 import { bomRows, exportCsv, exportDxf, exportWiringCsv, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows, fileBase } from './exporters'
-import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
+import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticPlc, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
 import { fieldLabel, fieldsFor, kindOf, motorCurrent } from './ratings'
@@ -122,7 +123,7 @@ const nextLabel = (doc: Doc, defId: string) => {
 
 const TEMPLATE_FN: Record<string, (b: Doc) => Doc> = {
   tplMotor: motorStarter, tplLamps: startLamps, tplTimer: timerOnDelay, tplTrafo: motorStarterTransformer, tplCascade: delayedCascade, tplRelay24: relay24V,
-  tplReversing: reversingStarter, tplPneu: pneumaticCylinder, tplPneuElec: pneumaticElectric, tplPneuAuto: pneumaticAuto,
+  tplReversing: reversingStarter, tplPneu: pneumaticCylinder, tplPneuElec: pneumaticElectric, tplPneuAuto: pneumaticAuto, tplPneuPlc: pneumaticPlc,
 }
 const GALLERY = BUILTIN_META.map((m) => ({ ...m, fn: TEMPLATE_FN[m.key] }))
 /** Exemple publié par l'administrateur (le schéma est téléchargé à l'ouverture). */
@@ -1170,6 +1171,9 @@ function Editor() {
     return out
   }, [all])
   const cylinderLabels = useMemo(() => [...new Set(all.symbols.filter((s) => SYMBOL_MAP[s.defId]?.fluid?.k === 'cyl' && s.label).map((s) => s.label))], [all])
+  // automate : panneau de programmation (Grafcet et langage à contacts)
+  const [plcEdit, setPlcEdit] = useState<string | null>(null)
+  const plcSym = plcEdit ? doc.symbols.find((x) => x.id === plcEdit) : undefined
   const wireAdvice = useMemo(() => (selWire ? computeWireAdvice(selWire, all, SYMBOL_MAP, lang) : undefined), [selWire, all, lang])
   const symForm = selSym ? (
           <div className="form" onFocus={checkpoint}>
@@ -1262,6 +1266,13 @@ function Editor() {
                   value={selSym.volts ?? ''} onChange={(e) => patchSym({ volts: Number(e.target.value) > 0 ? Number(e.target.value) : undefined })} />
                 {advLine('volts', selSym.volts)}
               </label>
+            )}
+            {SYMBOL_MAP[selSym.defId].sim?.k === 'plc' && (
+              <fieldset className="ratings">
+                <legend>{lang === 'fr' ? 'Programme' : 'Program'}</legend>
+                <button type="button" onClick={() => setPlcEdit(selSym.id)}>{lang === 'fr' ? 'Programmer l’automate…' : 'Program the controller…'}</button>
+                <p className="muted small">{lang === 'fr' ? `${selSym.plc?.steps.length ?? 0} étape(s) Grafcet · ${selSym.plc?.ladder.length ?? 0} réseau(x) Ladder. Alimentez L+ et M (24 V) pour que l’automate démarre.` : `${selSym.plc?.steps.length ?? 0} Grafcet step(s) · ${selSym.plc?.ladder.length ?? 0} ladder rung(s). Power L+ and M (24 V) to start the controller.`}</p>
+              </fieldset>
             )}
             {(() => { const d = SYMBOL_MAP[selSym.defId]; return d.sim?.k === 'switch' && d.sim.ctl === 'toggle' && /390_sensors_instruments|41_limit_switches/.test(d.id) })() && (
               <fieldset className="ratings" data-tip={lang === 'fr' ? 'Pose ce capteur sur un vérin pneumatique ou hydraulique : le contact se ferme quand le piston atteint la position réglée. Un repère sur le vérin montre où il est placé.' : 'Mounts this sensor on a pneumatic or hydraulic cylinder: the contact closes when the piston reaches the set position. A mark on the cylinder shows where it sits.'}>
@@ -1993,6 +2004,11 @@ function Editor() {
         </div>
       )}
 
+      {plcSym && (
+        <PlcEditor title={`${plcSym.label || 'A1'} — ${lang === 'fr' ? 'programme de l’automate' : 'controller program'}`} lang={lang} program={plcSym.plc} live={sim?.plc[plcSym.id]}
+          onFocus={checkpoint} onClose={() => setPlcEdit(null)}
+          onChange={(p) => update((d) => ({ ...d, symbols: d.symbols.map((x) => (x.id === plcSym.id ? { ...x, plc: p } : x)) }))} />
+      )}
       {showGuided && <GuidedList list={allGuided} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} classCode={classInfo.code} pseudo={classInfo.pseudo} onClass={setClass} />}
 
       {tourStep !== null && (
