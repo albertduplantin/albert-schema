@@ -115,7 +115,7 @@ try {
   await sleep(800)
   await p3.evaluate(() => [...document.querySelectorAll('button')].find((x) => /Simuler/.test(x.textContent))?.click())
   await sleep(500)
-  const s1 = await p3.evaluate(() => { const d = JSON.parse(localStorage.getItem('albertschema.doc')); const g = document.querySelector(`[data-sym="${d.symbols.find((x) => x.label === 'S1').id}"]`); const q = [...g.querySelectorAll('path,rect,line')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 3 && r.height > 3).sort((a, b) => b.width * b.height - a.width * a.height)[0]; return { x: q.x + q.width / 2, y: q.y + q.height / 2 } })
+  const s1 = await p3.evaluate(() => { const d = JSON.parse(localStorage.getItem('albertschema.doc')); const g = document.querySelector(`[data-sym="${d.symbols.find((x) => x.label === 'dcy').id}"]`); const q = [...g.querySelectorAll('path,rect,line')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 3 && r.height > 3).sort((a, b) => b.width * b.height - a.width * a.height)[0]; return { x: q.x + q.width / 2, y: q.y + q.height / 2 } })
   await p3.mouse.move(s1.x, s1.y); await p3.mouse.down(); await sleep(250); await p3.mouse.up()
   await sleep(600)
   check('exemple automate : chambres du vérin colorées en rouge (pression) pendant le cycle', await p3.evaluate(() => !!document.querySelector('svg.canvas rect[fill^="rgba(229"]')))

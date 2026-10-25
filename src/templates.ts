@@ -118,43 +118,55 @@ export const pneumaticAuto = (base: Doc): Doc => {
     ])
 }
 
-/** Cycle A+ B+ A- B- commandé par un automate programmable (Grafcet) : deux vérins repérés 1A1 et 2A1, électrovannes 1V1+ et 2V1+, détecteurs de position 1S1 1S2 2S1 2S2. */
+/**
+ * Cycle A+ B+ A- B- commandé par un automate programmable (Grafcet), écrit comme dans les sujets d'examen : deux vérins repérés 1A et 2A,
+ * deux distributeurs 5/2 bistables 1V1 et 2V1 dont les bobines sont 1YV14 / 1YV12 (A+ / A-) et 2YV14 / 2YV12 (B+ / B-),
+ * détecteurs de position a0 a1 (vérin A) et b0 b1 (vérin B), bouton de départ de cycle dcy.
+ */
 export const pneumaticPlc = (base: Doc): Doc => {
-  const V52 = FV('5020106020_elec/502010602010_5_2_way_010')
+  const V52 = FV('5020106020_elec/502010602030_5_2_way_030')
   const LS = Q('390_sensors_instruments/41_limit_switches/fin_de_course_came_2_no')
   const COIL = Q('310_relays_contactors_contacts/01_coils/bobine3')
   const PB = Q('380_signaling_operating/20_push_buttons/poussoir')
-  const chain = (n: number, x: number): [Spec[], Link[]] => [
-    [[`a${n}`, CYL, x, 80, `${n}A1`], [`v${n}`, V52, x + 20, 210, `${n}V1`], [`r${n}a`, SIL, x - 10, 310, ''], [`r${n}b`, SIL, x + 160, 310, '']],
-    [[`v${n}`, 't3', `a${n}`, 't0'], [`v${n}`, 't1', `a${n}`, 't1'], [`v${n}`, 't0', `r${n}a`, 't0'], [`v${n}`, 't2', `r${n}b`, 't0'], [`v${n}`, 't4', 'air', 't0']],
-  ]
-  const [s1, l1] = chain(1, 80)
-  const [s2, l2] = chain(2, 340)
+  const chain = (n: number, x: number, cyl: string): [Spec[], Link[]] => {
+    const [s, l] = pneuPart(V52, `${n}V1`, { b: 't3', a: 't0', r1: 't4', p: 't2', r2: 't1' })
+    // pneuPart pose un seul circuit : on le décale et on le renomme pour chaque vérin (le circuit pneumatique est dessiné deux fois).
+    const k = (key: string) => `${key}${n}`
+    return [
+      s.filter((e) => e[0] !== 'src').map(([key, def, px, py, label]) => [k(key), def, px + x, py - 30, key === 'a1' ? cyl : label] as Spec),
+      l.filter(([a, , b]) => a !== 'src' && b !== 'src').map(([a, ap, b, bp]) => [k(a), ap, k(b), bp] as Link),
+    ]
+  }
+  const [s1, l1] = chain(1, 0, '1A')
+  const [s2, l2] = chain(2, 280, '2A')
   const d = build(base,
-    [...s1, ...s2, ['air', SRC, 270, 400, ''],
-      ['es', 'sim-src1', 620, 40], ['b', PB, 560, 120, 'S1'],
-      ['d11', LS, 640, 120, '1S1'], ['d12', LS, 720, 120, '1S2'], ['d21', LS, 800, 120, '2S1'], ['d22', LS, 880, 120, '2S2'],
-      ['p', 'plc-8e8s-relay', 620, 330, 'API1'], ['k1', COIL, 620, 480, '1V1+'], ['k2', COIL, 780, 480, '2V1+']],
+    [...s1, ...s2, ['air', SRC, 330, 420, ''],
+      ['es', 'sim-src1', 700, 40], ['b', PB, 640, 120, 'dcy'],
+      ['d11', LS, 720, 120, 'a0'], ['d12', LS, 800, 120, 'a1'], ['d21', LS, 880, 120, 'b0'], ['d22', LS, 960, 120, 'b1'],
+      ['p', 'plc-8e8s-relay', 700, 330, 'API1'],
+      ['k1', COIL, 700, 480, '1YV14'], ['k2', COIL, 800, 480, '1YV12'], ['k3', COIL, 900, 480, '2YV14'], ['k4', COIL, 1000, 480, '2YV12']],
     [...l1, ...l2,
+      ['v1', 't2', 'air', 't0'], ['v2', 't2', 'air', 't0'],
       ['es', 'a', 'p', 'lp'], ['es', 'b', 'p', 'm'], ['es', 'a', 'p', 'com'],
       ['es', 'a', 'b', 't0'], ['b', 't1', 'p', 'i0'],
       ['es', 'a', 'd11', 't0'], ['d11', 't1', 'p', 'i1'], ['es', 'a', 'd12', 't0'], ['d12', 't1', 'p', 'i2'],
       ['es', 'a', 'd21', 't0'], ['d21', 't1', 'p', 'i3'], ['es', 'a', 'd22', 't0'], ['d22', 't1', 'p', 'i4'],
-      ['p', 'q0', 'k1', 't0'], ['k1', 't1', 'es', 'b'], ['p', 'q1', 'k2', 't0'], ['k2', 't1', 'es', 'b']])
+      ['p', 'q0', 'k1', 't0'], ['k1', 't1', 'es', 'b'], ['p', 'q1', 'k2', 't0'], ['k2', 't1', 'es', 'b'],
+      ['p', 'q2', 'k3', 't0'], ['k3', 't1', 'es', 'b'], ['p', 'q3', 'k4', 't0'], ['k4', 't1', 'es', 'b']])
   for (const s of d.symbols) {
     if (s.defId === 'sim-src1') { s.dc = true; s.volts = 24 }
     if (s.defId === COIL) s.volts = 24
-    const det: Record<string, { cyl: string; at: number }> = { '1S1': { cyl: '1A1', at: 0 }, '1S2': { cyl: '1A1', at: 1 }, '2S1': { cyl: '2A1', at: 0 }, '2S2': { cyl: '2A1', at: 1 } }
+    const det: Record<string, { cyl: string; at: number }> = { a0: { cyl: '1A', at: 0 }, a1: { cyl: '1A', at: 1 }, b0: { cyl: '2A', at: 0 }, b1: { cyl: '2A', at: 1 } }
     if (det[s.label]) s.det = det[s.label]
     if (s.defId === 'plc-8e8s-relay') {
       s.plc = {
-        names: { 'I0.0': 'dcy', 'I0.1': 'a0', 'I0.2': 'a1', 'I0.3': 'b0', 'I0.4': 'b1', 'Q0.0': 'A+', 'Q0.1': 'B+' },
+        names: { 'I0.0': 'dcy', 'I0.1': 'a0', 'I0.2': 'a1', 'I0.3': 'b0', 'I0.4': 'b1', 'Q0.0': '1YV14', 'Q0.1': '1YV12', 'Q0.2': '2YV14', 'Q0.3': '2YV12' },
         steps: [
           { id: 0, init: true, actions: [], comment: 'attente' },
-          { id: 1, actions: [{ kind: 'N', var: 'A+' }], comment: 'A sort' },
-          { id: 2, actions: [{ kind: 'N', var: 'A+' }, { kind: 'N', var: 'B+' }], comment: 'B sort' },
-          { id: 3, actions: [{ kind: 'N', var: 'B+' }], comment: 'A rentre' },
-          { id: 4, actions: [], comment: 'B rentre' },
+          { id: 1, actions: [{ kind: 'N', var: '1YV14' }], comment: 'A sort' },
+          { id: 2, actions: [{ kind: 'N', var: '2YV14' }], comment: 'B sort' },
+          { id: 3, actions: [{ kind: 'N', var: '1YV12' }], comment: 'A rentre' },
+          { id: 4, actions: [{ kind: 'N', var: '2YV12' }], comment: 'B rentre' },
         ],
         transitions: [
           { from: [0], to: [1], cond: 'dcy ET a0 ET b0' }, { from: [1], to: [2], cond: 'a1' }, { from: [2], to: [3], cond: 'b1' }, { from: [3], to: [4], cond: 'a0' }, { from: [4], to: [0], cond: 'b0' },

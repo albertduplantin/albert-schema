@@ -107,13 +107,13 @@ const prog = (): any => ({
   }
 }
 
-// ── exemple complet : cycle A+ B+ A- B- piloté par l'automate (Grafcet), électrovannes 1V1+/2V1+, détecteurs sur les vérins
+// ── exemple complet : cycle A+ B+ A- B- piloté par l'automate (Grafcet), distributeurs bistables 1V1/2V1 (bobines 1YV14/1YV12, 2YV14/2YV12), détecteurs a0 a1 b0 b1
 {
   const d = T.pneumaticPlc(base)
   let mem: any = {}, now = 1000
   const run = (pressed: string[], dt: number) => { now += dt; const r = simulate(d, SYMBOL_MAP, mem, { pressed: new Set(pressed), toggled: new Set(), cut: new Set() }, now); mem = r.state; return r }
   const id = (l: string) => d.symbols.find((x: any) => x.label === l).id
-  const [A, B, S1, P] = [id('1A1'), id('2A1'), id('S1'), id('API1')]
+  const [A, B, S1, P] = [id('1A'), id('2A'), id('dcy'), id('API1')]
   let r = run([], 0); r = run([], 100)
   check('exemple automate : au repos, vérins rentrés et automate à l’étape 0', [r.cylPos[A], r.cylPos[B], r.plc[P]?.steps], [0, 0, [0]])
   run([S1], 50); r = run([S1], 50); run([], 50)
