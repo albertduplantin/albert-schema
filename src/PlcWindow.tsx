@@ -47,8 +47,9 @@ interface Props {
 
 export default function PlcWindow({ win, set, lang, title, header, onClose, children }: Props) {
   const ref = useRef<HTMLElement>(null)
-  const drag = useRef<{ kind: 'size' | 'move' | 'corner'; dx: number; dy: number } | null>(null)
+  const drag = useRef<{ kind: 'size' | 'move' | 'corner'; dx: number; dy: number; x0: number; y0: number } | null>(null)
   const [, force] = useState(0)
+  const [snap, setSnap] = useState<WinState['dock'] | null>(null)
   useEffect(() => { const f = () => force((n) => n + 1); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
 
   const stage = () => ref.current?.parentElement?.getBoundingClientRect()
@@ -57,19 +58,34 @@ export default function PlcWindow({ win, set, lang, title, header, onClose, chil
     if (win.max) return
     const st = stage(); if (!st) return
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    drag.current = { kind, dx: e.clientX - st.left - win.fx, dy: e.clientY - st.top - win.fy }
+    drag.current = { kind, dx: e.clientX - st.left - win.fx, dy: e.clientY - st.top - win.fy, x0: e.clientX, y0: e.clientY }
     e.preventDefault()
   }
   const move = (e: RPointerEvent) => {
     const d = drag.current, st = stage()
     if (!d || !st) return
-    if (d.kind === 'move') set({ fx: clamp(e.clientX - st.left - d.dx, 0, st.width - 120), fy: clamp(e.clientY - st.top - d.dy, 0, st.height - 40) })
+    if (d.kind === 'move') {
+      if (win.dock !== 'float') {
+        // glisser le bandeau d'une fenêtre ancrée la détache : elle devient flottante sous le pointeur
+        if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 6) return
+        drag.current = { ...d, dx: 90, dy: 14 }
+        set({ dock: 'float', min: false, fx: clamp(e.clientX - st.left - 90, 0, st.width - 120), fy: clamp(e.clientY - st.top - 14, 0, st.height - 40) })
+        return
+      }
+      set({ fx: clamp(e.clientX - st.left - d.dx, 0, st.width - 120), fy: clamp(e.clientY - st.top - d.dy, 0, st.height - 40) })
+      // bords de la feuille : proposition d'ancrage
+      setSnap(e.clientX - st.left < 24 ? 'left' : st.right - e.clientX < 24 ? 'right' : st.bottom - e.clientY < 24 ? 'bottom' : null)
+    }
     else if (d.kind === 'corner') set({ fw: clamp(e.clientX - st.left - win.fx, 360, st.width - win.fx), fh: clamp(e.clientY - st.top - win.fy, 220, st.height - win.fy) })
     else if (win.dock === 'bottom') set({ h: clamp(st.bottom - e.clientY, 140, st.height - 70) })
     else if (win.dock === 'left') set({ w: clamp(e.clientX - st.left, 280, st.width - 120) })
     else if (win.dock === 'right') set({ w: clamp(st.right - e.clientX, 280, st.width - 120) })
   }
-  const end = () => { drag.current = null }
+  const end = () => {
+    if (drag.current?.kind === 'move' && snap) set({ dock: snap, min: false })
+    drag.current = null
+    setSnap(null)
+  }
 
   const cls = `plcwin dock-${win.dock}${win.max ? ' max' : ''}${win.min ? ' min' : ''}`
   const style: Record<string, string | number> = {}
@@ -84,11 +100,11 @@ export default function PlcWindow({ win, set, lang, title, header, onClose, chil
   )
 
   return (
-    <section ref={ref} className={cls} style={style} aria-label={title}>
+    <section ref={ref} className={cls + (snap ? ' snap-' + snap : '')} style={style} aria-label={title}>
       {!win.max && !win.min && win.dock !== 'float' && (
         <div className={`plcwin-grip grip-${win.dock}`} onPointerDown={start('size')} onPointerMove={move} onPointerUp={end} role="separator" aria-label={T(lang, 'Redimensionner', 'Resize')} />
       )}
-      <header onDoubleClick={() => set({ max: !win.max, min: false })} onPointerDown={win.dock === 'float' && !win.max ? start('move') : undefined} onPointerMove={move} onPointerUp={end}>
+      <header onDoubleClick={() => set({ max: !win.max, min: false })} onPointerDown={!win.max ? start('move') : undefined} onPointerMove={move} onPointerUp={end}>
         <strong className="plcwin-title">{title}</strong>
         <div className="plcwin-extra" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>{header}</div>
         <span className="grow" />

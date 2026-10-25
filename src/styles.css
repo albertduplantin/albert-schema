@@ -517,18 +517,21 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 .stage[data-plcdock='bottom'] > svg.canvas { height: calc(100% - var(--plc-h)); }
 .stage[data-plcdock='left'] > svg.canvas { margin-left: var(--plc-w); width: calc(100% - var(--plc-w)); }
 .stage[data-plcdock='right'] > svg.canvas { width: calc(100% - var(--plc-w)); }
-.plcwin { position: absolute; z-index: 30; display: flex; flex-direction: column; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); box-shadow: 0 4px 22px #0005; font-size: 12px; container-type: inline-size; min-width: 0; min-height: 0; }
+.plcwin { position: absolute; z-index: 10; display: flex; flex-direction: column; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); box-shadow: 0 4px 22px #0005; font-size: 12px; container-type: inline-size; min-width: 0; min-height: 0; }
 .plcwin.dock-bottom { left: 0; right: 0; bottom: 0; border-radius: 10px 10px 0 0; }
 .plcwin.dock-left { left: 0; top: 0; bottom: 0; border-radius: 0 10px 10px 0; }
 .plcwin.dock-right { right: 0; top: 0; bottom: 0; border-radius: 10px 0 0 10px; }
 .plcwin.dock-float { border-radius: 10px; }
-.plcwin.max { position: fixed; inset: 0 !important; width: auto !important; height: auto !important; border-radius: 0; z-index: 100; }
+.plcwin.max { inset: 0 !important; width: auto !important; height: auto !important; border-radius: 0; }
 .plcwin.min { height: auto !important; bottom: 0; top: auto; width: 460px; }
 .plcwin.min.dock-bottom, .plcwin.min.dock-float { left: 8px; right: auto; }
 .plcwin.min.dock-left { left: 0; right: auto; }
 .plcwin.min.dock-right { right: 0; left: auto; }
 .plcwin > header { display: flex; align-items: center; gap: 10px; padding: 5px 8px; border-bottom: 1px solid var(--ui-line); cursor: default; user-select: none; flex-wrap: wrap; }
-.plcwin.dock-float > header { cursor: move; }
+.plcwin > header { cursor: grab; }
+.plcwin.snap-left { box-shadow: -8px 0 0 0 var(--accent), 0 4px 22px #0005; }
+.plcwin.snap-right { box-shadow: 8px 0 0 0 var(--accent), 0 4px 22px #0005; }
+.plcwin.snap-bottom { box-shadow: 0 8px 0 0 var(--accent), 0 4px 22px #0005; }
 .plcwin .grow { flex: 1; }
 .plcwin-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .plcwin-btns { display: flex; gap: 2px; }
@@ -657,3 +660,6 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 .pe-names .plc-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
 .pe-names .plc-row input { padding: 2px 5px; border: 1px solid var(--ui-line); border-radius: 4px; background: var(--ui-panel); color: inherit; font: inherit; flex: 1; min-width: 0; }
 .pe-names .plc-io { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+
+.plcwin.min .plcwin-extra { display: none; }
+.plcwin.min > header { flex-wrap: nowrap; }
