@@ -6,6 +6,7 @@ import Combo from './Combo'
 import { GuidedList, GuidedPanel } from './GuidedPanel'
 import { GUIDED, guidedById } from './guidedData'
 import PlcEditor from './PlcEditor'
+import { usePlcWin } from './PlcWindow'
 import { customExercise, type CustomExo } from './customEx'
 import type { GExercise } from './guided'
 import { defaultVolts, sourcePots } from './sim/potentials'
@@ -1173,6 +1174,7 @@ function Editor() {
   const cylinderLabels = useMemo(() => [...new Set(all.symbols.filter((s) => SYMBOL_MAP[s.defId]?.fluid?.k === 'cyl' && s.label).map((s) => s.label))], [all])
   // automate : panneau de programmation (Grafcet et langage à contacts)
   const [plcEdit, setPlcEdit] = useState<string | null>(null)
+  const [plcWin, setPlcWin] = usePlcWin()
   const plcSym = plcEdit ? doc.symbols.find((x) => x.id === plcEdit) : undefined
   const wireAdvice = useMemo(() => (selWire ? computeWireAdvice(selWire, all, SYMBOL_MAP, lang) : undefined), [selWire, all, lang])
   const symForm = selSym ? (
@@ -1571,7 +1573,7 @@ function Editor() {
         <p className="note">{t('warn')} <button className="link" onClick={() => setShowCredits(true)}>{t('credits')}</button></p>
       </aside>
 
-      <main className="stage">
+      <main className="stage" data-plcdock={plcSym && !plcWin.max && !plcWin.min && plcWin.dock !== 'float' ? plcWin.dock : undefined} style={{ ['--plc-w' as string]: plcWin.w + 'px', ['--plc-h' as string]: plcWin.h + 'px' }}>
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel} detectors={detectors}
           onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
@@ -1587,6 +1589,11 @@ function Editor() {
             <button className="add" onClick={() => { if (window.confirm(tr(lang, 'pageDeleteConfirm'))) { commit((d) => deletePage(d, d.page ?? 0)); setSel([]) } }} title={t('pageDelete')} aria-label={t('pageDelete')}>🗑</button>
           )}
         </div>
+        {plcSym && (
+          <PlcEditor win={plcWin} setWin={setPlcWin} title={`${plcSym.label || 'A1'} — ${lang === 'fr' ? 'programme de l’automate' : 'controller program'}`} lang={lang} program={plcSym.plc} live={sim?.plc[plcSym.id]}
+            onFocus={checkpoint} onClose={() => setPlcEdit(null)}
+            onChange={(p, discrete) => { const fn = (d: Doc): Doc => ({ ...d, symbols: d.symbols.map((x) => (x.id === plcSym.id ? { ...x, plc: p } : x)) }); if (discrete) commit(fn); else update(fn) }} />
+        )}
         {viewOnly && (
           <div className="viewbanner" role="status">
             <span>👁 {t('shareView')}</span>
@@ -2004,11 +2011,6 @@ function Editor() {
         </div>
       )}
 
-      {plcSym && (
-        <PlcEditor title={`${plcSym.label || 'A1'} — ${lang === 'fr' ? 'programme de l’automate' : 'controller program'}`} lang={lang} program={plcSym.plc} live={sim?.plc[plcSym.id]}
-          onFocus={checkpoint} onClose={() => setPlcEdit(null)}
-          onChange={(p) => update((d) => ({ ...d, symbols: d.symbols.map((x) => (x.id === plcSym.id ? { ...x, plc: p } : x)) }))} />
-      )}
       {showGuided && <GuidedList list={allGuided} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} classCode={classInfo.code} pseudo={classInfo.pseudo} onClass={setClass} />}
 
       {tourStep !== null && (

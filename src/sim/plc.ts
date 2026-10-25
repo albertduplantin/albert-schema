@@ -237,6 +237,22 @@ export function scan(prog: PlcProgram, prev: PlcState | undefined, inputs: boole
   return { state: st, pending }
 }
 
+/** Évalue une condition avec les valeurs en direct (affichage seulement : les fronts et les temps ne sont pas évalués). */
+export function liveCond(prog: PlcProgram, st: PlcState | undefined, cond: string): boolean {
+  if (!st) return false
+  const ev = (e: Expr): boolean => {
+    switch (e.k) {
+      case 'const': return e.v
+      case 'var': return varValue(prog, st, e.name)
+      case 'not': return !ev(e.e)
+      case 'and': return ev(e.a) && ev(e.b)
+      case 'or': return ev(e.a) || ev(e.b)
+      default: return false
+    }
+  }
+  try { return ev(parseExpr(cond)) } catch { return false }
+}
+
 /** Valeur courante d'une variable (affichage en direct) à partir de l'état de l'automate. */
 export function varValue(prog: PlcProgram, st: PlcState | undefined, raw: string): boolean {
   if (!st) return false

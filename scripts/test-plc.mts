@@ -128,6 +128,31 @@ const prog = (): any => ({
   check('exemple automate : séquence A+ B+ A- B-', trace, ['A+', 'B+', 'A-', 'B-'])
   check('exemple automate : retour à l’étape 0, vérins rentrés', [r.plc[P]?.steps, r.cylPos[A], r.cylPos[B]], [[0], 0, 0])
 }
+
+// ── opérations d'édition (éditeur graphique)
+{
+  const E = await import(ROOT + '/src/plcEdit.ts')
+  const p0: any = { names: {}, steps: [], transitions: [], ladder: [] }
+  let { prog: p } = E.insertStep(p0, 0)
+  check('édition : première étape créée, initiale', [p.steps.length, p.steps[0].init, p.transitions.length], [1, true, 0])
+  p = E.insertStep(p, 1).prog; p = E.insertStep(p, 2).prog
+  check('édition : étapes ajoutées à la suite, reliées par des transitions', [p.steps.map((s: any) => s.id), p.transitions.map((t: any) => `${t.from}>${t.to}`)], [[0, 1, 2], ['0>1', '1>2']])
+  p = E.setTransition(p, 0, { cond: 'a1' })
+  p = E.insertStep(p, 1).prog
+  check('édition : insertion au milieu coupe la transition en deux (la condition reste en amont)', [p.steps.map((s: any) => s.id), p.transitions.map((t: any) => `${t.from}>${t.to}:${t.cond}`)], [[0, 1, 2, 3], ['0>1:a1', '1>2:1', '2>3:1']])
+  p = E.setTransition(p, 2, { cond: 'X1 ET b1' })
+  p = E.addAction(p, 3, { kind: 'N', var: 'Q0.0' })
+  const moved = E.moveStep(p, 3, 1)
+  check('édition : déplacer une étape emporte ses actions et rebranche la séquence', [moved.steps.map((s: any) => s.actions.length), moved.transitions.map((t: any) => `${t.from}>${t.to}`)], [[0, 1, 0, 0], ['0>1', '1>2', '2>3']])
+  const del = E.deleteStep(p, 1)
+  check('édition : supprimer une étape rebranche voisines et renumérote', [del.steps.map((s: any) => s.id), del.transitions.map((t: any) => `${t.from}>${t.to}`), del.transitions[0].cond], [[0, 1, 2], ['0>1', '1>2'], 'a1'])
+  check('édition : condition enrichie par glisser-déposer d’une variable', [E.appendCond('1', 'a1'), E.appendCond('a1', 'b1', true), E.appendCond('a OU b', 'c')], ['a1', 'a1 ET NON b1', '(a OU b) ET c'])
+  const lint = E.lint({ ...p0, steps: [{ id: 0, actions: [{ kind: 'N', var: 'inconnu' }] }], transitions: [] }, new Set(), 'fr')
+  check('contrôle : étape initiale absente, sortie manquante, variable inconnue', [lint.length >= 3, lint.some((l: string) => /inconnue/.test(l))], [true, true])
+  const rg = E.insertContact(E.newRung(), 0, 1, { var: 'b' })
+  const rg2 = E.insertContact(rg, 1, 0, { var: 'c' })
+  check('édition Ladder : contacts en série et branche parallèle', [rg.branches[0].length, rg2.branches.length, E.removeContact(rg2, 1, 0).branches.length], [2, 2, 1])
+}
 void emptyProgram
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests d’automate passent')
 process.exit(fails ? 1 : 0)
