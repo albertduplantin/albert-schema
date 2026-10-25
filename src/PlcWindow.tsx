@@ -80,7 +80,7 @@ export default function PlcWindow({ win, set, lang, title, header, onClose, chil
   }
 
   const dockBtn = (d: WinState['dock'], icon: string, fr: string, en: string) => (
-    <button key={d} className={win.dock === d && !win.max ? 'on' : ''} onClick={() => set({ dock: d, max: false, min: false })} title={T(lang, fr, en)} aria-label={T(lang, fr, en)}>{icon}</button>
+    <button key={d} className={win.dock === d && !win.max ? 'on' : ''} onClick={() => set({ dock: d, max: false, min: false })} data-tip={T(lang, fr, en)} aria-label={T(lang, fr, en)}>{icon}</button>
   )
 
   return (
@@ -97,9 +97,9 @@ export default function PlcWindow({ win, set, lang, title, header, onClose, chil
           {dockBtn('bottom', '⬓', 'Ancrer en bas', 'Dock bottom')}
           {dockBtn('right', '◨', 'Ancrer à droite', 'Dock right')}
           {dockBtn('float', '❐', 'Fenêtre flottante', 'Floating window')}
-          <button onClick={() => set({ min: !win.min, max: false })} title={T(lang, win.min ? 'Restaurer' : 'Réduire', win.min ? 'Restore' : 'Minimise')} aria-label={T(lang, 'Réduire', 'Minimise')}>{win.min ? '▢' : '—'}</button>
-          <button className={win.max ? 'on' : ''} onClick={() => set({ max: !win.max, min: false })} title={T(lang, win.max ? 'Restaurer la taille' : 'Agrandir (plein écran)', win.max ? 'Restore size' : 'Maximise')} aria-label={T(lang, 'Agrandir', 'Maximise')}>{win.max ? '🗗' : '🗖'}</button>
-          <button onClick={onClose} title={T(lang, 'Fermer', 'Close')} aria-label={T(lang, 'Fermer', 'Close')}>✕</button>
+          <button onClick={() => set({ min: !win.min, max: false })} data-tip={T(lang, win.min ? 'Restaurer' : 'Réduire', win.min ? 'Restore' : 'Minimise')} aria-label={T(lang, 'Réduire', 'Minimise')}>{win.min ? '▢' : '—'}</button>
+          <button className={win.max ? 'on' : ''} onClick={() => set({ max: !win.max, min: false })} data-tip={T(lang, win.max ? 'Restaurer la taille' : 'Agrandir (plein écran)', win.max ? 'Restore size' : 'Maximise')} aria-label={T(lang, 'Agrandir', 'Maximise')}>{win.max ? '🗗' : '🗖'}</button>
+          <button onClick={onClose} data-tip={T(lang, 'Fermer', 'Close')} aria-label={T(lang, 'Fermer', 'Close')}>✕</button>
         </div>
       </header>
       {!win.min && <div className="plcwin-body">{children}</div>}

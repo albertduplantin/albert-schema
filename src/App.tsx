@@ -313,11 +313,14 @@ function Editor() {
       if (el && rel && el.contains(rel)) return
       setTooltip(null)
     }
+    const drop = () => setTooltip(null)
+    document.addEventListener('dragstart', drop)
     document.addEventListener('mouseover', show)
     document.addEventListener('mouseout', hide)
     document.addEventListener('focusin', show)
     document.addEventListener('focusout', hide)
     return () => {
+      document.removeEventListener('dragstart', drop)
       document.removeEventListener('mouseover', show)
       document.removeEventListener('mouseout', hide)
       document.removeEventListener('focusin', show)
