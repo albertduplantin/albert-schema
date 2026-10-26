@@ -18,9 +18,17 @@ import Sheet from './Sheet'
 import { isSourceBlock, sourceCaption, sourcePots } from './sim/potentials'
 import { devKey, isOperableDef, type SimResult } from './sim/engine'
 import type { SimModel } from './types'
+import { PLC_BLADE_ROT, PLC_GEOM } from './symbols/plc'
 
 /** Variables CSS --b{n} : rotation de chaque lame de contact selon l'état simulé (la transition CSS anime le mouvement). */
 function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | null): React.CSSProperties | undefined {
+  if (sim && model?.k === 'plc') {
+    // contacts de sortie de l'automate : la lame se ferme quand le programme commande la sortie
+    const out = sim.plc[id]?.out
+    const v: Record<string, string> = {}
+    for (let i = 0; i < 8; i++) v['--b' + i] = (out?.[i] ? PLC_BLADE_ROT : 0) + 'deg'
+    return v as React.CSSProperties
+  }
   if (!sim || model?.k !== 'switch' || !model.blades) return undefined
   const actuated = sim.closed[id]
   // état conducteur : un inverseur est « fermé » côté travail quand il est actionné ; un contact simple selon sa nature (NO/NF)
@@ -893,11 +901,34 @@ export default function Canvas(p: Props) {
                     const st = p.sim.plc[s.id]
                     return (
                       <g pointerEvents="none" stroke="#666" strokeWidth={0.5}>
-                        {def.ports.filter((q) => /^[iq]\d$/.test(q.id)).map((q) => {
-                          const on = q.id[0] === 'i' ? st?.inputs[Number(q.id[1])] : st?.out[Number(q.id[1])]
-                          return <circle key={q.id} cx={q.x} cy={q.y === 0 ? 33 : def.h - 33} r={2.6} fill={on ? '#35c759' : '#e0e0e0'} />
+                        {def.ports.filter((q) => /^i\d$/.test(q.id)).map((q) => {
+                          const on = st?.inputs[Number(q.id[1])]
+                          return <circle key={q.id} cx={q.x} cy={33} r={2.6} fill={on ? '#35c759' : '#e0e0e0'} />
                         })}
-                        <text x={def.w - 6} y={def.h / 2 + 4} fontSize={6.5} textAnchor="end" stroke="none" fontWeight={700} fill={st ? '#1f8f3a' : '#999'}>{st ? 'RUN' : 'STOP'}</text>
+                        {(() => {
+                          // trajet du courant à l'intérieur : du commun jusqu'à chaque sortie dont le contact est fermé
+                          const g = PLC_GEOM, comPort = model.outputs[0].com
+                          const pot = p.sim!.potentialOf[`${s.id}:${comPort}`]
+                          if (!pot || !st) return null
+                          const y0 = comPort === 'com' ? g.H : 14
+                          const bus = `${g.COM_X},${y0} ${g.COM_X},${g.BUS} ${g.X0 + 7 * g.STEP},${g.BUS}`
+                          const live = [
+                            <polyline key="bus" points={bus} fill="none" stroke={potColor(pot)} strokeWidth={1.8} strokeOpacity={0.9} />,
+                            ...st.out.slice(0, 8).map((on, i) => {
+                            if (!on) return null
+                            const x = g.X0 + i * g.STEP
+                            const pts = `${g.COM_X},${y0} ${g.COM_X},${g.BUS} ${x},${g.BUS} ${x},${g.H}`
+                            return (
+                              <g key={'cur' + i} fill="none" strokeLinecap="butt">
+                                <polyline points={pts} stroke={potColor(pot)} strokeWidth={1.8} strokeOpacity={0.9} />
+                                <polyline points={pts} stroke="#fff" strokeWidth={1} strokeDasharray="2 6"><animate attributeName="stroke-dashoffset" from="0" to={comPort === 'com' ? '8' : '-8'} dur="0.45s" repeatCount="indefinite" /></polyline>
+                              </g>
+                            )
+                          }),
+                          ]
+                          return live
+                        })()}
+                        <text x={def.w - 6} y={46} fontSize={6.5} textAnchor="end" stroke="none" fontWeight={700} fill={st ? '#1f8f3a' : '#999'}>{st ? 'RUN' : 'STOP'}</text>
                       </g>
                     )
                   })()}
