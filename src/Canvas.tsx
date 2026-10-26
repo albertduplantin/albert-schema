@@ -394,10 +394,14 @@ export default function Canvas(p: Props) {
         if (ins) { inter.current = { kind: 'instr', id, sx: pt.x, sy: pt.y, ox: ins.x, oy: ins.y, moved: false }; return }
       }
     }
-    if (p.sim && !e.shiftKey && !wiringRef.current && !p.placing && !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-nm],[data-note]')) {
+    // une électrovanne de distributeur reste cliquable même sous l'étiquette d'un repère
+    const stack = p.sim ? document.elementsFromPoint(e.clientX, e.clientY) : []
+    const solUnder = stack.find((el) => el.hasAttribute('data-sol'))
+    if (p.sim && !e.shiftKey && !wiringRef.current && !p.placing && (solUnder || !(e.target as Element).closest('[data-port],[data-handle],[data-lbl],[data-nm],[data-note]'))) {
       // simulation : un clic manœuvre l'organe visé (bouton, interrupteur, défaut). Tout le reste, et Maj + clic, édite le schéma.
       const el = (e.target as Element).closest('[data-sym]')
-      const s = el ? doc.symbols.find((x) => x.id === el.getAttribute('data-sym')) : undefined
+      const symId = el?.getAttribute('data-sym') ?? solUnder?.closest('[data-solof]')?.getAttribute('data-solof')
+      const s = symId ? doc.symbols.find((x) => x.id === symId) : undefined
       const kind = s ? isOperableDef(SYMBOL_MAP[s.defId]) : null
       const m = s ? SYMBOL_MAP[s.defId].sim : undefined
       let handled = true
@@ -405,7 +409,7 @@ export default function Canvas(p: Props) {
       else if (s && e.altKey && (m?.k === 'switch' || m?.k === 'load' || m?.k === 'coil')) p.onSimFault?.((m.k === 'switch' ? 'stuck:' : 'short:') + s.id)
       else if (s && (SYMBOL_MAP[s.defId].fluid as { k: string; a?: string } | undefined)?.k === 'valve' && (SYMBOL_MAP[s.defId].fluid as { a?: string }).a === 'elec') {
         // électrodistributeur : on maintient le clic sur une électrovanne ; à droite ou à gauche selon la bobine visée (un monostable revient au lâcher, un bistable reste en place)
-        const side = (e.target as Element).closest('[data-sol]')?.getAttribute('data-sol')
+        const side = (solUnder ?? (e.target as Element)).closest('[data-sol]')?.getAttribute('data-sol')
         const f = SYMBOL_MAP[s.defId].fluid as { b?: string }
         const k = side === 'b' && f.b === 'elec' ? s.id + ':B' : side === 'b' || (f.b === 'elec' && !side) ? null : s.id
         if (k) { held.current = k; p.onSimPress(k, true) } else handled = false

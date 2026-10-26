@@ -360,7 +360,7 @@ function solve(x: Ctx) {
       windingV[s.id] = st.v
     }
     if (on) energized.add(s.id)
-    if (m.k === 'coil' && s.label) coilOn[devKey(s.label)] = coilOn[devKey(s.label)] || on
+    if ((m.k === 'coil' || (m.k === 'load' && m.role === 'valve')) && s.label) coilOn[devKey(s.label)] = coilOn[devKey(s.label)] || on
     // surcharge injectée sur un moteur : le relais thermique déclenche après un délai et reste déclenché tant que la surcharge dure
     if (m.k === 'load' && m.role === 'motor' && x.inp.cut?.has('ovl:' + s.id) && (on || x.memory[THERMAL]?.on)) coilOn[THERMAL] = true
   }

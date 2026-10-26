@@ -1229,7 +1229,7 @@ function Editor() {
           <div className="form" onFocus={checkpoint}>
             <div className="kind">{SYMBOL_MAP[selSym.defId].name[lang]} <small>({SYMBOL_MAP[selSym.defId].std})</small></div>
             <details className="explain-box"><summary>{lang === 'fr' ? 'À quoi ça sert ?' : 'What is it for?'}</summary><ExplainCard def={SYMBOL_MAP[selSym.defId]} lang={lang} /></details>
-            <label data-tip={t('helpLabel')}>{t('label')}{tip('helpLabel')}<Combo options={SYMBOL_MAP[selSym.defId].sim?.k === 'coil' ? solenoidChoices : []} value={selSym.label} onChange={(e) => { if (isTerminal(selSym.defId)) setActiveStrip(e.target.value); patchSym({ label: e.target.value }) }} />{isTerminal(selSym.defId) && <span className="advice">💡 {t('stripHint')}</span>}</label>
+            <label data-tip={t('helpLabel')}>{t('label')}{tip('helpLabel')}<Combo options={SYMBOL_MAP[selSym.defId].sim?.k === 'coil' || (SYMBOL_MAP[selSym.defId].sim?.k === 'load' && (SYMBOL_MAP[selSym.defId].sim as { role?: string }).role === 'valve') ? solenoidChoices : []} value={selSym.label} onChange={(e) => { if (isTerminal(selSym.defId)) setActiveStrip(e.target.value); patchSym({ label: e.target.value }) }} />{isTerminal(selSym.defId) && <span className="advice">💡 {t('stripHint')}</span>}</label>
             <label data-tip={t('helpDesc')}>{t('description')}{tip('helpDesc')}<input value={selSym.desc} onChange={(e) => patchSym({ desc: e.target.value })} /></label>
             {SYMBOL_MAP[selSym.defId].sim?.k === 'transformer' && (() => {
               const def = SYMBOL_MAP[selSym.defId]

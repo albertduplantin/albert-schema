@@ -126,7 +126,7 @@ export const pneumaticAuto = (base: Doc): Doc => {
 export const pneumaticPlc = (base: Doc): Doc => {
   const V52 = FV('5020106020_elec/502010602030_5_2_way_030')
   const LS = Q('390_sensors_instruments/41_limit_switches/ils_no') // détecteurs à lame souple (ILS) posés sur les vérins
-  const COIL = Q('310_relays_contactors_contacts/01_coils/bobine3')
+  const COIL = Q('391_consumers_actuators/20_valves/electrovanne') // électrovannes du distributeur (symbole d'électroaimant)
   const PB = Q('380_signaling_operating/20_push_buttons/poussoir')
   const chain = (n: number, x: number, cyl: string): [Spec[], Link[]] => {
     const [s, l] = pneuPart(V52, `${n}V1`, { b: 't3', a: 't0', r1: 't4', p: 't2', r2: 't1' })
@@ -151,8 +151,8 @@ export const pneumaticPlc = (base: Doc): Doc => {
       ['es', 'a', 'b', 't0'], ['b', 't1', 'p', 'i0'],
       ['es', 'a', 'd11', 't0'], ['d11', 't1', 'p', 'i1'], ['es', 'a', 'd12', 't0'], ['d12', 't1', 'p', 'i2'],
       ['es', 'a', 'd21', 't0'], ['d21', 't1', 'p', 'i3'], ['es', 'a', 'd22', 't0'], ['d22', 't1', 'p', 'i4'],
-      ['p', 'q0', 'k1', 't0'], ['k1', 't1', 'es', 'b'], ['p', 'q1', 'k2', 't0'], ['k2', 't1', 'es', 'b'],
-      ['p', 'q2', 'k3', 't0'], ['k3', 't1', 'es', 'b'], ['p', 'q3', 'k4', 't0'], ['k4', 't1', 'es', 'b']])
+      ['p', 'q0', 'k1', 't1'], ['k1', 't0', 'es', 'b'], ['p', 'q1', 'k2', 't1'], ['k2', 't0', 'es', 'b'],
+      ['p', 'q2', 'k3', 't1'], ['k3', 't0', 'es', 'b'], ['p', 'q3', 'k4', 't1'], ['k4', 't0', 'es', 'b']])
   for (const s of d.symbols) {
     if (s.defId === 'sim-src1') { s.dc = true; s.volts = 24 }
     if (s.defId === COIL) s.volts = 24

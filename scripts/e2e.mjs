@@ -133,6 +133,13 @@ try {
   await sleep(800)
   await p3.evaluate(() => [...document.querySelectorAll('button')].find((x) => /Simuler/.test(x.textContent))?.click())
   await sleep(500)
+  // clic maintenu sur l'électrovanne de gauche (A) du premier distributeur : elle s'active à la main
+  const sol = await p3.evaluate(() => { const r = [...document.querySelectorAll('svg.canvas [data-sol="a"]')][0]?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
+  const yellow = () => p3.evaluate(() => [...document.querySelectorAll('svg.canvas [data-sol]')].some((e) => e.getAttribute('fill') === '#ffd54f'))
+  check('exemple automate : au repos aucune électrovanne n’est active', !(await yellow()))
+  if (sol) { await p3.mouse.move(sol.x, sol.y); await p3.mouse.down(); await sleep(400) }
+  check('exemple automate : clic maintenu sur une électrovanne → elle s’active', !!sol && (await yellow()))
+  await p3.mouse.up(); await sleep(300)
   const s1 = await p3.evaluate(() => { const d = JSON.parse(localStorage.getItem('albertschema.doc')); const g = document.querySelector(`[data-sym="${d.symbols.find((x) => x.label === 'S1').id}"]`); const q = [...g.querySelectorAll('path,rect,line')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 3 && r.height > 3).sort((a, b) => b.width * b.height - a.width * a.height)[0]; return { x: q.x + q.width / 2, y: q.y + q.height / 2 } })
   await p3.mouse.move(s1.x, s1.y); await p3.mouse.down(); await sleep(250); await p3.mouse.up()
   await sleep(600)
