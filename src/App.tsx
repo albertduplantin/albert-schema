@@ -1,4 +1,5 @@
 import { ExplainCard } from './ExplainCard'
+import { clearReview, hasKept, isHidden, isKept, mark as markReview, reviewCounts, reviewExport, reviewListeners } from './review'
 import { matchesQuery } from './searchTerms'
 import { nextFluidLabel, pilotNumbers, renumberFluid, solenoidNames } from './fluidNames'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -890,8 +891,13 @@ function Editor() {
     try { localStorage.setItem('albertschema.ext', on ? '1' : '0') } catch { /* ignoré */ }
     if (on) { await loadExtended(); libListeners.forEach((f) => f()) }
   }
-  const extVisible = (s: { std?: string }) => showExt || s.std !== 'QElectroTech'
-  const cats = useMemo(() => CATEGORIES[domain].filter((c) => SYMBOLS.some((s) => s.cat === c.id && !s.legacy && extVisible(s))), [domain, showExt, extendedLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  // revue des symboles : « o » garde un symbole (même sans la bibliothèque étendue), « m » le masque
+  const [reviewMode, setReviewMode] = useState(false)
+  const [reviewSel, setReviewSel] = useState<string | null>(null)
+  const [, setReviewTick] = useState(0)
+  useEffect(() => { const f = () => setReviewTick((n) => n + 1); reviewListeners.add(f); return () => { reviewListeners.delete(f) } }, [])
+  const extVisible = (s: { id: string; std?: string }) => (isHidden(s.id) ? reviewMode : isKept(s.id) || showExt || s.std !== 'QElectroTech')
+  const cats = useMemo(() => CATEGORIES[domain].filter((c) => SYMBOLS.some((s) => s.cat === c.id && !s.legacy && extVisible(s))), [domain, showExt, extendedLoaded, reviewMode, reviewCounts().keep, reviewCounts().hide]) // eslint-disable-line react-hooks/exhaustive-deps
   const cat = catByDomain[domain] || TOP
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -907,7 +913,7 @@ function Editor() {
         !s.legacy && extVisible(s) && s.domain === domain &&
         (q
           ? matchesQuery(s, q)
-          : cat === TOP ? s.top || usageCount(s.id, now) >= 1 || globalShare(s.id) >= 30 : (s.menu ?? s.cat) === cat),
+          : cat === TOP ? s.top || isKept(s.id) || usageCount(s.id, now) >= 1 || globalShare(s.id) >= 30 : (s.menu ?? s.cat) === cat),
     )
     if (q || cat === TOP) {
       // recherche et « les plus utilisés » : par score adaptatif (a priori + usage de l'utilisateur)
@@ -919,7 +925,25 @@ function Editor() {
     const gmax = new Map<string, number>()
     for (const s of found) gmax.set(gk(s), Math.max(gmax.get(gk(s)) ?? 0, score(s)))
     return found.sort((a, b) => gmax.get(gk(b))! - gmax.get(gk(a))! || gk(a).localeCompare(gk(b)) || score(b) - score(a))
-  }, [domain, query, lang, cat, usageTick, showExt, extendedLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [domain, query, lang, cat, usageTick, showExt, extendedLoaded, reviewMode, reviewCounts().keep, reviewCounts().hide]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!reviewMode) return
+    const onKey = (e: KeyboardEvent) => {
+      const tg = e.target as HTMLElement
+      if (tg.closest('input,textarea,select,[contenteditable]') || e.ctrlKey || e.metaKey || e.altKey || !reviewSel) return
+      const k = e.key.toLowerCase()
+      if (k !== 'm' && k !== 'o' && k !== 'backspace') return
+      e.preventDefault()
+      e.stopPropagation()
+      markReview(reviewSel, k === 'o' ? 'keep' : k === 'm' ? 'hide' : null)
+      // passe au symbole suivant de la liste affichée
+      const i = list.findIndex((x) => x.id === reviewSel)
+      const nx = list[i + 1]
+      if (nx) { setReviewSel(nx.id); requestAnimationFrame(() => document.querySelector('.symbtn.revsel')?.scrollIntoView({ block: 'nearest' })) }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [reviewMode, reviewSel, list])
   const recents = useMemo(() => recent.map((id) => SYMBOL_MAP[id]).filter((s) => s && !s.legacy && s.domain === domain), [recent, domain])
 
   const selSym = sel.length === 1 ? doc.symbols.find((s) => s.id === sel[0]) : undefined
@@ -1414,13 +1438,13 @@ function Editor() {
   const hint = simMode ? t('simHint') : tool ? t('hintTool') : wiringOn ? t('hintWiring') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
   const symButton = (s: (typeof SYMBOLS)[number]) => (
-    <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '')} title={`${s.name[lang]} — ${s.std}`}
-      draggable
+    <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '') + (reviewMode && reviewSel === s.id ? ' revsel' : '') + (reviewMode && isKept(s.id) ? ' revkeep' : '') + (reviewMode && isHidden(s.id) ? ' revhide' : '')} title={`${s.name[lang]} — ${s.std}`}
+      draggable={!reviewMode}
       onDragStart={(e) => { e.dataTransfer.setData('text/x-albert-symbol', s.id); e.dataTransfer.effectAllowed = 'copy'; setPlacing(null) }}
-      onClick={() => { setPlacing(placing === s.id ? null : s.id); setTool(null); setSel([]) }}>
+      onClick={() => { if (reviewMode) { setReviewSel(s.id); return } setPlacing(placing === s.id ? null : s.id); setTool(null); setSel([]) }}>
       <svg viewBox={`-6 -6 ${s.w + 12} ${s.h + 12}`} stroke="currentColor" fill="none" strokeWidth={Math.max(2, Math.max(s.w, s.h) / 28)} strokeLinecap="round" strokeLinejoin="round"
         dangerouslySetInnerHTML={{ __html: s.svg.replace(/var\(--bg\)/g, 'transparent') }} />
-      <span>{s.name[lang]}</span>
+      <span>{reviewMode && isKept(s.id) ? '✓ ' : reviewMode && isHidden(s.id) ? '✕ ' : ''}{s.name[lang]}</span>
     </button>
   )
 
@@ -1622,6 +1646,17 @@ function Editor() {
             <input type="checkbox" checked={showExt} onChange={(e) => void toggleExt(e.target.checked)} />
             <span>{lang === 'fr' ? 'Bibliothèque étendue (QElectroTech)' : 'Extended library (QElectroTech)'}</span>
           </label>
+        )}
+        <label className="share" data-tip={lang === 'fr' ? 'Outil de mise au point : cliquez un symbole puis appuyez sur O pour le garder (il apparaît alors dans la palette et se simule) ou sur M pour le masquer. La liste se copie pour me la transmettre.' : 'Tuning tool: click a symbol then press O to keep it or M to hide it. The list can be copied.'}>
+          <input type="checkbox" checked={reviewMode} onChange={(e) => { setReviewMode(e.target.checked); setReviewSel(null); setPlacing(null) }} />
+          <span>{lang === 'fr' ? 'Mode revue des symboles (O garder · M masquer)' : 'Symbol review mode (O keep · M hide)'}</span>
+        </label>
+        {reviewMode && (
+          <div className="note review">
+            ✓ {reviewCounts().keep} · ✕ {reviewCounts().hide}{' '}
+            <button className="link" onClick={() => { const txt = reviewExport((id) => SYMBOL_MAP[id]?.name.fr ?? ''); void navigator.clipboard?.writeText(txt).then(() => say(lang === 'fr' ? 'Liste copiée' : 'List copied')) }}>{lang === 'fr' ? 'Copier la liste' : 'Copy list'}</button>{' · '}
+            <button className="link" onClick={() => { if (confirm(lang === 'fr' ? 'Effacer tous les choix ?' : 'Clear all choices?')) clearReview() }}>{lang === 'fr' ? 'Tout effacer' : 'Clear'}</button>
+          </div>
         )}
         <label className="share" title={t('shareText')}>
           <input type="checkbox" checked={share === 'yes'} onChange={(e) => chooseShare(e.target.checked ? 'yes' : 'no')} />
@@ -2175,7 +2210,7 @@ export default function App() {
         // bibliothèque étendue : activée par l'utilisateur, ou nécessaire à l'ouvrage en cours
         try {
           const raw = JSON.parse(localStorage.getItem(STORE) || 'null') as Doc | null
-          if (localStorage.getItem('albertschema.ext') === '1' || (raw && needsExtended([raw, ...(raw.pages ?? [])]))) await loadExtended()
+          if (localStorage.getItem('albertschema.ext') === '1' || hasKept() || (raw && needsExtended([raw, ...(raw.pages ?? [])]))) await loadExtended()
         } catch { /* stockage indisponible */ }
       })
       .then(() => setState('ready'), () => setState('error'))

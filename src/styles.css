@@ -678,3 +678,8 @@ svg.canvas.dark-sheet { filter: invert(0.92) hue-rotate(180deg); }
 .explain-tip { background: var(--ui-hover, rgba(127, 127, 127, .12)); padding: 6px 8px; border-radius: 6px; }
 details.explain-box { margin: 8px 0; }
 details.explain-box > summary { cursor: pointer; font-weight: 600; }
+
+.symbtn.revsel { outline: 2px solid var(--accent, #2b7de9); outline-offset: -2px; }
+.symbtn.revkeep { background: rgba(53, 199, 89, .16); }
+.symbtn.revhide { background: rgba(229, 57, 53, .14); opacity: .6; }
+.note.review { font-weight: 600; }
