@@ -152,9 +152,9 @@ const RECIPES: Record<string, Recipe> = {
   comm_courant_alter: coil('ac', T('Relais à courant alternatif', 'AC relay')),
   con_simple: sw('none', 'none', T('Contact auxiliaire à fermeture (NO)', 'Auxiliary make contact (NO)')),
   con_simple_nf: sw('nc', 'none', T('Contact auxiliaire à ouverture (NF)', 'Auxiliary break contact (NC)')),
-  com_puiss4: sw('none', 'none', T('Contacts de puissance, 3 pôles', 'Power contacts, 3 poles')),
-  com_puiss_3P_inv: sw('none', 'none', T('Contacteur inverseur, 3 pôles (modèle 1)', 'Reversing contactor, 3 poles (type 1)')),
-  com_puiss_3P_inv2: sw('none', 'none', T('Contacteur inverseur, 3 pôles (modèle 2)', 'Reversing contactor, 3 poles (type 2)')),
+  com_puiss4: sw('contactor', 'none', T('Contacts de puissance, 3 pôles', 'Power contacts, 3 poles')),
+  com_puiss_3P_inv: sw('contactor', 'none', T('Contacteur inverseur, 3 pôles (modèle 1)', 'Reversing contactor, 3 poles (type 1)')),
+  com_puiss_3P_inv2: sw('contactor', 'none', T('Contacteur inverseur, 3 pôles (modèle 2)', 'Reversing contactor, 3 poles (type 2)')),
   // commande
   poussoir: sw('none', 'push', T('Bouton poussoir à fermeture (NO)', 'Push button, make (NO)')),
   poussoir_nf: sw('nc', 'push', T('Bouton poussoir à ouverture (NF)', 'Push button, break (NC)')),

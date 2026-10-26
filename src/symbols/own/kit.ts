@@ -43,7 +43,7 @@ export function angle(a: Pt, b: Pt): number {
   return Math.round((Math.atan2(cross, dot) * 180) / Math.PI)
 }
 
-export type PoleMark = 'none' | 'nc' | 'breaker' | 'disconnector'
+export type PoleMark = 'none' | 'nc' | 'breaker' | 'disconnector' | 'contactor'
 export interface PoleOut { svg: string; rot: number; mid: Pt }
 
 /** Pôle de contact entre deux bornes (haut, bas) : fût fixe en haut, lame articulée en bas, ouverte au repos. */
@@ -73,6 +73,18 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
     extra.push(poly([mx - px, my - py], [mx + px, my + py]))
     extraPts.push([mx - px, my - py], [mx + px, my + py])
   }
+  if (mark === 'contactor') {
+    // contacteur : demi-cercle porté par la lame, côté ouvert, qui indique le pouvoir de coupure en charge
+    const vx = open[0] - hinge[0], vy = open[1] - hinge[1], len = Math.hypot(vx, vy)
+    const ux = vx / len, uy = vy / len, r = 3.6
+    const c: Pt = [hinge[0] + vx * 0.78, hinge[1] + vy * 0.78]
+    let nx = uy, ny = -ux
+    if (nx > 0) { nx = -nx; ny = -ny }
+    const p1: Pt = [c[0] - ux * r, c[1] - uy * r], p2: Pt = [c[0] + ux * r, c[1] + uy * r], q: Pt = [c[0] + nx * r, c[1] + ny * r]
+    const sweep = (p2[0] - p1[0]) * (q[1] - p1[1]) - (p2[1] - p1[1]) * (q[0] - p1[0]) > 0 ? 1 : 0
+    extra.push(`M${f(p1[0])} ${f(p1[1])}A${r} ${r} 0 0 ${sweep} ${f(p2[0])} ${f(p2[1])}`)
+    extraPts.push(p1, p2, q)
+  }
   svg += blade(n, hinge, open, extra, extraPts)
   return { svg, rot, mid: [(hinge[0] + open[0]) / 2, (hinge[1] + open[1]) / 2] }
 }
@@ -81,11 +93,12 @@ export type Head = 'none' | 'push' | 'mushroom' | 'rotate' | 'lever' | 'cam' | '
 
 /** Liaison mécanique en pointillés entre les pôles, puis tête de commande à gauche du premier. */
 export function actuator(mids: Pt[], head: Head): string {
-  if (!mids.length || head === 'none') return ''
+  if (!mids.length) return ''
   const sorted = [...mids].sort((a, b) => a[0] - b[0])
   const first = sorted[0], last = sorted[sorted.length - 1]
   let svg = ''
   if (sorted.length > 1) svg += line(first, last, DASH)
+  if (head === 'none') return svg
   const x = first[0] - 8, y = first[1]
   svg += line(first, [x, y], DASH)
   switch (head) {
