@@ -1,5 +1,5 @@
 import { ExplainCard } from './ExplainCard'
-import { clearReview, hasKept, isDeleted, isHidden, isKept, isRedo, mark as markReview, reviewCounts, reviewExport, reviewListeners } from './review'
+import { clearReview, restoreHidden, hasKept, isDeleted, isHidden, isKept, isRedo, mark as markReview, reviewCounts, reviewExport, reviewListeners } from './review'
 import { matchesQuery } from './searchTerms'
 import { nextFluidLabel, pilotNumbers, renumberFluid, solenoidNames } from './fluidNames'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -1656,6 +1656,7 @@ function Editor() {
           <div className="note review">
             ✓ {reviewCounts().keep} · ✕ {reviewCounts().hide} · 🗑 {reviewCounts().del} · 🔍 {reviewCounts().redo}{' '}
             <button className="link" onClick={() => { const txt = reviewExport((id) => SYMBOL_MAP[id]?.name.fr ?? ''); void navigator.clipboard?.writeText(txt).then(() => say(lang === 'fr' ? 'Liste copiée' : 'List copied')) }}>{lang === 'fr' ? 'Copier la liste' : 'Copy list'}</button>{' · '}
+            <button className="link" onClick={() => { if (reviewCounts().hide + reviewCounts().del === 0 || confirm(lang === 'fr' ? 'Réafficher tous les symboles masqués ou marqués à supprimer ?' : 'Show all hidden or deleted-marked symbols again?')) restoreHidden() }}>{lang === 'fr' ? 'Tout réafficher' : 'Show all'}</button>{' · '}
             <button className="link" onClick={() => { if (confirm(lang === 'fr' ? 'Effacer tous les choix ?' : 'Clear all choices?')) clearReview() }}>{lang === 'fr' ? 'Tout effacer' : 'Clear'}</button>
           </div>
         )}

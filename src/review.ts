@@ -41,6 +41,11 @@ export function mark(id: string, as: 'keep' | 'hide' | 'del' | 'redo' | null): v
   state = { keep: [...k], hide: [...h], del: [...d], redo: [...r] }
   save()
 }
+/** Réaffiche tous les symboles masqués ou marqués à supprimer (les symboles gardés restent gardés). */
+export function restoreHidden(): void {
+  state = { ...state, hide: [], del: [] }
+  save()
+}
 export function clearReview(): void {
   state = { keep: [], hide: [], del: [], redo: [] }
   save()
