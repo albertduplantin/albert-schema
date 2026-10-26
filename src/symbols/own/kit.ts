@@ -74,9 +74,9 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
     extraPts.push([mx - px, my - py], [mx + px, my + py])
   }
   if (mark === 'contactor') {
-    // contacteur : demi-cercle accroché au bas du conducteur amont, bombé du côté opposé à la lame
+    // contacteur : demi-cercle accroché au bas du conducteur amont, bombé du côté de la lame
     const r = 3.6
-    svg += path(`M${f(top[0])} ${f(tipY - 2 * r)}A${r} ${r} 0 0 1 ${f(top[0])} ${f(tipY)}`, 'fill="none"')
+    svg += path(`M${f(top[0])} ${f(tipY - 2 * r)}A${r} ${r} 0 0 0 ${f(top[0])} ${f(tipY)}`, 'fill="none"')
   }
   svg += blade(n, hinge, open, extra, extraPts)
   return { svg, rot, mid: [(hinge[0] + open[0]) / 2, (hinge[1] + open[1]) / 2] }
