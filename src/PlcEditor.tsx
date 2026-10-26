@@ -21,61 +21,9 @@ interface Props {
   onClose: () => void
 }
 
-type Tool = 'step' | 'contactNO' | 'contactNC' | 'coil' | 'set' | 'reset' | 'ton' | 'rung'
-type Payload = { k: 'tool'; tool: Tool } | { k: 'var'; name: string } | { k: 'step'; id: number } | { k: 'link'; from: number } | { k: 'rung'; i: number }
-
-interface Dnd { drag: Payload | null; armed: Payload | null; setDrag: (p: Payload | null) => void; setArmed: (p: Payload | null) => void }
-const DndCtx = createContext<Dnd>({ drag: null, armed: null, setDrag: () => {}, setArmed: () => {} })
-const MIME = 'application/x-albert-plc'
-const T = (lang: Lang, fr: string, en: string) => (lang === 'fr' ? fr : en)
-
-// ───────────────────────── éléments communs
-
-/** Élément qu'on peut saisir (glisser) ou choisir d'un clic puis poser d'un second clic. */
-function Draggable({ payload, className, children, title, click = true }: { payload: Payload; className?: string; children: ReactNode; title?: string; click?: boolean }) {
-  const { setDrag, armed, setArmed } = useContext(DndCtx)
-  const same = armed && JSON.stringify(armed) === JSON.stringify(payload)
-  return (
-    <div className={`${className ?? ''} dragitem${same ? ' armed' : ''}`} draggable data-tip={title} role="button" tabIndex={0}
-      onDragStart={(e) => { e.dataTransfer.setData(MIME, JSON.stringify(payload)); e.dataTransfer.effectAllowed = 'copyMove'; setDrag(payload) }}
-      onDragEnd={() => setDrag(null)}
-      onClick={() => click && setArmed(same ? null : payload)}
-      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && click) { e.preventDefault(); setArmed(same ? null : payload) } }}>
-      {children}
-    </div>
-  )
-}
-
-/** Emplacement de dépôt : invisible au repos, mis en évidence dès qu'un élément compatible est saisi ou choisi. */
-function Slot({ accept, onDrop, className, children, label }: { accept: (p: Payload) => boolean; onDrop: (p: Payload, e: { alt: boolean }) => void; className?: string; children?: ReactNode; label?: string }) {
-  const { drag, armed, setDrag, setArmed } = useContext(DndCtx)
-  const [over, setOver] = useState(false)
-  const cur = drag ?? armed
-  const can = !!cur && accept(cur)
-  const fire = (p: Payload, alt: boolean) => { onDrop(p, { alt }); setDrag(null); setArmed(null); setOver(false) }
-  return (
-    <div className={`slot ${className ?? ''}${can ? ' can' : ''}${over && can ? ' over' : ''}`} aria-label={label}
-      onDragOver={(e: DragEvent) => { if (can) { e.preventDefault(); setOver(true) } }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e: DragEvent) => { if (!can || !cur) return; e.preventDefault(); fire(cur, e.altKey) }}
-      onClick={(e) => { if (armed && can) { e.stopPropagation(); fire(armed, e.altKey) } }}>
-      {children}
-    </div>
-  )
-}
-
-/** Texte modifiable en place (clic), validé par Entrée ou en quittant le champ, annulé par Échap. */
-function Inline({ value, onCommit, placeholder, list, className, invalid, title }: { value: string; onCommit: (v: string) => void; placeholder?: string; list?: string; className?: string; invalid?: boolean; title?: string }) {
-  const [edit, setEdit] = useState(false)
-  const [v, setV] = useState(value)
-  useEffect(() => { if (!edit) setV(value) }, [value, edit])
-  if (!edit) {
-    return <span className={`inline ${className ?? ''}${invalid ? ' bad' : ''}${value ? '' : ' blank'}`} role="button" tabIndex={0} data-tip={title} onClick={() => setEdit(true)} onKeyDown={(e) => { if (e.key === 'Enter') setEdit(true) }}>{value || placeholder || '…'}</span>
-  }
-  const done = (ok: boolean) => { setEdit(false); if (ok && v !== value) onCommit(v) }
-  return <input className={`inline-input ${className ?? ''}`} autoFocus list={list} value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onBlur={() => done(true)}
-    onKeyDown={(e) => { if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false) }} onFocus={(e) => e.currentTarget.select()} />
-}
+import { Draggable, DndCtx, Inline, Slot, T, type Payload, type Tool } from './plcUi'
+import GrafcetView from './GrafcetView'
+import * as G from './grafcet'
 
 // ───────────────────────── éditeur
 
@@ -84,6 +32,7 @@ export default function PlcEditor({ win, setWin, title, lang, program, live, onC
   const [tab, setTab] = useState<'grafcet' | 'ladder' | 'vars'>('grafcet')
   const [drag, setDrag] = useState<Payload | null>(null)
   const [armed, setArmed] = useState<Payload | null>(null)
+  const [quick, setQuick] = useState('A+ B+ A- B-')
   const root = useRef<HTMLDivElement>(null)
   const change = (p: PlcProgram, discrete = true) => onChange(p, discrete)
   const nameOf = (a: string) => prog.names[a]?.trim() || a
@@ -114,8 +63,16 @@ export default function PlcEditor({ win, setWin, title, lang, program, live, onC
     <aside className="pe-tools" aria-label={T(lang, 'Éléments', 'Elements')}>
       {tab === 'grafcet' && (
         <section>
-          <h4>{T(lang, 'Éléments', 'Elements')}</h4>
-          <Draggable payload={{ k: 'tool', tool: 'step' }} className="tool" title={T(lang, 'Étape : un état stable du cycle, pendant lequel la machine exécute ses actions. Glissez-la sur un « ＋ » de la séquence, ou cliquez puis cliquez sur l’emplacement.', 'Step: a stable state of the cycle during which the machine performs its actions. Drag it onto a “＋” in the sequence, or click then click the spot.')}><b className="mini-step">n</b> {T(lang, 'Étape', 'Step')}</Draggable>
+          <h4>{T(lang, 'Grafcet', 'Grafcet')}</h4>
+          <Draggable payload={{ k: 'tool', tool: 'step' }} className="tool" title={T(lang, 'Étape : un état stable du cycle, pendant lequel la machine exécute ses actions. Déposez-la sur une transition (elle s’insère juste avant), ou sur le ＋ du haut pour une nouvelle étape initiale.', 'Step: a stable state of the cycle during which the machine performs its actions. Drop it on a transition (it is inserted before it), or on the top ＋ for a new initial step.')}><b className="mini-step">n</b> {T(lang, 'Étape', 'Step')}</Draggable>
+          <Draggable payload={{ k: 'tool', tool: 'alt' }} className="tool" title={T(lang, 'Divergence en OU (sélection de séquence) : déposez-la sur une étape pour lui ajouter une branche alternative. Une seule branche sera suivie, celle dont la condition devient vraie en premier. Les branches se rejoignent par une convergence en OU.', 'OR divergence (sequence selection): drop it on a step to add an alternative branch. Only one branch is followed, the one whose condition becomes true first. Branches rejoin through an OR convergence.')}><svg width="30" height="18" viewBox="0 0 30 18"><path d="M15 0V4M5 4H25M5 4V18M25 4V18" /></svg> {T(lang, 'Alternative (OU)', 'Alternative (OR)')}</Draggable>
+          <Draggable payload={{ k: 'tool', tool: 'par' }} className="tool" title={T(lang, 'Divergence en ET (parallélisme) : déposez-la sur une transition pour qu’elle active plusieurs étapes en même temps. La convergence en ET attend que toutes les branches soient terminées. Signalée par un trait double.', 'AND divergence (parallelism): drop it on a transition so that it activates several steps at once. The AND convergence waits for every branch to finish. Shown with a double line.')}><svg width="30" height="18" viewBox="0 0 30 18"><path d="M15 0V3M5 3H25M5 6H25M5 6V18M25 6V18" /></svg> {T(lang, 'Parallèle (ET)', 'Parallel (AND)')}</Draggable>
+          <Draggable payload={{ k: 'tool', tool: 'time' }} className="tool" title={T(lang, 'Temporisation : déposez-la sur une transition pour ajouter « T(3s) » à sa condition (la transition n’est franchie que 3 secondes après l’activation de l’étape). Modifiez la durée dans la condition.', 'Delay: drop it on a transition to add “T(3s)” to its condition (the transition only fires 3 seconds after the step became active). Edit the duration in the condition.')}><b className="mini-ton">T</b> {T(lang, 'Temporisation', 'Delay')}</Draggable>
+          <p className="muted small">{T(lang, 'Saut ou boucle : glissez le ↳ d’une étape sur une autre étape.', 'Jump or loop: drag the ↳ of a step onto another step.')}</p>
+          <h4>{T(lang, 'Séquence rapide', 'Quick sequence')}</h4>
+          <input className="pe-quick" value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="A+ B+ A- B-" aria-label={T(lang, 'Séquence rapide', 'Quick sequence')}
+            data-tip={T(lang, 'Écrivez les mouvements dans l’ordre : A+ (A sort), B- (B rentre). Entre parenthèses, des mouvements simultanés : (A+ B+). Les fins de course a1, a0, b1… et le départ « dcy » sont créés pour vous.', 'Write the movements in order: A+ (A extends), B- (B retracts). In parentheses, simultaneous movements: (A+ B+). The end sensors a1, a0, b1… and the start “dcy” are created for you.')} />
+          <button className="mini" onClick={() => { if (!prog.steps.length || confirm(T(lang, 'Remplacer le Grafcet actuel ?', 'Replace the current Grafcet?'))) change(G.fromSequence(prog, quick)) }}>⚡ {T(lang, 'Générer le Grafcet', 'Generate the Grafcet')}</button>
         </section>
       )}
       {tab === 'ladder' && (
@@ -163,7 +120,7 @@ export default function PlcEditor({ win, setWin, title, lang, program, live, onC
                 <button className="mini" onClick={() => setArmed(null)}>✕</button>
               </div>
             )}
-            {tab === 'grafcet' && <GrafcetEditor prog={prog} live={live} lang={lang} change={change} />}
+            {tab === 'grafcet' && <GrafcetView prog={prog} live={live} lang={lang} change={change} />}
             {tab === 'ladder' && <LadderEditor prog={prog} live={live} lang={lang} change={change} />}
             {tab === 'vars' && <NamesEditor prog={prog} lang={lang} change={change} alive={alive} />}
             {issues.length > 0 && tab !== 'vars' && (
@@ -201,123 +158,6 @@ function NamesEditor({ prog, lang, change, alive }: { prog: PlcProgram; lang: La
       <div className="plc-io">{col('I0.', N_IN, T(lang, 'Entrées', 'Inputs'))}{col('Q0.', N_OUT, T(lang, 'Sorties', 'Outputs'))}{col('M', 4, T(lang, 'Mémentos', 'Markers'))}</div>
       <h4>{T(lang, 'Écriture des conditions', 'Condition syntax')}</h4>
       <p className="muted small">{T(lang, 'ET, OU, NON (ou . + /) et parenthèses · « 1 » = toujours vrai · front montant ↑a1 ou R(a1) · temps écoulé depuis l’activation de l’étape : T(3s). Astuce : glissez une variable sur une transition pour l’ajouter à sa condition (Alt = NON).', 'AND, OR, NOT (or . + /) and parentheses · “1” = always true · rising edge ↑a1 or R(a1) · time since the step became active: T(3s). Tip: drag a variable onto a transition to add it to its condition (Alt = NOT).')}</p>
-    </div>
-  )
-}
-
-// ───────────────────────── Grafcet
-
-function GrafcetEditor({ prog, live, lang, change }: { prog: PlcProgram; live: PlcState | undefined; lang: Lang; change: (p: PlcProgram, d?: boolean) => void }) {
-  const { setArmed } = useContext(DndCtx)
-  const steps = prog.steps
-  const n = steps.length
-  const tIndex = (from: number, to: number) => prog.transitions.findIndex((t) => t.from.length === 1 && t.to.length === 1 && t.from[0] === from && t.to[0] === to)
-  const consecutive = new Set(steps.slice(0, -1).map((s, i) => tIndex(s.id, steps[i + 1].id)).filter((i) => i >= 0))
-  const others = prog.transitions.map((t, i) => ({ t, i })).filter(({ i }) => !consecutive.has(i))
-  const fires = (i: number) => {
-    const t = prog.transitions[i]
-    return !!live && t.from.length > 0 && t.from.every((s) => live.steps.includes(s)) && liveCond(prog, live, t.cond)
-  }
-  const acceptStepSlot = (p: Payload) => (p.k === 'tool' && p.tool === 'step') || p.k === 'step'
-  const dropStep = (index: number) => (p: Payload) => {
-    if (p.k === 'tool') change(E.insertStep(prog, index).prog)
-    else if (p.k === 'step') change(E.moveStep(prog, p.id, index))
-  }
-  const insertSlot = (index: number) => (
-    <Slot key={`slot${index}`} className="gf-slot" accept={acceptStepSlot} onDrop={dropStep(index)} label={T(lang, 'Insérer une étape ici', 'Insert a step here')}>
-      <button className="gf-plus" onClick={(e) => { e.stopPropagation(); change(E.insertStep(prog, index).prog) }} data-tip={T(lang, 'Insérer une étape ici', 'Insert a step here')} aria-label={T(lang, 'Insérer une étape ici', 'Insert a step here')}>＋</button>
-    </Slot>
-  )
-
-  const condField = (i: number) => {
-    const t = prog.transitions[i]
-    const err = checkExpr(t.cond)
-    return (
-      <Slot className="gf-cond" accept={(p) => p.k === 'var'} onDrop={(p, ev) => p.k === 'var' && change(E.setTransition(prog, i, { cond: E.appendCond(t.cond, p.name, ev.alt) }))}>
-        <Inline value={t.cond} list="plc-vars" invalid={!!err} placeholder="a1 ET NON b0" onCommit={(v) => change(E.setTransition(prog, i, { cond: v }))} data-tip={err ?? T(lang, 'Cliquez pour modifier la condition', 'Click to edit the condition')} />
-        {err && <span data-tip={err} className="gf-err">⚠</span>}
-      </Slot>
-    )
-  }
-
-  if (!n) {
-    return (
-      <div className="pe-empty">
-        <p>{T(lang, 'Le Grafcet est vide.', 'The Grafcet is empty.')}</p>
-        <Slot className="gf-first" accept={acceptStepSlot} onDrop={dropStep(0)}>
-          <button className="primary" onClick={() => change(E.insertStep(prog, 0).prog)}>＋ {T(lang, 'Créer l’étape initiale', 'Create the initial step')}</button>
-        </Slot>
-        <p className="muted small">{T(lang, 'Glissez l’élément « Étape » ici, ou cliquez sur le bouton.', 'Drag the “Step” element here, or click the button.')}</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="gf">
-      <p className="gf-legend muted small" data-tip={T(lang, 'N, S et R sont les types d’actions du Grafcet. Cliquez sur la lettre d’une action pour en changer.', 'N, S and R are the Grafcet action types. Click an action letter to change it.')}>
-        <b>N</b> {T(lang, 'tant que l’étape est active', 'while the step is active')} · <b>S</b> {T(lang, 'mise à 1 mémorisée', 'latched set')} · <b>R</b> {T(lang, 'remise à 0', 'reset')} — {T(lang, 'survolez une lettre pour le détail', 'hover a letter for details')}
-      </p>
-      {insertSlot(0)}
-      {steps.map((s, i) => {
-        const ti = i + 1 < n ? tIndex(s.id, steps[i + 1].id) : -1
-        const active = !!live?.steps.includes(s.id)
-        return (
-          <div key={s.id} className="gf-block">
-            <Slot className={`gf-step${active ? ' active' : ''}`}
-              accept={(p) => p.k === 'var' || (p.k === 'link' && p.from !== s.id)}
-              onDrop={(p) => {
-                if (p.k === 'var') change(E.addAction(prog, s.id, { kind: 'N', var: p.name }))
-                else if (p.k === 'link') change(E.addTransition(prog, p.from, s.id))
-              }}>
-              <Draggable payload={{ k: 'step', id: s.id }} className="gf-grip" data-tip={T(lang, 'Glisser pour déplacer l’étape dans la séquence', 'Drag to move the step in the sequence')} click={false}>⠿</Draggable>
-              <button className={`gf-no${s.init ? ' init' : ''}`} onClick={() => change(E.setInitial(prog, s.id, !s.init))} data-tip={T(lang, s.init ? 'Étape initiale (cliquez pour retirer)' : 'Cliquez pour en faire l’étape initiale', s.init ? 'Initial step (click to remove)' : 'Click to make it the initial step')}>{s.id}</button>
-              <div className="gf-actions">
-                {s.actions.map((a, k) => (
-                  <span key={k} className="gf-act">
-                    <button className={`kind k${a.kind}`} onClick={() => change(E.setStep(prog, s.id, { actions: s.actions.map((x, j) => (j === k ? { ...x, kind: a.kind === 'N' ? 'S' : a.kind === 'S' ? 'R' : 'N' } : x)) }))} data-tip={T(lang, a.kind === 'N' ? 'N (non mémorisée) : la sortie est à 1 uniquement tant que l’étape est active, elle retombe en la quittant. Cliquez pour passer à S.' : a.kind === 'S' ? 'S (mise à 1 mémorisée) : la sortie passe à 1 à l’activation de l’étape et y reste, même après avoir quitté l’étape, jusqu’à une action R. Cliquez pour passer à R.' : 'R (remise à 0) : la sortie repasse à 0 à l’activation de l’étape et y reste. Cliquez pour passer à N.', a.kind === 'N' ? 'N (non-stored): the output is 1 only while the step is active and drops on leaving it. Click to switch to S.' : a.kind === 'S' ? 'S (set): the output goes to 1 when the step becomes active and stays there after leaving it, until an R action. Click to switch to R.' : 'R (reset): the output goes back to 0 when the step becomes active and stays there. Click to switch to N.')}>{a.kind}</button>
-                    <Slot className="gf-var" accept={(p) => p.k === 'var'} onDrop={(p) => p.k === 'var' && change(E.setStep(prog, s.id, { actions: s.actions.map((x, j) => (j === k ? { ...x, var: p.name } : x)) }))}>
-                      <Inline value={a.var} list="plc-vars" placeholder="Q0.0" title={T(lang, 'Sortie commandée par l’étape : cliquez pour la saisir ou glissez-en une depuis la liste', 'Output driven by the step: click to type it or drag one from the list')} onCommit={(v) => change(E.setStep(prog, s.id, { actions: s.actions.map((x, j) => (j === k ? { ...x, var: v } : x)) }))} />
-                    </Slot>
-                    <button className="x" onClick={() => change(E.setStep(prog, s.id, { actions: s.actions.filter((_, j) => j !== k) }))} aria-label={T(lang, 'Retirer l’action', 'Remove action')}>✕</button>
-                  </span>
-                ))}
-                <button className="gf-addact" onClick={() => change(E.addAction(prog, s.id, { kind: 'N', var: '' }))} data-tip={T(lang, 'Ajouter une action (ou glissez une sortie sur l’étape)', 'Add an action (or drag an output onto the step)')}>＋ {T(lang, 'action', 'action')}</button>
-              </div>
-              <Inline className="gf-comment" title={T(lang, 'Commentaire libre sur le rôle de l’étape (ex. « A sort »)', 'Free comment on the step role (e.g. “A extends”)')} value={s.comment ?? ''} placeholder={T(lang, 'commentaire', 'comment')} onCommit={(v) => change(E.setStep(prog, s.id, { comment: v }), true)} />
-              <Draggable payload={{ k: 'link', from: s.id }} className="gf-link" data-tip={T(lang, 'Glisser sur une autre étape pour créer une transition (boucle, saut, alternative)', 'Drag onto another step to create a transition (loop, jump, branch)')} click={false}>↳</Draggable>
-              <button className="x" onClick={() => change(E.deleteStep(prog, s.id))} data-tip={T(lang, 'Supprimer l’étape', 'Delete the step')} aria-label={T(lang, 'Supprimer l’étape', 'Delete the step')}>🗑</button>
-            </Slot>
-            {i + 1 < n && (
-              ti >= 0 ? (
-                <div className={`gf-tr${fires(ti) ? ' fire' : ''}`}>
-                  <span className="bar" />
-                  {condField(ti)}
-                  <button className="x" onClick={() => change({ ...prog, transitions: prog.transitions.filter((_, k) => k !== ti) })} aria-label={T(lang, 'Supprimer la transition', 'Delete transition')}>✕</button>
-                </div>
-              ) : (
-                <div className="gf-tr missing"><span className="bar dashed" /><button className="mini" onClick={() => change(E.addTransition(prog, s.id, steps[i + 1].id))}>＋ {T(lang, 'transition', 'transition')}</button></div>
-              )
-            )}
-            {others.filter(({ t }) => Math.min(...t.from, 999) === s.id).map(({ t, i: k }) => (
-              <div key={k} className={`gf-jump${fires(k) ? ' fire' : ''}`}>
-                <span className="arrow">↳</span>
-                <span className="lbl">{t.from.join(',')} → {t.to.join(',') || '?'}</span>
-                {condField(k)}
-                <Inline className="gf-dest" value={t.to.join(',')} placeholder="0" onCommit={(v) => change(E.setTransition(prog, k, { to: v.split(/[\s,;]+/).map(Number).filter((x) => Number.isFinite(x) && steps.some((st) => st.id === x)) }))} data-tip={T(lang, 'Étape(s) d’arrivée (plusieurs séparées par des virgules : parallélisme)', 'Target step(s) (comma-separated for parallel branches)')} />
-                <button className="x" onClick={() => change({ ...prog, transitions: prog.transitions.filter((_, j) => j !== k) })} aria-label={T(lang, 'Supprimer la transition', 'Delete transition')}>✕</button>
-              </div>
-            ))}
-            {i + 1 < n && insertSlot(i + 1)}
-          </div>
-        )
-      })}
-      {insertSlot(n)}
-      <div className="gf-foot">
-        {!prog.transitions.some((t) => t.from.includes(steps[n - 1].id)) && n > 1 && (
-          <button className="mini" onClick={() => change(E.addTransition(prog, steps[n - 1].id, (steps.find((s) => s.init) ?? steps[0]).id))}>↺ {T(lang, 'Fermer le cycle (retour à l’étape initiale)', 'Close the cycle (back to the initial step)')}</button>
-        )}
-        <button className="mini" onClick={() => setArmed({ k: 'tool', tool: 'step' })}>＋ {T(lang, 'Étape (choisir puis cliquer un emplacement)', 'Step (pick, then click a spot)')}</button>
-      </div>
     </div>
   )
 }
