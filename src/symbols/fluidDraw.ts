@@ -1,5 +1,5 @@
 import type { PortDef, SymbolDef } from '../types'
-import { pilotNumbers, portNumbers, solenoidNames } from '../fluidNames'
+import { exhaustPortIds, pilotNumbers, portNumbers, solenoidNames } from '../fluidNames'
 
 /**
  * Dessin dynamique des distributeurs et des vérins pneumatiques et hydrauliques (inspiré des simulateurs de circuits fluides) :
@@ -119,9 +119,13 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   const [namesA, namesB] = solenoidNames(view.label ?? '', pil)
   // numéros normalisés des orifices (1 alimentation, 2 et 4 utilisations, 3 et 5 échappements) et des commandes (14, 12, 10)
   const nums = portNumbers(def)
+  const exhaust = new Set(exhaustPortIds(def))
   for (const p of fp) {
     const t = nums[p.id]
-    if (t) out += `<text x="${n(p.x + 2.5)}" y="${n(p.dir === 'up' ? -2 : H + 7)}" font-size="6" fill="currentColor" stroke="none">${t}</text>`
+    const sil = exhaust.has(p.id)
+    if (t) out += `<text x="${n(p.x + (sil ? 6 : 2.5))}" y="${n(p.dir === 'up' ? -2 : H + 7)}" font-size="6" fill="currentColor" stroke="none">${t}</text>`
+    // silencieux d'échappement posé sur l'orifice : triangle dont la pointe regarde l'atmosphère
+    if (sil) { const s = p.dir === 'up' ? -1 : 1, y = p.dir === 'up' ? 0 : H; out += `<path d="M${n(p.x - 3.5)} ${n(y + s * 1)}L${n(p.x + 3.5)} ${n(y + s * 1)}L${n(p.x)} ${n(y + s * 8)}Z" fill="var(--bg)" stroke="currentColor" stroke-width="1"/>` }
   }
   const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="6" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
   const pilotNo = (x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="5.5" text-anchor="${anchor}" fill="currentColor" stroke="none">${t}</text>` : '')

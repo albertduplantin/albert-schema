@@ -1,5 +1,5 @@
 import type { Doc, SymbolDef } from '../types'
-import { pilotNumbers, solenoidNames } from '../fluidNames'
+import { exhaustPortIds, pilotNumbers, solenoidNames } from '../fluidNames'
 
 /** Mémoire de simulation (voir engine.ts) : `p` et `dir` servent aux vérins. */
 export type FluidMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number; v?: number }>
@@ -106,6 +106,7 @@ export function solveFluid(x: FluidIn): FluidOut {
       const f = defs[s.defId]?.fluid
       if (f?.k === 'fsource') for (const p of f.ports) mark(key(s.id, p), 'P')
       if (f?.k === 'fsink') for (const p of f.ports) mark(key(s.id, p), 'R')
+      if (f?.k === 'valve') for (const p of exhaustPortIds(defs[s.defId])) mark(key(s.id, p), 'R') // échappement à l'air libre (silencieux dessiné sur l'orifice)
       if (f?.k === 'fpump' && pumpOn.has(s.id)) mark(key(s.id, f.out), 'P')
     }
     return { uf, pots }

@@ -171,3 +171,7 @@ export function renumberFluid(doc: Doc, defs: Record<string, SymbolDef>): Doc {
   }
   return { ...doc, symbols: doc.symbols.map((s) => (labels.has(s.id) ? { ...s, label: labels.get(s.id)! } : s)) }
 }
+
+/** Orifices d'échappement (3, 5) d'un distributeur pneumatique : ils portent un silencieux et sont à l'air libre même s'ils ne sont reliés à rien. */
+export const exhaustPortIds = (def: SymbolDef): string[] =>
+  def.domain === 'pneumatic' ? Object.entries(portNumbers(def)).filter(([, t]) => t === '3' || t === '5').map(([id]) => id) : []

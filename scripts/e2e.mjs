@@ -35,6 +35,8 @@ async function waitServer() {
 try {
   await waitServer()
   const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new' })
+  // les exports (PDF, SVG…) testés ici ne doivent pas atterrir dans le dossier Téléchargements de l'utilisateur
+  await (await browser.target().createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny' })
   const page = await browser.newPage()
   await page.setViewport({ width: 1500, height: 900 })
   const errors = []

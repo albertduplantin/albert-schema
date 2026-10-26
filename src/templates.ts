@@ -59,20 +59,17 @@ const motorStarterRaw = (base: Doc): Doc =>
 const FV = (p: string) => P('5020_velves/502010_control/50201060_5_2_way/' + p)
 const CYL = P('5030_actuators/503010_cylinder_lin/50301011_double_acting/5030101100_double_effet')
 const SRC = P('5010_compressed_air/501010_air_generation/50101000_compressed_air_source')
-const SIL = P('5010_compressed_air/501016_funktion_components/50101610_flow/5010161060_silencer')
 
-/** Partie pneumatique commune : source d'air, distributeur 5/2 (valve = identifiant du symbole), vérin A1 et deux silencieux d'échappement. */
+/** Partie pneumatique commune : source d'air, distributeur 5/2 (valve = identifiant du symbole), vérin A1 (les échappements du distributeur portent leur silencieux). */
 const pneuPart = (valve: string, valveLabel: string, ports: { b: string; a: string; r1: string; p: string; r2: string }): [Spec[], Link[]] => [
   [
     ['a1', CYL, 180, 90, 'A1'],
     ['v', valve, 200, 230, valveLabel],
-    ['sil1', SIL, 170, 330, ''],
     ['src', SRC, 250, 330, ''],
-    ['sil2', SIL, 340, 330, ''],
   ],
   [
     ['v', ports.b, 'a1', 't0'], ['v', ports.a, 'a1', 't1'],
-    ['v', ports.r1, 'sil1', 't0'], ['v', ports.p, 'src', 't0'], ['v', ports.r2, 'sil2', 't0'],
+    ['v', ports.p, 'src', 't0'],
   ],
 ]
 
