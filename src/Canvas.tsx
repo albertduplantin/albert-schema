@@ -33,7 +33,7 @@ function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | nul
   const actuated = sim.closed[id]
   // état conducteur : un inverseur est « fermé » côté travail quand il est actionné ; un contact simple selon sa nature (NO/NF)
   const conducting = model.changeover?.length ? actuated : model.nc ? !actuated : actuated
-  const vars: Record<string, string> = {}
+  const vars: Record<string, string> = { '--hs': actuated ? '1' : '0' }
   model.blades.forEach((b, n) => {
     vars['--b' + n] = (conducting === b.closed ? 0 : b.rot) + 'deg'
   })

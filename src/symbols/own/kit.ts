@@ -44,7 +44,7 @@ export function angle(a: Pt, b: Pt): number {
 }
 
 export type PoleMark = 'none' | 'nc' | 'breaker' | 'disconnector' | 'contactor'
-export interface PoleOut { svg: string; rot: number; mid: Pt }
+export interface PoleOut { svg: string; rot: number; mid: Pt; /** milieu de la lame une fois fermée */ midClosed: Pt }
 
 /** Pôle de contact entre deux bornes (haut, bas) : fût fixe en haut, lame articulée en bas, ouverte au repos. */
 export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): PoleOut {
@@ -79,13 +79,13 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
     svg += path(`M${f(top[0])} ${f(tipY - 2 * r)}A${r} ${r} 0 0 0 ${f(top[0])} ${f(tipY)}`, 'fill="none"')
   }
   svg += blade(n, hinge, open, extra, extraPts)
-  return { svg, rot, mid: [(hinge[0] + open[0]) / 2, (hinge[1] + open[1]) / 2] }
+  return { svg, rot, mid: [(hinge[0] + open[0]) / 2, (hinge[1] + open[1]) / 2], midClosed: [(hinge[0] + closed[0]) / 2, (hinge[1] + closed[1]) / 2] }
 }
 
 export type Head = 'none' | 'push' | 'mushroom' | 'rotate' | 'lever' | 'cam' | 'key'
 
 /** Liaison mécanique en pointillés entre les pôles, puis tête de commande à gauche du premier. */
-export function actuator(mids: Pt[], head: Head): string {
+export function actuator(mids: Pt[], head: Head, shift = 0): string {
   if (!mids.length) return ''
   const sorted = [...mids].sort((a, b) => a[0] - b[0])
   const first = sorted[0], last = sorted[sorted.length - 1]
@@ -95,7 +95,10 @@ export function actuator(mids: Pt[], head: Head): string {
   const x = first[0] - 8, y = first[1]
   svg += line(first, [x, y], DASH)
   switch (head) {
-    case 'push': svg += line([x, y], [x - 4, y]) + line([x - 4, y - 5], [x - 4, y + 5], 'stroke-width="2"'); break
+    case 'push':
+      // bouton poussoir : la commande (crochet) et sa liaison en pointillés suivent la lame quand on appuie
+      svg = (sorted.length > 1 ? line(first, last, DASH) : '') + `<g class="head" style="transform:translateX(calc(var(--hs,0) * ${f(shift)}px));transition:transform .25s ease-out">` + line(first, [x - 1, y], DASH) + path(`M${f(x + 3)} ${f(y - 5.5)}H${f(x - 1)}V${f(y + 5.5)}H${f(x + 3)}`, 'fill="none"') + '</g>'
+      break
     case 'mushroom': svg += path(`M${f(x)} ${f(y - 7)}A7 7 0 0 0 ${f(x)} ${f(y + 7)}Z`, 'fill="currentColor"'); break
     case 'rotate': svg += path(`M${f(x)} ${f(y - 7)}A7 7 0 0 0 ${f(x)} ${f(y + 7)}Z`, 'fill="currentColor"') + path(`M${f(x - 5)} ${f(y - 9)}A9 9 0 0 1 ${f(x - 5)} ${f(y + 9)}`, 'fill="none"') + path(`M${f(x - 7)} ${f(y + 8)}L${f(x - 4)} ${f(y + 9)}L${f(x - 5)} ${f(y + 5.5)}`, 'fill="none"'); break
     case 'lever': svg += line([x, y], [x - 4, y - 7]) + line([x - 4, y - 7], [x - 8, y - 7]); break
@@ -111,6 +114,7 @@ export function contacts(ports: PortInfo[], poles: [string, string][], mark: Pol
   let svg = ''
   const blades: { rot: number; closed: boolean }[] = []
   const mids: Pt[] = []
+  let shift = 0
   for (let i = 0; i < poles.length; i++) {
     const a = by.get(poles[i][0]), b = by.get(poles[i][1])
     if (!a || !b || Math.abs(a.y - b.y) < 12) return null
@@ -119,8 +123,9 @@ export function contacts(ports: PortInfo[], poles: [string, string][], mark: Pol
     svg += p.svg
     blades.push({ rot: p.rot, closed: false })
     mids.push(p.mid)
+    if (i === 0) shift = p.midClosed[0] - p.mid[0]
   }
-  return { svg: svg + actuator(mids, head), blades }
+  return { svg: svg + actuator(mids, head, shift), blades }
 }
 
 /** Boîtier d'appareil : rectangle entre les bornes (une borne à l'intérieur du cadre est posée sur son bord), titre et pictogramme au centre. */
