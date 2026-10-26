@@ -267,7 +267,7 @@ function sources(def: SymbolDef, ports: PortInfo[]): R {
     if (/variable/i.test(n)) svg += line([c[0] - 12, c[1] + 12], [c[0] + 12, c[1] - 12]) + arrowHead([c[0] + 12, c[1] - 12], [c[0] - 12, c[1] + 12])
     return { svg, name: /moteur/i.test(n) ? T('Compresseur entraîné par moteur', 'Motor-driven air compressor') : /variable/i.test(n) ? T('Compresseur à vitesse variable', 'Variable-speed air compressor') : T('Compresseur d’air', 'Air compressor') }
   }
-  if (fl?.k === 'fsink' && /^Silencieux/i.test(n)) return { svg: oneport(ports[0], 7, path('M-4 0L6 -6V6Z', BG) + line([6, -6], [6, 6]), 5), name: /vide/i.test(n) ? T('Silencieux pour vide', 'Vacuum silencer') : T('Silencieux', 'Silencer') }
+  if (fl?.k === 'fsink' && /^Silencieux/i.test(n)) return { svg: oneport(ports[0], 7, path('M-4 -6L6 0L-4 6Z', BG), 5), name: /vide/i.test(n) ? T('Silencieux pour vide', 'Vacuum silencer') : T('Silencieux', 'Silencer') }
   return null
 }
 
