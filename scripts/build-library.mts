@@ -34,6 +34,8 @@ for (const s of raw.symbols) {
     own++
   }
 }
+// les symboles les plus courants (boutons, contacts, lampes, moteurs…) figurent dans « Les plus utilisés »
+for (const s of raw.symbols) if (s.own && !s.legacy && s.domain === 'electrical' && (s.score ?? 0) >= 80) s.top = true
 // un seul symbole par nom dans la palette : les variantes dessinées à l'identique (autre taille, autre origine) restent chargeables mais cachées
 {
   const seen = new Set<string>()
