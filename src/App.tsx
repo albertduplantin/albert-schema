@@ -885,7 +885,8 @@ function Editor() {
   // bibliothèque étendue (collection QElectroTech) : chargée à la demande, affichée seulement si l'utilisateur l'a activée
   const [, setLibTick] = useState(0)
   useEffect(() => { const f = () => setLibTick((n) => n + 1); libListeners.add(f); return () => { libListeners.delete(f) } }, [])
-  const [showExt, setShowExt] = useState(() => { try { return localStorage.getItem('albertschema.ext') === '1' } catch { return false } })
+  // la bibliothèque étendue est affichée par défaut (le choix de l'utilisateur est mémorisé)
+  const [showExt, setShowExt] = useState(() => { try { return localStorage.getItem('albertschema.ext') !== '0' } catch { return true } })
   const toggleExt = async (on: boolean) => {
     setShowExt(on)
     try { localStorage.setItem('albertschema.ext', on ? '1' : '0') } catch { /* ignoré */ }
@@ -2210,7 +2211,7 @@ export default function App() {
         // bibliothèque étendue : activée par l'utilisateur, ou nécessaire à l'ouvrage en cours
         try {
           const raw = JSON.parse(localStorage.getItem(STORE) || 'null') as Doc | null
-          if (localStorage.getItem('albertschema.ext') === '1' || hasKept() || (raw && needsExtended([raw, ...(raw.pages ?? [])]))) await loadExtended()
+          if (localStorage.getItem('albertschema.ext') !== '0' || hasKept() || (raw && needsExtended([raw, ...(raw.pages ?? [])]))) await loadExtended()
         } catch { /* stockage indisponible */ }
       })
       .then(() => setState('ready'), () => setState('error'))
