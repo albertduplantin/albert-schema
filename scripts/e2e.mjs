@@ -71,10 +71,12 @@ try {
   await page.evaluate(() => document.querySelectorAll('.symbtn')[0]?.click()); await sleep(100)
   await page.keyboard.press('o'); await sleep(150)
   await page.keyboard.press('m'); await sleep(150)
+  await page.keyboard.press('s'); await sleep(150)
+  await page.keyboard.press('r'); await sleep(150)
   const rev = await page.evaluate(() => JSON.parse(localStorage.getItem('albertschema.review') || '{}'))
-  check('revue : O garde le premier symbole, M masque le suivant', rev.keep?.length === 1 && rev.hide?.length === 1 && rev.keep[0] !== rev.hide[0], JSON.stringify(rev))
+  check('revue : O garde, M masque, S supprime, R marque à revoir', rev.keep?.length === 1 && rev.hide?.length === 1 && rev.del?.length === 1 && rev.redo?.length === 1 && rev.keep[0] !== rev.hide[0], JSON.stringify(rev))
   check('revue : le symbole masqué reste visible (grisé) en mode revue', await page.evaluate(() => !!document.querySelector('.symbtn.revhide') && !!document.querySelector('.symbtn.revkeep')))
-  for (const i of [0, 1]) { await page.evaluate((k) => document.querySelectorAll('.symbtn')[k]?.click(), i); await sleep(80); await page.keyboard.press('Backspace'); await sleep(80) }
+  for (const i of [0, 1, 2, 3]) { await page.evaluate((k) => document.querySelectorAll('.symbtn')[k]?.click(), i); await sleep(80); await page.keyboard.press('Backspace'); await sleep(80) }
   await page.evaluate(() => [...document.querySelectorAll('aside.palette label.share')].find((l) => /revue/i.test(l.textContent))?.querySelector('input')?.click())
   await sleep(150)
   // ── formes : cadre en pointillés, redimensionnement, annulation

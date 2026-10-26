@@ -683,3 +683,7 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .symbtn.revkeep { background: rgba(53, 199, 89, .16); }
 .symbtn.revhide { background: rgba(229, 57, 53, .14); opacity: .6; }
 .note.review { font-weight: 600; }
+
+.symbtn.revdel { background: rgba(120, 120, 120, .25); opacity: .5; text-decoration: line-through; }
+
+.symbtn.revredo { background: rgba(255, 183, 0, .22); }

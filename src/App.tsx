@@ -1,5 +1,5 @@
 import { ExplainCard } from './ExplainCard'
-import { clearReview, hasKept, isHidden, isKept, mark as markReview, reviewCounts, reviewExport, reviewListeners } from './review'
+import { clearReview, hasKept, isDeleted, isHidden, isKept, isRedo, mark as markReview, reviewCounts, reviewExport, reviewListeners } from './review'
 import { matchesQuery } from './searchTerms'
 import { nextFluidLabel, pilotNumbers, renumberFluid, solenoidNames } from './fluidNames'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -897,7 +897,7 @@ function Editor() {
   const [, setReviewTick] = useState(0)
   useEffect(() => { const f = () => setReviewTick((n) => n + 1); reviewListeners.add(f); return () => { reviewListeners.delete(f) } }, [])
   const extVisible = (s: { id: string; std?: string }) => (isHidden(s.id) ? reviewMode : isKept(s.id) || showExt || s.std !== 'QElectroTech')
-  const cats = useMemo(() => CATEGORIES[domain].filter((c) => SYMBOLS.some((s) => s.cat === c.id && !s.legacy && extVisible(s))), [domain, showExt, extendedLoaded, reviewMode, reviewCounts().keep, reviewCounts().hide]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cats = useMemo(() => CATEGORIES[domain].filter((c) => SYMBOLS.some((s) => s.cat === c.id && !s.legacy && extVisible(s))), [domain, showExt, extendedLoaded, reviewMode, reviewCounts().keep, reviewCounts().hide, reviewCounts().del, reviewCounts().redo]) // eslint-disable-line react-hooks/exhaustive-deps
   const cat = catByDomain[domain] || TOP
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -925,17 +925,17 @@ function Editor() {
     const gmax = new Map<string, number>()
     for (const s of found) gmax.set(gk(s), Math.max(gmax.get(gk(s)) ?? 0, score(s)))
     return found.sort((a, b) => gmax.get(gk(b))! - gmax.get(gk(a))! || gk(a).localeCompare(gk(b)) || score(b) - score(a))
-  }, [domain, query, lang, cat, usageTick, showExt, extendedLoaded, reviewMode, reviewCounts().keep, reviewCounts().hide]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [domain, query, lang, cat, usageTick, showExt, extendedLoaded, reviewMode, reviewCounts().keep, reviewCounts().hide, reviewCounts().del, reviewCounts().redo]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!reviewMode) return
     const onKey = (e: KeyboardEvent) => {
       const tg = e.target as HTMLElement
       if (tg.closest('input,textarea,select,[contenteditable]') || e.ctrlKey || e.metaKey || e.altKey || !reviewSel) return
       const k = e.key.toLowerCase()
-      if (k !== 'm' && k !== 'o' && k !== 'backspace') return
+      if (k !== 'm' && k !== 'o' && k !== 's' && k !== 'r' && k !== 'backspace') return
       e.preventDefault()
       e.stopPropagation()
-      markReview(reviewSel, k === 'o' ? 'keep' : k === 'm' ? 'hide' : null)
+      markReview(reviewSel, k === 'o' ? 'keep' : k === 'm' ? 'hide' : k === 's' ? 'del' : k === 'r' ? 'redo' : null)
       // passe au symbole suivant de la liste affichée
       const i = list.findIndex((x) => x.id === reviewSel)
       const nx = list[i + 1]
@@ -1438,13 +1438,13 @@ function Editor() {
   const hint = simMode ? t('simHint') : tool ? t('hintTool') : wiringOn ? t('hintWiring') : placing ? t('hintPlace') : sel.length ? t('hintSel') : t('hintIdle')
 
   const symButton = (s: (typeof SYMBOLS)[number]) => (
-    <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '') + (reviewMode && reviewSel === s.id ? ' revsel' : '') + (reviewMode && isKept(s.id) ? ' revkeep' : '') + (reviewMode && isHidden(s.id) ? ' revhide' : '')} title={`${s.name[lang]} — ${s.std}`}
+    <button key={s.id} className={'symbtn' + (placing === s.id ? ' on' : '') + (usageCount(s.id) >= 2 ? ' used' : '') + (reviewMode && reviewSel === s.id ? ' revsel' : '') + (reviewMode && isKept(s.id) ? ' revkeep' : '') + (reviewMode && isHidden(s.id) ? ' revhide' : '') + (reviewMode && isDeleted(s.id) ? ' revdel' : '') + (reviewMode && isRedo(s.id) ? ' revredo' : '')} title={`${s.name[lang]} — ${s.std}`}
       draggable={!reviewMode}
       onDragStart={(e) => { e.dataTransfer.setData('text/x-albert-symbol', s.id); e.dataTransfer.effectAllowed = 'copy'; setPlacing(null) }}
       onClick={() => { if (reviewMode) { setReviewSel(s.id); return } setPlacing(placing === s.id ? null : s.id); setTool(null); setSel([]) }}>
       <svg viewBox={`-6 -6 ${s.w + 12} ${s.h + 12}`} stroke="currentColor" fill="none" strokeWidth={Math.max(2, Math.max(s.w, s.h) / 28)} strokeLinecap="round" strokeLinejoin="round"
         dangerouslySetInnerHTML={{ __html: s.svg.replace(/var\(--bg\)/g, 'transparent') }} />
-      <span>{reviewMode && isKept(s.id) ? '✓ ' : reviewMode && isHidden(s.id) ? '✕ ' : ''}{s.name[lang]}</span>
+      <span>{reviewMode && isKept(s.id) ? '✓ ' : reviewMode && isDeleted(s.id) ? '🗑 ' : reviewMode && isRedo(s.id) ? '🔍 ' : reviewMode && isHidden(s.id) ? '✕ ' : ''}{s.name[lang]}</span>
     </button>
   )
 
@@ -1647,13 +1647,13 @@ function Editor() {
             <span>{lang === 'fr' ? 'Bibliothèque étendue (QElectroTech)' : 'Extended library (QElectroTech)'}</span>
           </label>
         )}
-        <label className="share" data-tip={lang === 'fr' ? 'Outil de mise au point : cliquez un symbole puis appuyez sur O pour le garder (il apparaît alors dans la palette et se simule) ou sur M pour le masquer. La liste se copie pour me la transmettre.' : 'Tuning tool: click a symbol then press O to keep it or M to hide it. The list can be copied.'}>
+        <label className="share" data-tip={lang === 'fr' ? 'Outil de mise au point : cliquez un symbole puis appuyez sur O pour le garder (il apparaît alors dans la palette et se simule), sur M pour le masquer sur S pour le marquer à supprimer de la bibliothèque ou sur R pour le marquer à revoir (je chercherai un meilleur symbole sur QElectroTech ou ailleurs). La liste se copie pour me la transmettre.' : 'Tuning tool: click a symbol then press O to keep it or M to hide it. The list can be copied.'}>
           <input type="checkbox" checked={reviewMode} onChange={(e) => { setReviewMode(e.target.checked); setReviewSel(null); setPlacing(null) }} />
-          <span>{lang === 'fr' ? 'Mode revue des symboles (O garder · M masquer)' : 'Symbol review mode (O keep · M hide)'}</span>
+          <span>{lang === 'fr' ? 'Mode revue des symboles (O garder · M masquer · S supprimer · R à revoir)' : 'Symbol review mode (O keep · M hide · S delete · R redo)'}</span>
         </label>
         {reviewMode && (
           <div className="note review">
-            ✓ {reviewCounts().keep} · ✕ {reviewCounts().hide}{' '}
+            ✓ {reviewCounts().keep} · ✕ {reviewCounts().hide} · 🗑 {reviewCounts().del} · 🔍 {reviewCounts().redo}{' '}
             <button className="link" onClick={() => { const txt = reviewExport((id) => SYMBOL_MAP[id]?.name.fr ?? ''); void navigator.clipboard?.writeText(txt).then(() => say(lang === 'fr' ? 'Liste copiée' : 'List copied')) }}>{lang === 'fr' ? 'Copier la liste' : 'Copy list'}</button>{' · '}
             <button className="link" onClick={() => { if (confirm(lang === 'fr' ? 'Effacer tous les choix ?' : 'Clear all choices?')) clearReview() }}>{lang === 'fr' ? 'Tout effacer' : 'Clear'}</button>
           </div>
