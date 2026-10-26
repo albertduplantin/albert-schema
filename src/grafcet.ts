@@ -109,6 +109,7 @@ export function drawOrder(seqs: GNode[][]): number[] {
 
 /** Renumérote les étapes 0, 1, 2… dans l'ordre du dessin (les références X2 des conditions suivent). */
 export function normalize(prog: PlcProgram): PlcProgram {
+  if (prog.manual) return prog // numéros choisis à la main : on n'y touche pas
   const order = drawOrder(parseGraph(prog))
   const map = new Map<number, number>()
   order.forEach((id, k) => map.set(id, k))
@@ -228,3 +229,18 @@ export function fromSequence(prog: PlcProgram, text: string, start = 'dcy'): Plc
   })
   return { ...prog, steps, transitions, ladder: prog.ladder }
 }
+
+/** Donne un autre numéro à une étape (les références X2 des conditions suivent). Si le numéro est déjà pris, les deux étapes échangent leurs numéros. La numérotation passe en manuel. */
+export function setStepNumber(prog: PlcProgram, id: number, no: number): PlcProgram {
+  if (!Number.isInteger(no) || no < 0 || no > 999 || !prog.steps.some((s) => s.id === id)) return prog
+  if (no === id) return { ...prog, manual: true }
+  const map = new Map<number, number>()
+  for (const s of prog.steps) map.set(s.id, s.id)
+  const other = prog.steps.find((s) => s.id === no)
+  map.set(id, no)
+  if (other) map.set(no, id)
+  return { ...renumber(prog, map), manual: true }
+}
+
+/** Revient à la numérotation automatique : 0, 1, 2… dans l'ordre du dessin. */
+export const autoNumber = (prog: PlcProgram): PlcProgram => normalize({ ...prog, manual: undefined })

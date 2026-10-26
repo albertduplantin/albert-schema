@@ -50,7 +50,9 @@ export default function GrafcetView({ prog, live, lang, change }: Props) {
             <Draggable payload={{ k: 'step', id }} className="gf-grip" click={false} title={T(lang, 'Étape ' + id, 'Step ' + id)}>⠿</Draggable>
             <Draggable payload={{ k: 'link', from: id }} className="gf-link" click={false} title={T(lang, 'Glisser sur une autre étape pour créer une transition (boucle, saut, alternative)', 'Drag onto another step to create a transition (loop, jump, branch)')}>↳</Draggable>
           </span>
-          <button className={`gf-no gfg-no${s.init ? ' init' : ''}`} onClick={() => change(E.setInitial(prog, id, !s.init))} data-tip={T(lang, s.init ? 'Étape initiale (cliquez pour retirer)' : 'Cliquez pour en faire l’étape initiale', s.init ? 'Initial step (click to remove)' : 'Click to make it the initial step')}>{id}</button>
+          <button className={`gf-no gfg-no${s.init ? ' init' : ''}`} onClick={() => change(E.setInitial(prog, id, !s.init))}
+            onDoubleClick={() => { const v = window.prompt(T(lang, 'Nouveau numéro de cette étape (si il est déjà pris, les deux étapes échangent leurs numéros) :', 'New number for this step (if already used, the two steps swap numbers):'), String(id)); if (v !== null && v.trim() !== '') change(G.setStepNumber(prog, id, Number(v))) }}
+            data-tip={T(lang, (s.init ? 'Étape initiale (clic : retirer). ' : 'Clic : en faire l’étape initiale. ') + 'Double-clic : changer son numéro.', (s.init ? 'Initial step (click: remove). ' : 'Click: make it the initial step. ') + 'Double-click: change its number.')}>{id}</button>
           <span className="gfg-side">
             <span className="gf-actions gfg-actions">
               {s.actions.map((a, k) => (
@@ -169,7 +171,9 @@ export default function GrafcetView({ prog, live, lang, change }: Props) {
           })()}
         </Fragment>
       ))}
-      <div className="gf-foot"><button className="mini" onClick={() => setArmed({ k: 'tool', tool: 'step' })}>＋ {T(lang, 'Étape (choisir puis cliquer un emplacement)', 'Step (pick, then click a spot)')}</button></div>
+      <div className="gf-foot">
+        <button className="mini" onClick={() => change(G.autoNumber(prog))} data-tip={T(lang, 'Remet les numéros dans l’ordre du dessin : 0, 1, 2… (les conditions qui citent X2… sont mises à jour)', 'Puts the numbers back in drawing order: 0, 1, 2… (conditions citing X2… are updated)')}>№ {T(lang, prog.manual ? 'Renuméroter automatiquement' : 'Renuméroter', prog.manual ? 'Renumber automatically' : 'Renumber')}</button>
+        <button className="mini" onClick={() => setArmed({ k: 'tool', tool: 'step' })}>＋ {T(lang, 'Étape (choisir puis cliquer un emplacement)', 'Step (pick, then click a spot)')}</button></div>
     </div>
   )
 }

@@ -21,6 +21,8 @@ export interface PlcProgram {
   steps: PlcStep[]
   transitions: PlcTransition[]
   ladder: PlcRung[]
+  /** numéros d'étapes choisis par l'utilisateur : la numérotation automatique (0, 1, 2… dans l'ordre du dessin) est suspendue */
+  manual?: boolean
 }
 
 export const emptyProgram = (): PlcProgram => ({ names: {}, steps: [], transitions: [], ladder: [] })

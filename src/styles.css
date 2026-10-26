@@ -703,8 +703,8 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .gfg-side { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .gfg-side::before { content: ''; width: 14px; border-top: 2px solid currentColor; flex: none; }
 .gfg-actions { flex: none; flex-wrap: wrap; max-width: 330px; padding: 3px 4px; border: 1.5px solid currentColor; border-radius: 0; background: var(--ui-panel); }
-.gfg-del { opacity: 0; }
-.gfg-step:hover .gfg-del { opacity: .7; }
+.gfg-del { opacity: .45; }
+.gfg-step:hover .gfg-del { opacity: 1; }
 .gfg-trw { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; min-height: 22px; padding: 0; }
 .gfg-trw .bar { width: 26px; border-top: 4px solid currentColor; height: 0; }
 .gfg-trw .bar.multi { border-top-width: 4px; }

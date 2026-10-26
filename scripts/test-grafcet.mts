@@ -58,6 +58,14 @@ check('suppression d’une branche : plus d’étape orpheline', G.removeStep(al
 const bad = G.removeStep(par, par.steps.find((s: any) => s.id !== 0 && par.transitions.some((t: any) => t.from.length > 1 && t.from.includes(s.id)))!.id)
 check('suppression dans un parallélisme : le programme reste cohérent (aucune transition vide)', bad.transitions.every((t: any) => t.from.length > 0 && t.to.length > 0), true)
 check('renumérotation : étapes contiguës 0..n-1', G.normalize(alt).steps.map((s: any) => s.id), [0, 1, 2, 3])
+// numéros choisis à la main
+let nb = G.fromSequence(emptyProgram(), 'A+ B+ A-')
+nb = G.setStepNumber({ ...nb, transitions: nb.transitions.map((t: any, i: number) => (i === 1 ? { ...t, cond: 'X1 ET a1' } : t)) }, 1, 7)
+check('numéro manuel : l’étape 1 devient 7, les références suivent', [nb.steps.map((s: any) => s.id), nb.transitions[1].cond, nb.manual], [[0, 2, 3, 7], 'X7 ET a1', true])
+const sw = G.setStepNumber(nb, 7, 2)
+check('numéro déjà pris : les deux étapes échangent leurs numéros', sw.steps.find((s: any) => s.actions[0]?.var === 'A+').id, 2)
+check('numérotation manuelle : une étape ajoutée ne bouleverse pas les numéros', G.appendStep(nb, 3).steps.map((s: any) => s.id).slice(0, 4), [0, 2, 3, 7])
+check('retour à la numérotation automatique', G.autoNumber(nb).steps.map((s: any) => s.id), [0, 1, 2, 3])
 void parSteps
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests du Grafcet graphique passent')
 process.exit(fails ? 1 : 0)
