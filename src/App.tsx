@@ -1,4 +1,5 @@
 import { ExplainCard } from './ExplainCard'
+import MachineView from './MachineView'
 import { clearReview, restoreHidden, hasKept, isDeleted, isHidden, isKept, isRedo, mark as markReview, reviewCounts, reviewExport, reviewListeners } from './review'
 import { matchesQuery } from './searchTerms'
 import { nextFluidLabel, pilotNumbers, renumberFluid, solenoidNames } from './fluidNames'
@@ -203,6 +204,7 @@ function Editor() {
   const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
   const [showCredits, setShowCredits] = useState(false)
   const [explainFor, setExplainFor] = useState<string | null>(null)
+  const [showMachine, setShowMachine] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
   const [usageTick, setUsageTick] = useState(0) // relance le classement après chaque pose
   const [share, setShareState] = useState<ShareChoice>(getShare)
@@ -1585,6 +1587,7 @@ function Editor() {
           <button className={'simbtn' + (simMode ? ' on' : '')} onClick={() => (simMode ? setSimMode(false) : startSim())} title={t('simTitle')}>
             {simMode ? '■ ' + t('simStop') : '▶ ' + t('simStart')}
           </button>
+          <button className={showMachine ? 'on' : ''} onClick={() => setShowMachine((v) => !v)} title={lang === 'fr' ? 'Vue machine : la partie opérative en 2D, animée par la simulation' : 'Machine view: the operative part in 2D, animated by the simulation'}>⚙ {lang === 'fr' ? 'Machine' : 'Machine'}</button>
           {simMode && (
             <>
               <button onClick={() => rebase({ paused: !clock.current.paused })}>{clockUi.paused ? '▶ ' + t('resume') : '⏸ ' + t('pause')}</button>
@@ -1694,6 +1697,7 @@ function Editor() {
             <button onClick={keepCopy}>{t('shareKeep')}</button>
           </div>
         )}
+        {showMachine && <MachineView doc={doc} sim={sim} lang={lang} onClose={() => setShowMachine(false)} />}
         {sim && signalNames.length > 0 && (
           <Chrono rows={trace.current.rows} names={signalNames} now={chronoNow} lang={lang}
             onClear={() => { trace.current = { t0: vnow(), rows: [] }; setChronoNow(0) }} />

@@ -161,6 +161,12 @@ try {
   await sleep(600)
   check('exemple automate : chambres du vérin colorées en rouge (pression) pendant le cycle', await p3.evaluate(() => !!document.querySelector('svg.canvas rect[fill^="rgba(229"]')))
   check('exemple automate : voyant RUN de l’automate', await p3.evaluate(() => [...document.querySelectorAll('svg.canvas text')].some((t) => t.textContent === 'RUN')))
+  // vue machine : la partie opérative 2D suit les vérins du schéma
+  await p3.evaluate(() => [...document.querySelectorAll('.toolbar button')].find((b) => /Machine/.test(b.textContent))?.click())
+  await sleep(2500)
+  check('vue machine : la machine animée s’affiche avec des pièces', await p3.evaluate(() => !!document.querySelector('.machview svg') && document.querySelectorAll('.machview svg rect[rx="3"]').length > 0))
+  await p3.screenshot({ path: process.env.TEMP + '/mv.png' })
+  await p3.evaluate(() => document.querySelector('.machview .x')?.click())
   // ── éditeur de programme : ouverture, glisser-déposer, ancrage et agrandissement de la fenêtre
   const plcAt = await p3.evaluate(() => { const d = JSON.parse(localStorage.getItem('albertschema.doc')); const g = document.querySelector(`[data-sym="${d.symbols.find((x) => x.label === 'API1').id}"]`); const q = [...g.querySelectorAll('path,rect')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 20).sort((a, b) => b.width * b.height - a.width * a.height)[0]; return { x: q.x + q.width / 2, y: q.y + q.height / 2 } })
   await p3.click('.toolbar .simbtn.on').catch(() => {})

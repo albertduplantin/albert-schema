@@ -728,3 +728,15 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .gfg-blk:hover > .gfg-addbr { opacity: 1; }
 .gfg-jump { color: #2a5bd7; font-size: 12px; font-weight: 600; padding-top: 2px; }
 .pe-quick { width: 100%; box-sizing: border-box; padding: 3px 6px; border: 1px solid var(--ui-line); border-radius: 5px; background: var(--ui-panel); color: inherit; font: inherit; margin-bottom: 4px; }
+
+/* Vue machine : partie opérative 2D */
+.machview { position: absolute; left: 12px; top: 54px; z-index: 12; width: 440px; min-width: 260px; max-width: 94%; resize: both; overflow: auto; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-radius: 10px; box-shadow: 0 6px 24px #0004; padding: 6px 8px 8px; }
+.machview > header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.machview > header nav { display: flex; gap: 3px; }
+.machview > header nav button { font: inherit; font-size: 12px; padding: 2px 8px; border: 1px solid var(--ui-line); background: transparent; color: inherit; border-radius: 5px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.machview > header nav button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.machview .grow { flex: 1; }
+.machview .x { border: 0; background: transparent; color: var(--ui-muted); cursor: pointer; font-size: 14px; }
+.mv-svg { width: 100%; height: auto; display: block; color: #263238; }
+.mv-note { margin: 4px 0 0; }
+@keyframes mv-spin { to { transform: rotate(360deg); } }
