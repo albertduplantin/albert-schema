@@ -44,7 +44,7 @@ export function angle(a: Pt, b: Pt): number {
 }
 
 export type PoleMark = 'none' | 'nc' | 'breaker' | 'disconnector' | 'contactor'
-export interface PoleOut { svg: string; rot: number; mid: Pt; /** milieu de la lame une fois fermée */ midClosed: Pt }
+export interface PoleOut { svg: string; rot: number; mid: Pt; /** milieu de la lame une fois fermée */ midClosed: Pt; /** contact fermé au repos (NF) : la lame est dessinée appuyée contre la barre */ nc?: boolean }
 
 /** Pôle de contact entre deux bornes (haut, bas) : fût fixe en haut, lame articulée en bas, ouverte au repos. */
 export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): PoleOut {
@@ -56,7 +56,11 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
   const open: Pt = [top[0] - span * 0.38, tipY]
   const hinge: Pt = [bot[0], hingeY]
   const closed: Pt = [top[0], tipY]
-  const rot = angle([open[0] - hinge[0], open[1] - hinge[1]], [closed[0] - hinge[0], closed[1] - hinge[1]])
+  // contact NF : au repos la lame touche l'extrémité de la barre ; actionné, elle s'écarte vers la position ouverte
+  const rest: Pt = mark === 'nc' ? [top[0] - 4, tipY] : open
+  const rot = mark === 'nc'
+    ? angle([rest[0] - hinge[0], rest[1] - hinge[1]], [open[0] - hinge[0], open[1] - hinge[1]])
+    : angle([open[0] - hinge[0], open[1] - hinge[1]], [closed[0] - hinge[0], closed[1] - hinge[1]])
   let svg = line(top, closed) + line(bot, hinge)
   const extra: string[] = []
   const extraPts: Pt[] = []
@@ -78,8 +82,9 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
     const r = 3.6
     svg += path(`M${f(top[0])} ${f(tipY - 2 * r)}A${r} ${r} 0 0 0 ${f(top[0])} ${f(tipY)}`, 'fill="none"')
   }
-  svg += blade(n, hinge, open, extra, extraPts)
-  return { svg, rot, mid: [(hinge[0] + open[0]) / 2, (hinge[1] + open[1]) / 2], midClosed: [(hinge[0] + closed[0]) / 2, (hinge[1] + closed[1]) / 2] }
+  svg += blade(n, hinge, rest, extra, extraPts)
+  const alt: Pt = mark === 'nc' ? open : closed
+  return { svg, rot, mid: [(hinge[0] + rest[0]) / 2, (hinge[1] + rest[1]) / 2], midClosed: [(hinge[0] + alt[0]) / 2, (hinge[1] + alt[1]) / 2], nc: mark === 'nc' }
 }
 
 export type Head = 'none' | 'push' | 'mushroom' | 'rotate' | 'lever' | 'cam' | 'key'
@@ -121,7 +126,7 @@ export function contacts(ports: PortInfo[], poles: [string, string][], mark: Pol
     const [t, u] = a.y < b.y ? [a, b] : [b, a]
     const p = pole(i, [t.x, t.y], [u.x, u.y], mark)
     svg += p.svg
-    blades.push({ rot: p.rot, closed: false })
+    blades.push({ rot: p.rot, closed: !!p.nc })
     mids.push(p.mid)
     if (i === 0) shift = p.midClosed[0] - p.mid[0]
   }
