@@ -114,6 +114,13 @@ try {
   check('clic droit : fiche « à quoi ça sert » ouverte', await page.evaluate(() => /À quoi ça sert/.test(document.querySelector('.dialog .explain')?.textContent ?? '')))
   await page.keyboard.press('Escape'); await page.evaluate(() => document.querySelector('.modal')?.click()); await sleep(200)
 
+  // ── désignation d'un composant sur plusieurs lignes
+  await page.mouse.click(symPos[0], symPos[1]); await sleep(150)
+  await page.keyboard.press('Enter'); await sleep(300)
+  const ta = await page.$('.propspop textarea')
+  if (ta) { await ta.click({ clickCount: 3 }); await page.keyboard.type('Ligne A'); await page.keyboard.press('Enter'); await page.keyboard.type('Ligne B'); await sleep(250) }
+  check('désignation : plusieurs lignes affichées', await page.evaluate(() => [...document.querySelectorAll('svg.canvas text')].some((t) => t.querySelectorAll('tspan').length === 2 && /Ligne A/.test(t.textContent) && /Ligne B/.test(t.textContent))))
+  await page.keyboard.press('Escape'); await sleep(100)
   // ── annotation sur plusieurs lignes
   await menu(1); await click(/^T Texte/, '.toolbar .menu-list button'); await sleep(300)
   const pos = await page.evaluate(() => { const r = document.querySelector('[data-note]').getBoundingClientRect(); return [r.x + 10, r.y + 6] })

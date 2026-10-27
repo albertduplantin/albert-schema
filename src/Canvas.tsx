@@ -20,6 +20,9 @@ import { devKey, isOperableDef, type SimResult } from './sim/engine'
 import type { SimModel } from './types'
 import { PLC_BLADE_ROT, PLC_GEOM } from './symbols/plc'
 
+/** Texte sur plusieurs lignes : une ligne par retour à la ligne, alignées sur `x`. */
+const lines = (t: string, x: number, lh: number) => t.split('\n').map((l, i) => <tspan key={i} x={x} dy={i === 0 ? 0 : lh}>{l || ' '}</tspan>)
+
 /** Variables CSS --b{n} : rotation de chaque lame de contact selon l'état simulé (la transition CSS anime le mouvement). */
 function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | null): React.CSSProperties | undefined {
   if (sim && model?.k === 'plc') {
@@ -954,14 +957,14 @@ export default function Canvas(p: Props) {
                   return <text key={pt.id} x={pos.x + off[0]} y={pos.y + off[1]} fontSize={6} fill="currentColor" stroke="none" textAnchor={pos.dir === 'left' ? 'end' : 'start'}>{text}</text>
                 })}
                 {doc.showNames && def.cat !== 'sim' && (
-                  <text transform={`translate(${s.nameOff?.x ?? 0} ${s.nameOff?.y ?? 0})`} x={(b.x1 + b.x2) / 2} y={b.y2 + 4 + (doc.nameStyle?.size ?? 7)} fontSize={doc.nameStyle?.size ?? 7} fontFamily={fontCss(doc.nameStyle?.font)} fontWeight={doc.nameStyle?.bold ? 700 : 400} fontStyle={doc.nameStyle?.italic ? 'italic' : 'normal'} textAnchor="middle" fill="#555" stroke="none">{s.nameText || def.name[p.lang]}</text>
+                  <text transform={`translate(${s.nameOff?.x ?? 0} ${s.nameOff?.y ?? 0})`} x={(b.x1 + b.x2) / 2} y={b.y2 + 4 + (doc.nameStyle?.size ?? 7)} fontSize={doc.nameStyle?.size ?? 7} fontFamily={fontCss(doc.nameStyle?.font)} fontWeight={doc.nameStyle?.bold ? 700 : 400} fontStyle={doc.nameStyle?.italic ? 'italic' : 'normal'} textAnchor="middle" fill="#555" stroke="none">{lines(s.nameText || def.name[p.lang], (b.x1 + b.x2) / 2, (doc.nameStyle?.size ?? 7) * 1.15)}</text>
                 )}
                 {(s.label || s.desc || crossRefs[s.id]?.length) && (
                   <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>
                     {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
-                    {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{s.desc}</text>}
+                    {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{lines(s.desc, b.x2 + 6, 8.5)}</text>}
                     {crossRefs[s.id]?.map((r, i) => (
-                      <text key={i} x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + (s.desc ? 20 : 10) + i * 8} fontSize={6.5} fill="#444" stroke="none">{r}</text>
+                      <text key={i} x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + (s.desc ? 12 + 8.5 * s.desc.split('\n').length : 10) + i * 8} fontSize={6.5} fill="#444" stroke="none">{r}</text>
                     ))}
                   </g>
                 )}
@@ -1054,8 +1057,8 @@ export default function Canvas(p: Props) {
                   )
                 })}
                 {(s.label || s.desc) && (() => {
-                  const w = Math.max((s.label?.length ?? 0) * 6.5, (s.desc?.length ?? 0) * 4) + 6
-                  const h = (s.label ? 12 : 0) + (s.desc ? 9 : 0) + 2
+                  const w = Math.max((s.label?.length ?? 0) * 6.5, ...(s.desc ?? '').split('\n').map((l) => l.length * 4)) + 6
+                  const h = (s.label ? 12 : 0) + (s.desc ? 8.5 * s.desc.split('\n').length + 1 : 0) + 2
                   return <rect data-lbl={s.id} className="lbl-hit" x={b.x2 + 3 + (s.labelOff?.x ?? 0)} y={(b.y1 + b.y2) / 2 - 10 + (s.labelOff?.y ?? 0)} width={w} height={h} />
                 })()}
               </g>
@@ -1066,8 +1069,9 @@ export default function Canvas(p: Props) {
             if (def.cat === 'sim') return null
             const b = symBBox(s)
             const fs = doc.nameStyle?.size ?? 7
-            const w = (s.nameText || def.name[p.lang]).length * fs * (doc.nameStyle?.bold ? 0.62 : 0.55) + 6
-            return <rect key={'nm' + s.id} data-nm={s.id} className="lbl-hit" x={(b.x1 + b.x2) / 2 - w / 2 + (s.nameOff?.x ?? 0)} y={b.y2 + 2 + (s.nameOff?.y ?? 0)} width={w} height={fs + 6} />
+            const nl = (s.nameText || def.name[p.lang]).split('\n')
+            const w = Math.max(...nl.map((l) => l.length)) * fs * (doc.nameStyle?.bold ? 0.62 : 0.55) + 6
+            return <rect key={'nm' + s.id} data-nm={s.id} className="lbl-hit" x={(b.x1 + b.x2) / 2 - w / 2 + (s.nameOff?.x ?? 0)} y={b.y2 + 2 + (s.nameOff?.y ?? 0)} width={w} height={fs * 1.15 * nl.length + 5} />
           })}
           {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')

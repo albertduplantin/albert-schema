@@ -740,3 +740,5 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .mv-svg { width: 100%; height: auto; display: block; color: #263238; }
 .mv-note { margin: 4px 0 0; }
 @keyframes mv-spin { to { transform: rotate(360deg); } }
+
+.form textarea { font: inherit; padding: 5px 7px; width: 100%; box-sizing: border-box; resize: vertical; min-height: 36px; }
