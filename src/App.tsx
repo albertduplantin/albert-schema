@@ -1564,6 +1564,12 @@ function Editor() {
             <label className="chk keep"><input type="checkbox" checked={!!doc.lockShapes} onChange={() => commit((d) => ({ ...d, lockShapes: d.lockShapes ? undefined : true }))} /> {t('shapesLock')}</label>
             <p className="menu-title">{t('display')}</p>
             <label className="chk keep" title={t('darkSheetHelp')}><input type="checkbox" checked={darkSheet} onChange={(e) => setDarkSheet(e.target.checked)} /> {t('darkSheet')}</label>
+            <div className="row" title={t('labelSizeHelp')}>
+              <span>{t('labelSize')}</span>
+              <button className="keep" disabled={(doc.labelScale ?? 1) <= 0.75} onClick={() => commit((d) => ({ ...d, labelScale: Math.max(0.75, Math.round(((d.labelScale ?? 1) - 0.25) * 100) / 100) }))}>A−</button>
+              <span>{Math.round((doc.labelScale ?? 1) * 100)} %</span>
+              <button className="keep" disabled={(doc.labelScale ?? 1) >= 2.5} onClick={() => commit((d) => ({ ...d, labelScale: Math.min(2.5, Math.round(((d.labelScale ?? 1) + 0.25) * 100) / 100) }))}>A+</button>
+            </div>
             <label className="chk keep" title={t('showNamesHelp')}><input type="checkbox" checked={!!doc.showNames} onChange={() => commit((d) => ({ ...d, showNames: !d.showNames }))} /> {t('showNames')}</label>
             {doc.showNames && (
               <div className="namestyle">
@@ -1611,7 +1617,7 @@ function Editor() {
             <>
               <button onClick={() => rebase({ paused: !clock.current.paused })}>{clockUi.paused ? '▶ ' + t('resume') : '⏸ ' + t('pause')}</button>
               {clockUi.paused && <button onClick={() => { clock.current = { ...clock.current, v: clock.current.v + (sim?.pendingMs ?? 500) + 15 }; setSimTick((n) => n + 1) }}>⏭ {t('step')}</button>}
-              <select aria-label={t('speed')} title={t('speed')} value={clockUi.speed} onChange={(e) => rebase({ speed: Number(e.target.value) })}>
+              <select aria-label={t('speed')} title={t('speedHelp')} value={clockUi.speed} onChange={(e) => rebase({ speed: Number(e.target.value) })}>
                 {[0.5, 1, 2, 5, 10].map((v) => <option key={v} value={v}>× {v}</option>)}
               </select>
             </>
@@ -1690,7 +1696,7 @@ function Editor() {
       </aside>
 
       <main className="stage" data-plcdock={plcSym && !plcWin.max && !plcWin.min && plcWin.dock !== 'float' ? plcWin.dock : undefined} style={{ ['--plc-w' as string]: plcWin.w + 'px', ['--plc-h' as string]: plcWin.h + 'px' }}>
-        <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
+        <Canvas doc={doc} lang={lang} simSpeed={simMode ? clockUi.speed : 1} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel} detectors={detectors}
           onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} onAdjust={onAdjust} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>

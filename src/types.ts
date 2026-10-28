@@ -328,6 +328,8 @@ export interface Doc {
   /** projet à plusieurs feuilles : le contenu de la feuille active est dans symbols/wires/notes */
   pages?: Page[]
   page?: number
+  /** échelle des repères et désignations des composants (1 = taille normale) */
+  labelScale?: number
   /** afficher le nom (type) de chaque composant sous son symbole */
   showNames?: boolean
   nameStyle?: NameStyle

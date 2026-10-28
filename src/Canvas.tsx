@@ -77,6 +77,8 @@ const GLOW: Record<string, string> = { lamp: '#ffd400', motor: '#35c759', valve:
 interface Props {
   doc: Doc
   lang: Lang
+  /** vitesse du temps simulé (× 0,5 à × 10) : accélère aussi les animations */
+  simSpeed?: number
   sel: string[]
   setSel: (s: string[]) => void
   placing: string | null
@@ -160,6 +162,8 @@ function alignGuides(moving: PlacedSymbol[], others: PlacedSymbol[]) {
 
 export default function Canvas(p: Props) {
   const { doc, sel } = p
+  const spd = p.simSpeed && p.simSpeed > 0 ? p.simSpeed : 1
+  const ls = doc.labelScale ?? 1
   const svgRef = useRef<SVGSVGElement>(null)
   const [view, setView] = useState({ x: 20, y: 20, k: 0.8 })
   const fit = (paper = doc.paper) => {
@@ -829,12 +833,12 @@ export default function Canvas(p: Props) {
                 {p.faults?.has(wr.id) && <text x={mx - 4} y={my + 4} fontSize={12} fill="#e53935" stroke="none">✂</text>}
                 {p.sim?.current[wr.id] && (
                   <polyline points={pointsAttr(pts)} stroke="#fff" strokeOpacity={0.95} strokeWidth={1.3} strokeDasharray="2 6" strokeLinecap="butt">
-                    <animate attributeName="stroke-dashoffset" from="0" to={p.sim.current[wr.id] > 0 ? '-8' : '8'} dur="0.45s" repeatCount="indefinite" />
+                    <animate attributeName="stroke-dashoffset" from="0" to={p.sim.current[wr.id] > 0 ? '-8' : '8'} dur={`${0.45 / spd}s`} repeatCount="indefinite" />
                   </polyline>
                 )}
                 {Math.abs(p.sim?.oilWire?.[wr.id] ?? 0) > 0.15 && (
                   <polyline points={pointsAttr(pts)} fill="none" stroke="#fff" strokeOpacity={0.95} strokeWidth={1.5} strokeLinecap="round" strokeDasharray="0.5 6" pointerEvents="none">
-                    <animate attributeName="stroke-dashoffset" from="0" to={(p.sim!.oilWire[wr.id] ?? 0) > 0 ? '-13' : '13'} dur={`${Math.max(0.25, Math.min(3, 16 / Math.abs(p.sim!.oilWire[wr.id] ?? 1)))}s`} repeatCount="indefinite" />
+                    <animate attributeName="stroke-dashoffset" from="0" to={(p.sim!.oilWire[wr.id] ?? 0) > 0 ? '-13' : '13'} dur={`${Math.max(0.25, Math.min(3, 16 / Math.abs(p.sim!.oilWire[wr.id] ?? 1))) / spd}s`} repeatCount="indefinite" />
                   </polyline>
                 )}
                 {txt && <text x={mx + 4} y={my - 4} fontSize={7} fill={wr.color === 'gnye' ? '#2e9b2e' : wr.color} stroke="none">{txt}</text>}
@@ -983,7 +987,7 @@ export default function Canvas(p: Props) {
                             return (
                               <g key={'cur' + i} fill="none" strokeLinecap="butt">
                                 <polyline points={pts} stroke={potColor(pot)} strokeWidth={1.8} strokeOpacity={0.9} />
-                                <polyline points={pts} stroke="#fff" strokeWidth={1} strokeDasharray="2 6"><animate attributeName="stroke-dashoffset" from="0" to={comPort === 'com' ? '8' : '-8'} dur="0.45s" repeatCount="indefinite" /></polyline>
+                                <polyline points={pts} stroke="#fff" strokeWidth={1} strokeDasharray="2 6"><animate attributeName="stroke-dashoffset" from="0" to={comPort === 'com' ? '8' : '-8'} dur={`${0.45 / spd}s`} repeatCount="indefinite" /></polyline>
                               </g>
                             )
                           }),
@@ -1008,7 +1012,7 @@ export default function Canvas(p: Props) {
                         : A && B ? `${A.x},${A.y} ${B.x},${B.y}` : ''
                       if (A && B) out.push(
                         <polyline key="oil" points={pts} fill="none" stroke="#fff" strokeWidth={1.4} strokeLinecap="round" strokeDasharray="0.5 5" pointerEvents="none">
-                          <animate attributeName="stroke-dashoffset" from="0" to={bypass || q > 0 ? '-11' : '11'} dur={`${Math.max(0.25, Math.min(3, 14 / Math.abs(q)))}s`} repeatCount="indefinite" />
+                          <animate attributeName="stroke-dashoffset" from="0" to={bypass || q > 0 ? '-11' : '11'} dur={`${Math.max(0.25, Math.min(3, 14 / Math.abs(q))) / spd}s`} repeatCount="indefinite" />
                         </polyline>,
                       )
                     }
@@ -1017,7 +1021,7 @@ export default function Canvas(p: Props) {
                       if (rpm > 0.5) {
                         const vertical = def.ports.some((x) => x.dir === 'up' || x.dir === 'down')
                         const mc = vertical ? { x: def.ports[0].x, y: def.h / 2 } : { x: def.w / 2, y: def.h / 2 }
-                        out.push(<Rotor key="rot" cx={mc.x} cy={mc.y} r={17} dir={(p.sim.fluidMotor[s.id] ?? 1) >= 0 ? 1 : -1} dur={Math.max(0.35, Math.min(6, 200 / rpm))} />)
+                        out.push(<Rotor key="rot" cx={mc.x} cy={mc.y} r={17} dir={(p.sim.fluidMotor[s.id] ?? 1) >= 0 ? 1 : -1} dur={Math.max(0.35, Math.min(6, 200 / rpm)) / spd} />)
                       }
                     }
                     return out.length ? <g pointerEvents="none">{out}</g> : null
@@ -1051,10 +1055,10 @@ export default function Canvas(p: Props) {
                 )}
                 {(s.label || s.desc || crossRefs[s.id]?.length) && (
                   <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>
-                    {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
-                    {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10} fontSize={7} fill="currentColor" stroke="none">{lines(s.desc, b.x2 + 6, 8.5)}</text>}
+                    {s.label && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2} fontSize={10 * ls} fontWeight={700} fill="currentColor" stroke="none">{s.label}</text>}
+                    {s.desc && <text x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + 10 * ls} fontSize={7 * ls} fill="currentColor" stroke="none">{lines(s.desc, b.x2 + 6, 8.5 * ls)}</text>}
                     {crossRefs[s.id]?.map((r, i) => (
-                      <text key={i} x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + (s.desc ? 12 + 8.5 * s.desc.split('\n').length : 10) + i * 8} fontSize={6.5} fill="#444" stroke="none">{r}</text>
+                      <text key={i} x={b.x2 + 6} y={(b.y1 + b.y2) / 2 + ((s.desc ? 12 + 8.5 * s.desc.split('\n').length : 10) + i * 8) * ls} fontSize={6.5 * ls} fill="#444" stroke="none">{r}</text>
                     ))}
                   </g>
                 )}
@@ -1147,9 +1151,9 @@ export default function Canvas(p: Props) {
                   )
                 })}
                 {(s.label || s.desc) && (() => {
-                  const w = Math.max((s.label?.length ?? 0) * 6.5, ...(s.desc ?? '').split('\n').map((l) => l.length * 4)) + 6
-                  const h = (s.label ? 12 : 0) + (s.desc ? 8.5 * s.desc.split('\n').length + 1 : 0) + 2
-                  return <rect data-lbl={s.id} className="lbl-hit" x={b.x2 + 3 + (s.labelOff?.x ?? 0)} y={(b.y1 + b.y2) / 2 - 10 + (s.labelOff?.y ?? 0)} width={w} height={h} />
+                  const w = (Math.max((s.label?.length ?? 0) * 6.5, ...(s.desc ?? '').split('\n').map((l) => l.length * 4)) + 6) * ls
+                  const h = ((s.label ? 12 : 0) + (s.desc ? 8.5 * s.desc.split('\n').length + 1 : 0) + 2) * ls
+                  return <rect data-lbl={s.id} className="lbl-hit" x={b.x2 + 3 + (s.labelOff?.x ?? 0)} y={(b.y1 + b.y2) / 2 - 10 * ls + (s.labelOff?.y ?? 0)} width={w} height={h} />
                 })()}
               </g>
             )
