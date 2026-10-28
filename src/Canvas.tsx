@@ -944,7 +944,7 @@ export default function Canvas(p: Props) {
                 {closedState !== undefined && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
-                <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={{ ...(bladeVars(s.id, model, p.sim) ?? {}), ...(p.sim && (def.fluid?.k === 'fthrottle') ? ({ '--nd': (1 - (p.sim.needle?.[s.id] ?? 0)) * 32 + 'deg' } as React.CSSProperties) : {}), ...(p.sim && def.fluid?.k === 'relief' ? ({ '--ro': String(p.sim.needle?.[s.id] ?? 0) } as React.CSSProperties) : {}) }}>
+                <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={{ ...({ '--ls': String(ls) } as React.CSSProperties), ...(bladeVars(s.id, model, p.sim) ?? {}), ...(p.sim && (def.fluid?.k === 'fthrottle') ? ({ '--nd': (1 - (p.sim.needle?.[s.id] ?? 0)) * 32 + 'deg' } as React.CSSProperties) : {}), ...(p.sim && def.fluid?.k === 'relief' ? ({ '--ro': String(p.sim.needle?.[s.id] ?? 0) } as React.CSSProperties) : {}) }}>
                   {isDynamic(def) ? <FluidShape s={s} def={def} sim={p.sim ?? null} detectors={s.label ? p.detectors?.[s.label.replace(/\s+/g, '').toUpperCase()]?.map((d) => ({ label: d.label, at: d.at, on: !!p.sim?.closed[d.id] })) : undefined} /> : <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />}
                   {def.domain === 'hydraulic' && (() => {
                     // lettres normalisées des orifices des appareils hydrauliques (P pression, T réservoir, A et B utilisations, S aspiration)
@@ -955,7 +955,7 @@ export default function Canvas(p: Props) {
                       : f?.k === 'check' ? { [f.from]: 'A', [f.to]: 'B' } : null as unknown as Record<string, string>
                     if (!m) return null
                     return (
-                      <g pointerEvents="none" fontSize={6} fill="currentColor" stroke="none">
+                      <g pointerEvents="none" fontSize={6 * ls} fill="currentColor" stroke="none">
                         {def.ports.filter((q) => m[q.id]).map((q) => {
                           const h = q.dir === 'left' || q.dir === 'right'
                           return <text key={q.id} x={h ? q.x + (q.dir === 'left' ? 2 : -2) : q.x + 2.5} y={h ? q.y - 2.5 : q.y + (q.dir === 'up' ? 7 : -3)} textAnchor={h && q.dir === 'right' ? 'end' : 'start'}>{m[q.id]}</text>

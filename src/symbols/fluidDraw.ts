@@ -133,12 +133,12 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   for (const p of fp) {
     const t = nums[p.id]
     const sil = exhaust.has(p.id)
-    if (t) out += `<text x="${n(p.x + (sil ? 6 : 2.5))}" y="${n(p.dir === 'up' ? -2 : H + 7)}" font-size="6" fill="currentColor" stroke="none">${t}</text>`
+    if (t) out += `<text x="${n(p.x + (sil ? 6 : 2.5))}" y="${n(p.dir === 'up' ? -2 : H + 7)}" style="font-size:calc(6px * var(--ls,1))" fill="currentColor" stroke="none">${t}</text>`
     // silencieux d'échappement posé sur l'orifice : triangle dont la pointe regarde l'atmosphère
     if (sil) { const s = p.dir === 'up' ? -1 : 1, y = p.dir === 'up' ? 0 : H; out += `<path d="M${n(p.x - 3.5)} ${n(y + s * 1)}L${n(p.x + 3.5)} ${n(y + s * 1)}L${n(p.x)} ${n(y + s * 8)}Z" fill="var(--bg)" stroke="currentColor" stroke-width="1"/>` }
   }
-  const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="6" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
-  const pilotNo = (x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="5.5" text-anchor="${anchor}" fill="currentColor" stroke="none">${t}</text>` : '')
+  const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" style="font-size:calc(6px * var(--ls,1))" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
+  const pilotNo = (x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => (t ? `<text x="${n(x)}" y="${n(y)}" style="font-size:calc(5.5px * var(--ls,1))" text-anchor="${anchor}" fill="currentColor" stroke="none">${t}</text>` : '')
   const yS = y0 + ch * 0.27
   const hS = ch * 0.45
   /** commande en bas de la case d'extrémité : électroaimant (carré à diagonale) ou levier */
