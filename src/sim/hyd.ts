@@ -114,7 +114,7 @@ export function solveHyd(inp: HydIn): HydOut | null {
 
   // ── éléments
   const els: El[] = []
-  const meta: Record<string, { Vd?: number; Aca?: number; Aann?: number; strokeCm?: number }> = {}
+  const meta: Record<string, { Vd?: number; Aca?: number; Aann?: number; strokeCm?: number; loadBar?: number; ratio?: number }> = {}
   for (const s of hydSyms) {
     const f = defs[s.defId].fluid
     if (!f) continue
@@ -190,8 +190,9 @@ export function solveHyd(inp: HydIn): HydOut | null {
       case 'fmotor': {
         if (!f.b) break
         const aN = node(s.id, f.a), bN = node(s.id, f.b)
-        const load = dflt(r.load, 5)
-        meta[s.id] = { Vd: dflt(r.disp, 100) }
+        const Vd = dflt(r.disp, 100)
+        const load = r.torque !== undefined ? 2 + (r.torque * 20 * Math.PI) / Vd : dflt(r.load, 5)
+        meta[s.id] = { Vd, loadBar: load }
         els.push({
           sym: s.id, kind: 'motor', nodes: [aN, bN],
           out: (p) => { const d = p[aN] - p[bN]; const q = d > load ? K_MOTOR * (d - load) : d < -load ? K_MOTOR * (d + load) : 0; return [q, -q] },
@@ -203,7 +204,7 @@ export function solveHyd(inp: HydIn): HydOut | null {
         const aN = node(s.id, f.cap), bN = f.rod ? node(s.id, f.rod) : -1
         const ratio = f.rod ? A.ann / A.cap : 0
         const pl = 2 + dflt(r.load, 0) / A.cap // frottement + charge (daN / cm² = bar)
-        meta[s.id] = { Aca: A.cap, Aann: A.ann, strokeCm: A.strokeCm }
+        meta[s.id] = { Aca: A.cap, Aann: A.ann, strokeCm: A.strokeCm, ratio }
         const pos = () => inp.cylPos(s.id)
         els.push({
           sym: s.id, kind: 'cyl', nodes: bN >= 0 ? [aN, bN] : [aN],
@@ -280,21 +281,28 @@ export function solveHyd(inp: HydIn): HydOut | null {
     const q = o[0]
     out.oil[e.sym] = e.kind === 'pump' ? -q : (out.oil[e.sym] ?? 0) + q
     if (e.kind === 'throttle') out.needle[e.sym] = Math.min(1, (e.oneWay ? Math.max(0, q) : Math.abs(q)) / 30)
-    if (e.kind === 'pump') out.info[e.sym] = `Q = ${fmt(-q)} L/min`
-    else if (e.kind === 'relief') out.info[e.sym] = q > 0.15 ? `ouvert · ${fmt(q)} L/min` : 'fermé'
+    const dp = e.nodes.length >= 2 ? p[e.nodes[0]] - p[e.nodes[1]] : 0
+    if (e.kind === 'pump') out.info[e.sym] = `Q = ${fmt(-q)} L/min\n${fmt(p[e.nodes[0]], 0)} bar · ${fmt((-q * p[e.nodes[0]]) / 600)} kW`
+    else if (e.kind === 'relief') out.info[e.sym] = q > 0.15 ? `ouvert · ${fmt(q)} L/min\nperdu en chaleur : ${fmt((q * dp) / 600)} kW` : 'fermé'
     else if (e.kind === 'prop') out.info[e.sym] = 'joystick ' + fmt(Math.abs(dflt(doc.symbols.find((x) => x.id === e.sym)?.rated?.joy, 0)), 0) + ' %'
-    else if (e.kind === 'throttle' || e.kind === 'meter') out.info[e.sym] = `Q = ${fmt(Math.abs(q))} L/min`
+    else if (e.kind === 'throttle') out.info[e.sym] = `Q = ${fmt(Math.abs(q))} L/min\nΔP = ${fmt(Math.abs(dp))} bar`
+    else if (e.kind === 'meter') out.info[e.sym] = `Q = ${fmt(Math.abs(q))} L/min`
     else if (e.kind === 'motor') {
       const rpm = (Math.abs(q) * 1000) / (meta[e.sym]?.Vd ?? 100)
       out.rpm[e.sym] = rpm
       out.dir[e.sym] = q >= 0 ? 1 : -1
-      out.info[e.sym] = `n = ${fmt(rpm, 0)} tr/min`
+      // couple sur l'arbre : (ΔP − frottement) × cylindrée / 20π ; puissance mécanique = 2π n C / 60
+      const torque = Math.max(0, Math.min(Math.abs(dp), meta[e.sym]?.loadBar ?? 5) - 2) * (meta[e.sym]?.Vd ?? 100) / (20 * Math.PI)
+      out.info[e.sym] = rpm > 0.5 ? `n = ${fmt(rpm, 0)} tr/min\nC = ${fmt(torque)} N·m · ${fmt((2 * Math.PI * rpm * torque) / 60000, 2)} kW` : `à l'arrêt · ${fmt(Math.abs(dp), 0)} bar`
     } else if (e.kind === 'cyl') {
       const m = meta[e.sym]
       out.cylX[e.sym] = q
       const v = ((q * 1000) / 60) / (m?.Aca ?? 19.6)
       out.cylV[e.sym] = v
-      out.info[e.sym] = Math.abs(v) > 0.05 ? `v = ${fmt(Math.abs(v))} cm/s` : ''
+      // effort sur la tige : pression fond × section fond − pression tige × section annulaire (bar × cm² = daN)
+      const pa = p[e.nodes[0]], pb = e.nodes.length > 1 ? p[e.nodes[1]] : 0
+      const force = pa * (m?.Aca ?? 19.6) - pb * (m?.Aann ?? 0)
+      out.info[e.sym] = `${Math.abs(v) > 0.05 ? `v = ${fmt(Math.abs(v))} cm/s` : 'immobile'}\nF = ${fmt(force, 0)} daN`
     }
   }
   for (const s of hydSyms) {

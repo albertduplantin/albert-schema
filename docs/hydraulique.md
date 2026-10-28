@@ -27,3 +27,11 @@ annulée par dichotomie (toutes les lois sont croissantes avec la pression du n�
 - Les distributeurs classiques commutent instantanément et sans perte de charge.
 - Les accumulateurs, le débit de fuite (drain) des moteurs et la régulation en couple ne sont pas modélisés.
 - Les valeurs par défaut (cylindrée, vitesse d'entraînement, charge, alésage…) se règlent dans les propriétés de chaque appareil.
+
+## Charge et grandeurs calculées
+- **Moteur** : la charge est un couple résistant (N·m). Pression nécessaire = 2 bar (frottement) + couple × 20π / cylindrée. Le couple affiché sur l'arbre
+  vaut (min(ΔP, pression nécessaire) − 2) × cylindrée / 20π ; la puissance mécanique vaut 2π × vitesse × couple / 60.
+- **Vérin** : la charge est un effort résistant (daN). Pression nécessaire côté fond = 2 bar + effort / section du fond. L'effort affiché vaut
+  pression du fond × section du fond − pression de la tige × section annulaire (bar × cm² = daN). Au-delà de ce que le limiteur de pression permet, la tige cale.
+- **Pompe** : puissance hydraulique = pression × débit / 600 (kW). **Limiteur de pression ouvert** : puissance perdue en chaleur = ΔP × débit / 600.
+- Pendant la simulation, les boutons − et + au-dessous du moteur ou du vérin font varier la charge (5 N·m ou 50 daN par clic).

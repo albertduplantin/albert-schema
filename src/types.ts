@@ -152,6 +152,8 @@ export interface Ratings {
   disp?: number
   rpm?: number
   load?: number
+  /** moteur hydraulique : couple résistant (N·m) */
+  torque?: number
   bore?: number
   rod?: number
   stroke?: number

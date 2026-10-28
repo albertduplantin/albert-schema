@@ -786,14 +786,14 @@ function Editor() {
   }
 
   /** réglage d'un limiteur de débit ou de pression pendant la simulation (boutons − et +) */
-  const onAdjust = useCallback((id: string, key: 'open' | 'set', delta: number) => {
+  const onAdjust = useCallback((id: string, key: 'open' | 'set' | 'torque' | 'load', delta: number) => {
     commit((d) => ({
       ...d,
       symbols: d.symbols.map((x) => {
         if (x.id !== id) return x
         const f = SYMBOL_MAP[x.defId]?.fluid
-        const cur = key === 'open' ? x.rated?.open ?? 50 : x.rated?.set ?? (f?.k === 'reducer' ? 50 : 100)
-        const next = key === 'open' ? Math.min(100, Math.max(2, cur + delta)) : Math.min(350, Math.max(0, cur + delta))
+        const cur = key === 'open' ? x.rated?.open ?? 50 : key === 'torque' ? x.rated?.torque ?? 5 : key === 'load' ? x.rated?.load ?? 0 : x.rated?.set ?? (f?.k === 'reducer' ? 50 : 100)
+        const next = key === 'open' ? Math.min(100, Math.max(2, cur + delta)) : key === 'torque' ? Math.min(500, Math.max(0, cur + delta)) : key === 'load' ? Math.min(10000, Math.max(0, cur + delta)) : Math.min(350, Math.max(0, cur + delta))
         return { ...x, rated: { ...(x.rated ?? {}), [key]: next } }
       }),
     }))

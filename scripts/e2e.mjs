@@ -248,6 +248,12 @@ try {
   if (plus) { await p4.mouse.move(plus.x, plus.y); await p4.mouse.down(); await p4.mouse.up(); await sleep(400) }
   const after = await p4.evaluate(() => [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent).filter((t) => /^\d+ %$/.test(t)))
   check('limiteur de débit : le bouton + de la simulation augmente l’ouverture', !!plus && JSON.stringify(before) !== JSON.stringify(after), JSON.stringify([before, after]))
+  // charge du moteur : le bouton + de la simulation augmente le couple résistant
+  const ch0 = await p4.evaluate(() => [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent).filter((t) => /N·m$/.test(t) && /charge/.test(t)))
+  const plusC = await p4.evaluate(() => { const r = document.querySelector('svg.canvas [data-adj$="|torque|5"]')?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
+  if (plusC) { await p4.mouse.move(plusC.x, plusC.y); await p4.mouse.down(); await p4.mouse.up(); await sleep(400) }
+  const ch1 = await p4.evaluate(() => [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent).filter((t) => /N·m$/.test(t) && /charge/.test(t)))
+  check('moteur : le bouton + augmente la charge (couple résistant)', !!plusC && JSON.stringify(ch0) !== JSON.stringify(ch1), JSON.stringify([ch0, ch1]))
   const hs = await p4.evaluate(() => { const r = document.querySelector('svg.canvas [data-sol="a"]')?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
   if (hs) { await p4.mouse.move(hs.x, hs.y); await p4.mouse.down(); await sleep(1500) }
   check('banc hydraulique : pressions en bar et vitesse du moteur affichées', await p4.evaluate(() => { const t = [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent); return t.some((x) => /\d+ bar/.test(x)) && t.some((x) => /tr\/min/.test(x)) }))

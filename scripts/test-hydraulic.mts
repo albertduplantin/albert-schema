@@ -18,7 +18,7 @@ const rig = (doc: any) => {
   const run = (pressed: string[] = [], dt = 0) => { now += dt; const r = simulate(doc, SYMBOL_MAP, mem, { pressed: new Set(pressed), toggled: new Set(), cut: new Set() }, now); mem = r.state; return r }
   return { run, id: (label: string) => doc.symbols.find((s: any) => s.label === label)?.id }
 }
-const num = (s: string | undefined) => Number((s ?? '').replace(/[^0-9,]/g, '').replace(',', '.'))
+const num = (s: string | undefined) => { const m = /(\d+(?:,\d+)?)/.exec(s ?? ''); return m ? Number(m[1].replace(',', '.')) : 0 }
 
 // ── TP1 : limiteur de pression, moteur hydraulique, distributeur 4/3 (pompe 18 cm³ à 1500 tr/min = 27 L/min)
 const tp1 = (centre = 'd43_o') => T.build(base,
@@ -47,6 +47,26 @@ const tp1 = (centre = 'd43_o') => T.build(base,
   d.symbols.find((s: any) => s.id === motor).rated = { load: 95 }
   r = g.run([v], 200); r = g.run([v], 3000)
   check('charge 95 bar : le limiteur s’ouvre et le moteur ralentit', [/ouvert/.test(r.fluidInfo[relief]), r.motorRpm[motor] < 200], [true, true])
+}
+// ── charge du moteur en N·m : pression = frottement + couple × 20π / cylindrée ; le couple et la puissance affichés suivent
+{
+  const d = tp1()
+  const g = rig(d)
+  const m = g.id('M2'), v = g.id('1V1'), gauge = g.id('M1')
+  d.symbols.find((s: any) => s.id === g.id('LP')).rated = { set: 200 }
+  d.symbols.find((s: any) => s.id === m).rated = { disp: 100, torque: 50 }
+  let r = g.run([v], 0); r = g.run([v], 2500)
+  near('moteur chargé à 50 N·m (100 cm³) : pression ≈ 2 + 31,4 + 13 bar', num(r.fluidInfo[gauge]), 46.4, 4)
+  const info = r.fluidInfo[m]
+  near('moteur chargé : le couple affiché vaut la charge (50 N·m)', Number(/C = (\d+(?:,\d+)?) N·m/.exec(info)?.[1].replace(',', '.')), 50, 1.5)
+  d.symbols.find((s: any) => s.id === m).rated = { disp: 100, torque: 120 }
+  r = g.run([v], 200); r = g.run([v], 2500)
+  near('moteur chargé à 120 N·m : pression ≈ 2 + 75 + 13 bar', num(r.fluidInfo[gauge]), 90.5, 5)
+  // 200 N·m dépasse le tarage (200 bar fixé ci-dessus → 127 bar nécessaires reste sous le tarage) : on abaisse le tarage à 100 bar, le moteur cale
+  d.symbols.find((s: any) => s.id === g.id('LP')).rated = { set: 100 }
+  d.symbols.find((s: any) => s.id === m).rated = { disp: 100, torque: 200 }
+  r = g.run([v], 200); r = g.run([v], 2500)
+  check('moteur trop chargé (127 bar nécessaires, tarage 100) : il cale, le limiteur évacue tout le débit', [(r.motorRpm[m] ?? 0) < 1, /ouvert/.test(r.fluidInfo[g.id('LP')])], [true, true])
 }
 // centres : H et M (tandem) déchargent la pompe, Y et fermé laissent monter la pression
 for (const [tail, low] of [['d43_o', false], ['d43_h', true], ['d43_m', true], ['d43_y', false]] as const) {
@@ -172,8 +192,20 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   check('exemple vérin : la tige sort sous la pression du fond', mid > 0 && mid < 1, true)
   const gp = num(r.fluidInfo[g.id('G3')]), gtige = num(r.fluidInfo[g.id('G2')])
   check('limiteur à l’échappement : effet multiplicateur, la pression côté tige dépasse celle de la pompe', gtige > gp, true)
-  const slow = r.cylV ?? null
-  void slow
+  // charge sur la tige : effort affiché = pression fond × section fond − pression tige × section annulaire ; au-delà de la force du limiteur, la tige cale
+  const cylInfo = r.fluidInfo[c]
+  check('vérin : l’effort s’affiche en daN', /F = -?\d+ daN/.test(cylInfo), true)
+  const dd = T.hydraulicCylinder(base)
+  const gg = rig(dd)
+  const cc = gg.id('1A')
+  dd.symbols.find((s: any) => s.id === gg.id('LB')).rated = { open: 100 }
+  dd.symbols.find((s: any) => s.id === gg.id('LA')).rated = { open: 100 }
+  dd.symbols.find((s: any) => s.id === cc).rated = { bore: 50, rod: 30, stroke: 350, load: 2500 }
+  let r2 = gg.run([gg.id('1V1') + ':B'], 0); r2 = gg.run([gg.id('1V1') + ':B'], 3000)
+  check('vérin : 2500 daN sur la tige (50 mm, 100 bar) dépassent la force du limiteur : la tige ne sort pas', r2.cylPos[cc] < 0.05, true)
+  dd.symbols.find((s: any) => s.id === cc).rated = { bore: 50, rod: 30, stroke: 350, load: 1000 }
+  r2 = gg.run([gg.id('1V1') + ':B'], 200); r2 = gg.run([gg.id('1V1') + ':B'], 3000)
+  check('vérin : 1000 daN (≈ 51 bar) : la tige sort', r2.cylPos[cc] > 0.9, true)
 }
 
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests hydrauliques passent')

@@ -97,7 +97,7 @@ interface Props {
   onSimPress: (id: string, down: boolean) => void
   onSimToggle: (id: string) => void
   /** réglage d'un limiteur de débit (ouverture, %) ou d'un limiteur / réducteur de pression (tarage, bar) pendant la simulation */
-  onAdjust?: (id: string, key: 'open' | 'set', delta: number) => void
+  onAdjust?: (id: string, key: 'open' | 'set' | 'torque' | 'load', delta: number) => void
   /** défauts injectés (fils coupés, appareils ouverts) et bascule d'un défaut */
   faults?: ReadonlySet<string>
   /** projet à plusieurs feuilles : symboles des autres feuilles, feuille de chaque symbole, et repère « n/N » de la feuille affichée */
@@ -410,7 +410,7 @@ export default function Canvas(p: Props) {
     const adj = p.sim ? (e.target as Element).closest('[data-adj]') : null
     if (adj) {
       const [id, k, d] = adj.getAttribute('data-adj')!.split('|')
-      p.onAdjust?.(id, k as 'open' | 'set', Number(d))
+      p.onAdjust?.(id, k as 'open' | 'set' | 'torque' | 'load', Number(d))
       return
     }
     // une électrovanne de distributeur reste cliquable même sous l'étiquette d'un repère
@@ -868,24 +868,31 @@ export default function Canvas(p: Props) {
                   )
                 })()}
                 {def.fluid?.k === 'fthrottle' && !p.sim && <text x={b.x1 + (b.x2 - b.x1) / 2} y={b.y1 - 2} textAnchor="middle" fontSize={8} stroke="none" fill="#555" pointerEvents="none">{s.rated?.open ?? 50} %</text>}
-                {p.sim && (def.fluid?.k === 'fthrottle' || def.fluid?.k === 'relief' || def.fluid?.k === 'reducer') && (() => {
-                  const isThr = def.fluid!.k === 'fthrottle'
-                  const key = isThr ? 'open' : 'set'
-                  const val = isThr ? s.rated?.open ?? 50 : s.rated?.set ?? (def.fluid!.k === 'relief' ? 100 : 50)
-                  const step = 5
-                  const cx = (b.x1 + b.x2) / 2, cy = isThr ? b.y1 - 5 : b.y1 - 2
+                {p.sim && (() => {
+                  // réglages accessibles pendant la simulation : − et + autour de la valeur
+                  const k = def.fluid?.k
+                  const hyd = def.domain === 'hydraulic'
+                  const spec = k === 'fthrottle' ? { key: 'open', val: s.rated?.open ?? 50, unit: '%', step: 5, below: false, fr: 'Régler l’ouverture du limiteur de débit', en: 'Adjust the flow limiter opening' }
+                    : k === 'relief' || k === 'reducer' ? { key: 'set', val: s.rated?.set ?? (k === 'relief' ? 100 : 50), unit: 'bar', step: 5, below: false, fr: 'Régler le tarage (bar)', en: 'Adjust the setting (bar)' }
+                    : k === 'fmotor' && hyd ? { key: 'torque', val: s.rated?.torque ?? 5, unit: 'N·m', step: 5, below: true, fr: 'Faire varier la charge : couple résistant sur l’arbre (N·m)', en: 'Vary the load: resisting torque on the shaft (N·m)' }
+                    : k === 'cyl' && hyd ? { key: 'load', val: s.rated?.load ?? 0, unit: 'daN', step: 50, below: true, fr: 'Faire varier la charge : effort résistant sur la tige (daN)', en: 'Vary the load: resisting force on the rod (daN)' }
+                    : null
+                  if (!spec) return null
+                  const cx = (b.x1 + b.x2) / 2, cy = spec.below ? b.y2 + (p.sim.fluidInfo?.[s.id] ? 26 : 12) + 8 : b.y1 - 5
                   const btn = (dx: number, sign: number) => (
-                    <g data-adj={`${s.id}|${key}|${sign * step}`} style={{ cursor: 'pointer' }}>
+                    <g data-adj={`${s.id}|${spec.key}|${sign * spec.step}`} style={{ cursor: 'pointer' }}>
                       <rect x={cx + dx - 5} y={cy - 8} width={10} height={10} rx={2} fill="#e8f0fe" stroke="#1565c0" strokeWidth={0.8} />
                       <text x={cx + dx} y={cy - 0.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#1565c0" stroke="none" pointerEvents="none">{sign > 0 ? '+' : '−'}</text>
-                      <title>{key === 'open' ? (p.lang === 'fr' ? 'Régler l’ouverture du limiteur de débit' : 'Adjust the flow limiter opening') : (p.lang === 'fr' ? 'Régler le tarage (bar)' : 'Adjust the setting (bar)')}</title>
+                      <title>{p.lang === 'fr' ? spec.fr : spec.en}</title>
                     </g>
                   )
+                  const label = `${spec.below ? (p.lang === 'fr' ? 'charge ' : 'load ') : ''}${spec.val} ${spec.unit}`
+                  const w = 12 + label.length * 2.3
                   return (
                     <g>
-                      {btn(-22, -1)}
-                      <text x={cx} y={cy - 0.5} textAnchor="middle" fontSize={8} fontWeight={700} fill="#0d47a1" stroke="#fff" strokeWidth={2.2} paintOrder="stroke" pointerEvents="none">{val} {isThr ? '%' : 'bar'}</text>
-                      {btn(22, 1)}
+                      {btn(-w, -1)}
+                      <text x={cx} y={cy - 0.5} textAnchor="middle" fontSize={8} fontWeight={700} fill="#0d47a1" stroke="#fff" strokeWidth={2.2} paintOrder="stroke" pointerEvents="none">{label}</text>
+                      {btn(w, 1)}
                     </g>
                   )
                 })()}
@@ -1023,7 +1030,7 @@ export default function Canvas(p: Props) {
                   <text transform={`translate(${s.nameOff?.x ?? 0} ${s.nameOff?.y ?? 0})`} x={(b.x1 + b.x2) / 2} y={b.y2 + 4 + (doc.nameStyle?.size ?? 7)} fontSize={doc.nameStyle?.size ?? 7} fontFamily={fontCss(doc.nameStyle?.font)} fontWeight={doc.nameStyle?.bold ? 700 : 400} fontStyle={doc.nameStyle?.italic ? 'italic' : 'normal'} textAnchor="middle" fill="#555" stroke="none">{lines(s.nameText || def.name[p.lang], (b.x1 + b.x2) / 2, (doc.nameStyle?.size ?? 7) * 1.15)}</text>
                 )}
                 {p.sim?.fluidInfo?.[s.id] && (
-                  <text x={(b.x1 + b.x2) / 2} y={b.y2 + 11} fontSize={8} fontWeight={700} textAnchor="middle" fill="#0d47a1" stroke="#fff" strokeWidth={2.5} paintOrder="stroke" pointerEvents="none">{p.sim.fluidInfo[s.id]}</text>
+                  <text x={(b.x1 + b.x2) / 2} y={b.y2 + 11} fontSize={8} fontWeight={700} textAnchor="middle" fill="#0d47a1" stroke="#fff" strokeWidth={2.5} paintOrder="stroke" pointerEvents="none">{lines(p.sim.fluidInfo[s.id], (b.x1 + b.x2) / 2, 8.5)}</text>
                 )}
                 {(s.label || s.desc || crossRefs[s.id]?.length) && (
                   <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>

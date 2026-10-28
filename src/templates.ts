@@ -410,7 +410,7 @@ export const hydraulicMotor = (base: Doc): Doc => tune(build(base,
   [
     ['pump', 'i', 't1', 't0'], ['pump', 'o', 'rv', 'p'], ['pump', 'o', 'v', 'p'], ['pump', 'o', 'g3', 'a'], ['rv', 't', 't2', 't0'], ['v', 't', 't2', 't0'],
     ['v', 'a', 'la', 'a'], ['la', 'b', 'm', 'a'], ['v', 'b', 'lb', 'a'], ['lb', 'b', 'm', 'b'], ['m', 'a', 'g1', 'a'], ['m', 'b', 'g2', 'a'],
-  ]), { LP: { set: 100 }, LA: { open: 40 }, LB: { open: 40 }, M2: { disp: 100, load: 5 }, GMP: { disp: 18, rpm: 1500 } })
+  ]), { LP: { set: 100 }, LA: { open: 40 }, LB: { open: 40 }, M2: { disp: 100, torque: 5 }, GMP: { disp: 18, rpm: 1500 } })
 
 /**
  * TP « limiteur de débit à l'échappement » : vérin 50/30 course 350, limiteurs unidirectionnels placés sur le retour de chaque chambre.
