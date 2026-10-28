@@ -274,6 +274,20 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   check('manomètre : pointe en l’air : aucune lecture', readPressure(ins, ctx, r).found, false)
 }
 
+// ── réservoir à plusieurs orifices : un seul réservoir pour l'aspiration de la pompe et les retours du limiteur et du distributeur
+{
+  const d = T.build(base,
+    [['tank', H('bache_4'), 160, 330, 'T1'], ['pump', H('groupe_pompe_fixe'), 160, 220, 'GMP'], ['rv', H('limiteur_pression'), 260, 200, 'LP'],
+      ['v', H('d43_o'), 200, 100, '1V1'], ['m', H('moteur_hydraulique'), 200, 20, 'M2']],
+    [['pump', 'i', 'tank', 's1'], ['pump', 'o', 'rv', 'p'], ['pump', 'o', 'v', 'p'], ['rv', 't', 'tank', 'r1'], ['v', 't', 'tank', 'r2'], ['v', 'a', 'm', 'a'], ['v', 'b', 'm', 'b']])
+  const g = rig(d)
+  const v = g.id('1V1'), m = g.id('M2')
+  d.symbols.find((s: any) => s.id === m).rated = { disp: 50, torque: 5 }
+  let r = g.run([], 0); r = g.run([v], 100); r = g.run([v], 2000)
+  check('réservoir à 4 orifices : la pompe aspire et le moteur tourne avec des retours sur le même réservoir', r.motorRpm[m] > 300, true)
+  check('réservoir à 4 orifices : sa repère est 0Z1 (alimentation commune)', /^0Z\d$/.test((await import(ROOT + '/src/fluidNames.ts')).renumberFluid(d, SYMBOL_MAP).symbols.find((s: any) => s.defId === H('bache_4')).label), true)
+}
+
 // grille : chaque orifice d'un appareil hydraulique tombe sur un multiple de 10 (sinon les fils sont de travers)
 {
   const off = lib.symbols.filter((s: any) => s.domain === 'hydraulic').flatMap((s: any) => s.ports.filter((p: any) => p.x % 10 || p.y % 10).map((p: any) => `${s.id}:${p.id}(${p.x},${p.y})`))

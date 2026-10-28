@@ -222,6 +222,16 @@ function closedPlug(def: SymbolDef, ports: PortInfo[]): R {
   return null
 }
 
+/** Réservoir hydraulique à plusieurs orifices : cuve ouverte (normalisée), les retours s'arrêtent sous le haut, les aspirations plongent jusqu'au fond. */
+function hydTank(def: SymbolDef, ports: PortInfo[]): R {
+  if (def.domain !== 'hydraulic' || !/^own:hyd\/bache/.test(def.id)) return null
+  const w = def.w, h = def.h
+  let svg = path(`M0 0V${f(h)}H${f(w)}V0`, 'fill="none"')
+  for (const p of ports) svg += line([p.x, 0], [p.x, p.id.startsWith('s') ? h - 8 : h * 0.4])
+  const n = ports.length
+  return { svg, name: T(`Réservoir (bâche) à ${n} orifices`, `Tank with ${n} ports`) }
+}
+
 function tanks(def: SymbolDef, ports: PortInfo[]): R {
   const n = def.name.fr, w = def.w, h = def.h
   if (/^Bâche à l/i.test(n)) return { svg: path(`M${f(w * 0.12)} ${f(h * 0.25)}V${f(h - 3)}H${f(w * 0.88)}V${f(h * 0.25)}`, 'fill="none"') + line([ports[0].x, ports[0].y], [ports[0].x, h * 0.55]) + line([w * 0.12 + 3, h * 0.5], [w * 0.88 - 3, h * 0.5], DASH), name: T('Réservoir à l’air libre', 'Vented reservoir') }
@@ -464,6 +474,7 @@ const RECIPES: ((def: SymbolDef, ports: PortInfo[]) => R)[] = [
   maintenanceUnit,
   pressureValves,
   hydFilters,
+  hydTank,
   pumpGroup,
   pumpOrMotor,
   cell,

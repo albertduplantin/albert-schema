@@ -29,8 +29,16 @@ const CHECK: [string, string] = ['Clapets et sélecteurs', 'Check valves and shu
 const MEAS: [string, string] = ['Mesure', 'Measurement']
 const FILT: [string, string] = ['Filtration', 'Filtration']
 const GROUP: [string, string] = ['Groupes et moteurs', 'Power packs and motors']
+const TANKS: [string, string] = ['Réservoirs', 'Tanks']
+/** Réservoir à n orifices en haut, espacés de 20 : les retours (r1…) puis les aspirations (s1…). */
+const tankPorts = (returns: number, suctions: number): PortDef[] => [
+  ...Array.from({ length: returns }, (_, i) => P('r' + (i + 1), 20 * (i + 1), 0, 'up')),
+  ...Array.from({ length: suctions }, (_, i) => P('s' + (i + 1), 20 * (returns + i + 1), 0, 'up')),
+]
 
 const specs: Spec[] = [
+  { tail: 'bache_4', fr: 'Réservoir (bâche) à 4 orifices : 3 retours, 1 aspiration', en: 'Tank with 4 ports: 3 returns, 1 suction', group: TANKS, cat: '30_hydraulic/21_tanks', w: 100, h: 40, prefix: 'Z', ports: tankPorts(3, 1), fluid: { k: 'fsink', ports: ['r1', 'r2', 'r3', 's1'] }, score: 93, top: true },
+  { tail: 'bache_6', fr: 'Réservoir (bâche) à 6 orifices : 4 retours, 2 aspirations', en: 'Tank with 6 ports: 4 returns, 2 suctions', group: TANKS, cat: '30_hydraulic/21_tanks', w: 140, h: 40, prefix: 'Z', ports: tankPorts(4, 2), fluid: { k: 'fsink', ports: ['r1', 'r2', 'r3', 'r4', 's1', 's2'] }, score: 85 },
   { tail: 'limiteur_pression', fr: 'Limiteur de pression', en: 'Pressure relief valve', group: PRESS, cat: VALVES, w: 60, h: 60, prefix: 'V', ports: [P('p', 0, 30, 'left'), P('t', 60, 30, 'right')], fluid: { k: 'relief', p: 'p', t: 't' }, score: 95, top: true },
   { tail: 'reducteur_pression', fr: 'Réducteur de pression', en: 'Pressure reducing valve', group: PRESS, cat: VALVES, w: 60, h: 60, prefix: 'V', ports: [P('p', 0, 30, 'left'), P('a', 60, 30, 'right')], fluid: { k: 'reducer', p: 'p', a: 'a' }, score: 80, top: true },
   { tail: 'limiteur_debit', fr: 'Limiteur de débit réglable', en: 'Adjustable flow restrictor', group: FLOW, cat: VALVES, w: 50, h: 40, prefix: 'V', ports: [P('a', 0, 20, 'left'), P('b', 50, 20, 'right')], fluid: { k: 'fthrottle', a: 'a', b: 'b' }, score: 85 },
