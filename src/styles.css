@@ -744,3 +744,6 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .form textarea { font: inherit; padding: 5px 7px; width: 100%; box-sizing: border-box; resize: vertical; min-height: 36px; }
 
 .form input.ratingrange { padding: 0; margin-top: 2px; accent-color: var(--accent, #2b7de9); }
+
+/* case « Ne plus afficher » de la fenêtre feuille vide : lisible sur le fond clair */
+.empty .chk { color: var(--ui-text); font-size: 12px; padding: 4px 0 10px; text-transform: none; letter-spacing: 0; }

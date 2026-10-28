@@ -1605,6 +1605,11 @@ function Editor() {
           </div>
         </details>
 
+        <div className="group" title={t('labelSizeHelp')}>
+          <button aria-label={t('labelSize') + ' −'} disabled={(doc.labelScale ?? 1) <= 0.75} onClick={() => commit((d) => ({ ...d, labelScale: Math.max(0.75, Math.round(((d.labelScale ?? 1) - 0.25) * 100) / 100) }))}><span style={{ fontSize: 11 }}>A</span>−</button>
+          <button aria-label={t('labelSize') + ' +'} disabled={(doc.labelScale ?? 1) >= 2.5} onClick={() => commit((d) => ({ ...d, labelScale: Math.min(2.5, Math.round(((d.labelScale ?? 1) + 0.25) * 100) / 100) }))}><span style={{ fontSize: 15 }}>A</span>+</button>
+        </div>
+
         <button onClick={() => setShowGuided(true)} title={t('guidedTitle')}>🎓 {t('exercises')}</button>
         <button className="editonly" onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
 
