@@ -231,6 +231,23 @@ try {
   await p3.evaluate(() => document.querySelector('.plcwin-btns button[aria-label="Réduire"]').click())
   await sleep(200)
   check('éditeur de programme : réduite en barre de titre', await p3.evaluate(() => document.querySelector('.plcwin').getBoundingClientRect().height < 60))
+  // banc hydraulique : moteur, pressions en bar et vitesse en tr/min pendant qu'on maintient une électrovanne
+  const p4 = await browser.newPage()
+  await p4.setViewport({ width: 1500, height: 950 })
+  p4.on('pageerror', (e) => errors.push(String(e)))
+  await p4.evaluateOnNewDocument(() => { try { localStorage.clear(); localStorage.setItem('albertschema.tour', '1') } catch {} })
+  await p4.goto(URL, { waitUntil: 'networkidle0' })
+  await sleep(500)
+  await p4.evaluate(() => [...document.querySelectorAll('button')].find((x) => /moteur et limiteurs de débit/.test(x.textContent))?.click())
+  await sleep(900)
+  await p4.evaluate(() => [...document.querySelectorAll('button')].find((x) => /Simuler/.test(x.textContent))?.click())
+  await sleep(600)
+  const hs = await p4.evaluate(() => { const r = document.querySelector('svg.canvas [data-sol="a"]')?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
+  if (hs) { await p4.mouse.move(hs.x, hs.y); await p4.mouse.down(); await sleep(1500) }
+  check('banc hydraulique : pressions en bar et vitesse du moteur affichées', await p4.evaluate(() => { const t = [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent); return t.some((x) => /\d+ bar/.test(x)) && t.some((x) => /tr\/min/.test(x)) }))
+  await p4.screenshot({ path: process.env.TEMP + '/hyd.png' })
+  await p4.mouse.up()
+  await p4.close()
   await p3.keyboard.press('Escape')
   await p3.close()
   // ── lien d'exercice : ?exo=… ouvre directement l'exercice

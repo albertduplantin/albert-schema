@@ -49,7 +49,7 @@ const G = {
   hose: (): [number, string] => [10, path('M-10 0q2.5 -5 5 0t5 0t5 0t5 0', 'fill="none"')],
 }
 
-const gaugeMark = (n: string): string => (/vide/i.test(n) ? 'V' : /thermom/i.test(n) ? 'θ' : /flux|débit/i.test(n) ? 'Q' : /niveau/i.test(n) ? 'L' : /tachym/i.test(n) ? 'n' : /couple/i.test(n) ? 'C' : /pression|manom/i.test(n) ? 'P' : '')
+const gaugeMark = (n: string): string => (/vide/i.test(n) ? 'V' : /thermom/i.test(n) ? 'θ' : /flux|débit/i.test(n) ? 'Q' : /niveau/i.test(n) ? 'L' : /tachym/i.test(n) ? 'n' : /couple/i.test(n) ? 'C' : /pression/i.test(n) ? 'P' : '')
 
 // ───────────────────────── recettes
 /** Éléments de traitement de l'air (filtre, sécheur, lubrificateur…) à deux bornes alignées. */
@@ -119,6 +119,15 @@ const energy = (c: Pt, r: number, toward: Pt, fill: boolean): string => {
   return path(poly(tip, [b[0] + n[0] * k, b[1] + n[1] * k], [b[0] - n[0] * k, b[1] - n[1] * k]) + 'Z', fill ? 'fill="currentColor"' : BG)
 }
 /** Trait de la borne jusqu'au cercle (centre c, rayon r), selon l'axe de la borne. */
+/** Triangle d'énergie d'un moteur : base contre le cercle du côté de l'orifice `from`, pointe vers le centre. */
+const energyIn = (c: Pt, r: number, from: Pt, fill: boolean): string => {
+  const dx = from[0] - c[0], dy = from[1] - c[1], len = Math.hypot(dx, dy) || 1
+  const u: Pt = [dx / len, dy / len], n: Pt = [-u[1], u[0]]
+  const base: Pt = [c[0] + u[0] * (r - 1), c[1] + u[1] * (r - 1)]
+  const tip: Pt = [c[0] + u[0] * 1.5, c[1] + u[1] * 1.5]
+  const k = r * 0.55
+  return path(poly(tip, [base[0] + n[0] * k, base[1] + n[1] * k], [base[0] - n[0] * k, base[1] - n[1] * k]) + 'Z', fill ? 'fill="currentColor"' : BG)
+}
 const toCircle = (p: PortInfo, c: Pt, r: number): string => {
   if (p.dir === 'up' || p.dir === 'down') {
     const dx = Math.abs(p.x - c[0])
@@ -151,7 +160,7 @@ function pumpOrMotor(def: SymbolDef, ports: PortInfo[]): R {
   } else if (fl?.k === 'fmotor') {
     for (const id of [fl.a, fl.b]) {
       const p = pid(ports, id)
-      if (p) svg += energy(c, r, [c[0] * 2 - p.x, c[1] * 2 - p.y], hyd)
+      if (p) svg += energyIn(c, r, [p.x, p.y], hyd)
     }
   }
   if (/variable/i.test(n)) svg += line([c[0] - r - 3, c[1] + r + 3], [c[0] + r + 3, c[1] - r - 3]) + arrowHead([c[0] + r + 3, c[1] - r - 3], [c[0] - r, c[1] + r])
@@ -238,6 +247,12 @@ function gaugesAndSwitches(def: SymbolDef, ports: PortInfo[]): R {
     const sensor = /analogique|capteur/i.test(n)
     return { svg: line([p.x, p.y], [p.x + a[0] * 10, p.y + a[1] * 10]) + rect(c[0] - 10, c[1] - 9, 20, 18, BG) + text(c[0], c[1] + 3, 'P', 9, 'font-weight="700"') + line([c[0] + 10, c[1]], [c[0] + 18, c[1]], DASH) + line([c[0] + 18, c[1] - 5], [c[0] + 18, c[1] + 5]), name: sensor ? T(/analogique/i.test(n) ? 'Capteur de pression analogique' : 'Capteur de pression', 'Pressure sensor') : T(/électronique/i.test(n) ? 'Pressostat électronique' : /contact/i.test(n) ? 'Pressostat à contact' : 'Pressostat', 'Pressure switch') }
   }
+  if (fl?.k === 'fflow') {
+    const a = pid(ports, fl.a), b = pid(ports, fl.b)
+    if (!a || !b) return null
+    const c: Pt = [(a.x + b.x) / 2, (a.y + b.y) / 2]
+    return { svg: line([a.x, a.y], [b.x, b.y]) + circle(c[0], c[1], 10, BG) + text(c[0], c[1] + 3.5, 'Q', 10, 'font-weight="700"'), name: T('Débitmètre', 'Flow meter') }
+  }
   if (fl?.k !== 'fgauge' || /régulateur/i.test(n)) return null
   const mark = gaugeMark(n), r = 9
   if (ports.length === 1) {
@@ -310,7 +325,9 @@ function inlineParts(def: SymbolDef, ports: PortInfo[]): R {
     let svg = line([a.x, a.y], [c[0] - 9, a.y]) + line([c[0] + 9, b.y], [b.x, b.y]) + path(`M${f(c[0] - 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] - 5)} ${f(c[1] + 8)}M${f(c[0] + 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] + 5)} ${f(c[1] + 8)}`, 'fill="none"')
     svg += line([c[0] - 10, c[1] + 11], [c[0] + 10, c[1] - 11]) + arrowHead([c[0] + 10, c[1] - 11], [c[0] - 10, c[1] + 11])
     if (fl.oneWay) svg += line([c[0] - 6, c[1] + 17], [c[0] + 6, c[1] + 17]) + circle(c[0], c[1] + 14, 3, BG)
-    return { svg, name: fl.oneWay ? T('Limiteur de débit unidirectionnel', 'One-way flow control valve') : T('Limiteur de débit réglable', 'Adjustable flow restrictor') }
+    if (fl.comp) svg += rect(c[0] - 14, c[1] - 14, 28, 28, 'fill="none"')
+    if (a.x > b.x) svg = `<g transform="translate(${f(a.x + b.x)} 0) scale(-1 1)">${svg}</g>`
+    return { svg, name: fl.comp ? T('Régulateur de débit compensé en pression, unidirectionnel', 'Pressure-compensated flow regulator, one-way') : fl.oneWay ? T('Limiteur de débit unidirectionnel', 'One-way flow control valve') : T('Limiteur de débit réglable', 'Adjustable flow restrictor') }
   }
   if (fl?.k === 'logic') {
     const out = pid(ports, fl.out), i1 = pid(ports, fl.ins[0]), i2 = pid(ports, fl.ins[1])
@@ -371,8 +388,49 @@ function misc(def: SymbolDef, ports: PortInfo[]): R {
   return null
 }
 
+/** Limiteur et réducteur de pression : case carrée, ressort réglable, pilotage par la pression (trait pointillé). */
+function pressureValves(def: SymbolDef, ports: PortInfo[]): R {
+  const fl = def.fluid
+  if (fl?.k !== 'relief' && fl?.k !== 'reducer') return null
+  const p = pid(ports, fl.p), t = pid(ports, fl.k === 'relief' ? fl.t : fl.a)
+  if (!p || !t) return null
+  const y = p.y, x0 = def.w / 2 - 11
+  const spring = path(`M${f(x0 + 11)} ${f(y - 11)}l-3 -2l6 -3l-6 -3l6 -3l-6 -3l3 -2`, 'fill="none"')
+  const adj = line([x0 + 3, y - 14], [x0 + 21, y - 28]) + arrowHead([x0 + 21, y - 28], [x0 + 3, y - 14])
+  let svg = line([p.x, p.y], [x0, y]) + line([x0 + 22, t.y], [t.x, t.y]) + rect(x0, y - 11, 22, 22, BG) + spring + adj
+  if (fl.k === 'relief') {
+    // fermé au repos : la flèche est décalée par rapport aux orifices ; le pilotage vient de l'amont
+    svg += line([x0 + 6, y + 8], [x0 + 6, y - 8]) + arrowHead([x0 + 6, y - 8], [x0 + 6, y + 8])
+    svg += path(`M${f(p.x + 10)} ${f(y)}V${f(y + 20)}H${f(x0 + 11)}V${f(y + 11)}`, `fill="none" ${DASH}`)
+  } else {
+    // ouvert au repos : la flèche relie les orifices ; le pilotage vient de l'aval
+    svg += line([x0 + 3, y], [x0 + 19, y]) + arrowHead([x0 + 19, y], [x0 + 3, y])
+    svg += path(`M${f(t.x - 10)} ${f(y)}V${f(y + 20)}H${f(x0 + 11)}V${f(y + 11)}`, `fill="none" ${DASH}`)
+  }
+  return { svg }
+}
+
+/** Groupe motopompe : moteur électrique, accouplement et pompe hydraulique (cylindrée fixe ou variable régulée en pression). */
+function pumpGroup(def: SymbolDef, ports: PortInfo[]): R {
+  const fl = def.fluid
+  if (fl?.k !== 'fpump' || !/^Groupe motopompe/i.test(def.name.fr)) return null
+  const out = pid(ports, fl.out), inn = pid(ports, fl.in)
+  if (!out || !inn) return null
+  const cy = (out.y + inn.y) / 2, px = out.x, mx = px - 38
+  let svg = circle(mx, cy, 14, BG) + text(mx, cy + 5, 'M', 14, 'font-weight="700"') + rect(mx - 15, cy + 15, 30, 3, 'fill="currentColor"')
+  svg += line([mx + 14, cy], [px - 14, cy]) + rect(mx + 17, cy - 4, 6, 8, BG)
+  svg += circle(px, cy, 14, BG) + toCircle(out, [px, cy], 14) + toCircle(inn, [px, cy], 14) + energy([px, cy], 14, [out.x, out.y], true)
+  if (fl.variable) svg += line([px - 18, cy + 18], [px + 18, cy - 18]) + arrowHead([px + 18, cy - 18], [px - 18, cy + 18])
+  // signal Load Sensing : trait pointillé vers le régulateur de la pompe
+  const ls = fl.ls ? pid(ports, fl.ls) : undefined
+  if (ls) svg += path(`M${f(ls.x)} ${f(ls.y)}H${f(px + 22)}V${f(cy - 20)}`, `fill="none" ${DASH}`) + text(ls.x - 6, ls.y - 4, 'LS', 7)
+  return { svg }
+}
+
 const RECIPES: ((def: SymbolDef, ports: PortInfo[]) => R)[] = [
   maintenanceUnit,
+  pressureValves,
+  pumpGroup,
   pumpOrMotor,
   cell,
   closedPlug,

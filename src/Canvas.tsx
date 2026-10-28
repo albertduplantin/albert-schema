@@ -418,11 +418,12 @@ export default function Canvas(p: Props) {
       let handled = true
       if (s && p.sim?.tripped.has(s.id) && !e.altKey) p.onSimToggle(s.id) // protection déclenchée : un clic la réarme
       else if (s && e.altKey && (m?.k === 'switch' || m?.k === 'load' || m?.k === 'coil')) p.onSimFault?.((m.k === 'switch' ? 'stuck:' : 'short:') + s.id)
-      else if (s && (SYMBOL_MAP[s.defId].fluid as { k: string; a?: string } | undefined)?.k === 'valve' && (SYMBOL_MAP[s.defId].fluid as { a?: string }).a === 'elec') {
+      else if (s && (SYMBOL_MAP[s.defId].fluid as { k: string; a?: string } | undefined)?.k === 'valve' && ((SYMBOL_MAP[s.defId].fluid as { a?: string }).a === 'elec' || ((SYMBOL_MAP[s.defId].fluid as { a?: string; b?: string }).a === 'man' && (SYMBOL_MAP[s.defId].fluid as { b?: string }).b === 'man'))) {
         // électrodistributeur : on maintient le clic sur une électrovanne ; à droite ou à gauche selon la bobine visée (un monostable revient au lâcher, un bistable reste en place)
         const side = (solUnder ?? (e.target as Element)).closest('[data-sol]')?.getAttribute('data-sol')
         const f = SYMBOL_MAP[s.defId].fluid as { b?: string }
-        const k = side === 'b' && f.b === 'elec' ? s.id + ':B' : side === 'b' || (f.b === 'elec' && !side) ? null : s.id
+        const twoSided = f.b === 'elec' || f.b === 'man'
+        const k = side === 'b' && twoSided ? s.id + ':B' : side === 'b' || (twoSided && !side) ? null : s.id
         if (k) { held.current = k; p.onSimPress(k, true) } else handled = false
       }
       else if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
@@ -861,7 +862,7 @@ export default function Canvas(p: Props) {
                 {p.sim && def.fluid?.k === 'valve' && def.fluid.three && p.sim.valveB[s.id] && !isDynamic(def) && (
                   <circle cx={b.x1 - 4} cy={b.y1 + 4} r={3} fill="#ff9800" stroke="#e65100" strokeWidth={0.8} />
                 )}
-                {p.sim && (def.fluid?.k === 'fgauge' || def.fluid?.k === 'fpress') && (() => {
+                {p.sim && !p.sim.fluidInfo?.[s.id] && (def.fluid?.k === 'fgauge' || def.fluid?.k === 'fpress') && (() => {
                   const port = def.fluid.k === 'fpress' ? def.fluid.port : def.fluid.ports[0]
                   const pot = p.sim.potentialOf[`${s.id}:${port}`]
                   if (pot !== 'P' && pot !== 'R') return null
@@ -958,6 +959,9 @@ export default function Canvas(p: Props) {
                 })}
                 {doc.showNames && def.cat !== 'sim' && (
                   <text transform={`translate(${s.nameOff?.x ?? 0} ${s.nameOff?.y ?? 0})`} x={(b.x1 + b.x2) / 2} y={b.y2 + 4 + (doc.nameStyle?.size ?? 7)} fontSize={doc.nameStyle?.size ?? 7} fontFamily={fontCss(doc.nameStyle?.font)} fontWeight={doc.nameStyle?.bold ? 700 : 400} fontStyle={doc.nameStyle?.italic ? 'italic' : 'normal'} textAnchor="middle" fill="#555" stroke="none">{lines(s.nameText || def.name[p.lang], (b.x1 + b.x2) / 2, (doc.nameStyle?.size ?? 7) * 1.15)}</text>
+                )}
+                {p.sim?.fluidInfo?.[s.id] && (
+                  <text x={(b.x1 + b.x2) / 2} y={b.y2 + 11} fontSize={8} fontWeight={700} textAnchor="middle" fill="#0d47a1" stroke="#fff" strokeWidth={2.5} paintOrder="stroke" pointerEvents="none">{p.sim.fluidInfo[s.id]}</text>
                 )}
                 {(s.label || s.desc || crossRefs[s.id]?.length) && (
                   <g transform={`translate(${s.labelOff?.x ?? 0} ${s.labelOff?.y ?? 0})`}>

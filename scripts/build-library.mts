@@ -9,7 +9,12 @@ const { ownDrawing } = await import('../src/symbols/own/index.ts')
 const raw = JSON.parse(readFileSync(new URL('../data/library-raw.json', import.meta.url), 'utf8'))
 let dyn = 0, own = 0
 // symboles propres à l'application (absents de la collection d'origine)
-const { extraSymbols } = await import('../src/symbols/own/extra.ts')
+const { extraSymbols: extras0 } = await import('../src/symbols/own/extra.ts')
+const { hydValves } = await import('../src/symbols/own/hydValves.ts')
+const { hydParts } = await import('../src/symbols/own/hydParts.ts')
+const extraSymbols = [...extras0, ...[...hydValves, ...hydParts].map((v: any) => ({ ...v, svg: v.svg || (v.fluid?.k === 'valve' ? staticSvg(v) : ownDrawing(v)?.svg) || staticSvg(v) }))]
+// les anciens distributeurs hydrauliques (cases isolées, symboles non simulés…) sont remplacés par la série complète de distributeurs hydrauliques
+for (const o of raw.symbols) if (o.domain === 'hydraulic' && /\/31_control_valves\//.test(o.id)) o.legacy = true
 for (const e of extraSymbols) raw.symbols.push({ ...e, own: true })
 const ids = JSON.parse(readFileSync(new URL('../api/_ids.json', import.meta.url), 'utf8'))
 for (const e of extraSymbols) if (!ids.includes(e.id)) ids.push(e.id)

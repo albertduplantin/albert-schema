@@ -77,6 +77,9 @@ export interface SimResult {
   plc: Record<string, PlcState>
   /** moteurs pneumatiques : sens de rotation */
   fluidMotor: Record<string, -1 | 0 | 1>
+  /** hydraulique : mesures affichées sous les appareils (pression, débit, vitesse) et vitesse des moteurs (tr/min) */
+  fluidInfo: Record<string, string>
+  motorRpm: Record<string, number>
 }
 
 export const DEFAULT_DELAY_S = 3
@@ -712,7 +715,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
       }
     }
     // circuits de fluide : positions des distributeurs (mémorisées si bistables) et sens de déplacement des vérins
-    const fl = solveFluid({ doc, defs, memory, coilOn: out.coilOn, pressed: inp.pressed, toggled: inp.toggled })
+    const fl = solveFluid({ doc, defs, memory, coilOn: out.coilOn, pressed: inp.pressed, toggled: inp.toggled, now })
     for (const [id, a] of Object.entries(fl.valveA)) {
       if (a !== (memory['§V:' + id]?.on ?? false)) {
         memory['§V:' + id] = { on: a, since: now }
@@ -790,7 +793,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     rotation[s.id] = (idx[1] - idx[0] + 3) % 3 === 1 ? 1 : -1
   }
   // fluide : état final, positions des vérins et pression aux orifices
-  const fl = solveFluid({ doc, defs, memory, coilOn: out.coilOn, pressed: inp.pressed, toggled: inp.toggled })
+  const fl = solveFluid({ doc, defs, memory, coilOn: out.coilOn, pressed: inp.pressed, toggled: inp.toggled, now })
   const cyl: Record<string, number> = {}
   const fluidPending: number[] = []
   for (const s of doc.symbols) {
@@ -831,5 +834,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     valveB: fl.valveB,
     plc: plcLive,
     fluidMotor: fl.motor,
+    fluidInfo: fl.info,
+    motorRpm: fl.rpm,
   }
 }

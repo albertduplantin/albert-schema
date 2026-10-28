@@ -113,6 +113,14 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
     return `${port ? `<path d="M${n(port.x)} ${n(port.y)}${port.y !== ym ? `V${n(ym)}` : ''}H${n(xe)}" stroke="${c}" fill="none"/>` : ''}<path d="M${n(xe)} ${n(ym - 4)}V${n(ym + 4)}L${n(tip)} ${n(ym)}Z" fill="${c === 'currentColor' ? 'currentColor' : c}" stroke="${c}"/>`
   }
   const pl = pilot('left'), pr = pilot('right')
+  // trois positions : un ressort de centrage de chaque côté, entre les cases et la commande
+  const SPR = 13
+  const zig = (x0: number, dir: 1 | -1, ym: number) => {
+    const pts = [0, 2, 4, 7, 10, 13].map((d, i) => `${n(x0 + dir * d)} ${n(ym + (i % 2 ? 4 : -4) * (i === 0 || i === 5 ? 0 : 1))}`)
+    return `<path d="M${pts.join('L')}" fill="none" stroke="currentColor"/>`
+  }
+  const sprL = !!f.three
+  const sprR = !!f.three && f.b !== 'none' && f.b !== 'spring'
   const yl = f.a === 'pneu' && pl ? pl.y : y0 + ch / 2
   const yr = f.b === 'pneu' && pr ? pr.y : y0 + ch / 2
   const pil = pilotNumbers(def)
@@ -129,14 +137,21 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   }
   const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="6" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
   const pilotNo = (x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => (t ? `<text x="${n(x)}" y="${n(y)}" font-size="5.5" text-anchor="${anchor}" fill="currentColor" stroke="none">${t}</text>` : '')
-  if (f.a === 'elec') out += solenoid(xl, -1, !!view.a, yl, 'a') + tag(xl - 6.5, yl - 8, namesA[0]) + pilotNo(xl - 14, yl + 2, pil[0], 'end')
-  else if (f.a === 'man') out += `<path d="M${n(xl)} ${n(yl)}H${n(xl - 4)}" stroke="currentColor"/><rect x="${n(xl - 13)}" y="${n(yl - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xl - 11)} ${n(yl - 2)}H${n(xl - 6)}M${n(xl - 8.5)} ${n(yl - 2)}V${n(yl + 3)}" stroke="currentColor" fill="none"/>`
-  else if (f.a === 'pneu') out += pilotShape(xl, -1, pl, yl)
+  if (sprL) out += zig(xl, -1, yl)
+  const xlO = xl - (sprL ? SPR : 0)
+  if (f.a === 'elec') out += solenoid(xlO, -1, !!view.a, yl, 'a') + tag(xlO - 6.5, yl - 8, namesA[0]) + pilotNo(xlO - 14, yl + 2, pil[0], 'end')
+  else if (f.a === 'man') out += `<path d="M${n(xlO)} ${n(yl)}H${n(xlO - 4)}" stroke="currentColor"/><rect data-sol="a" style="cursor:pointer" x="${n(xlO - 13)}" y="${n(yl - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xlO - 11)} ${n(yl - 2)}H${n(xlO - 6)}M${n(xlO - 8.5)} ${n(yl - 2)}V${n(yl + 3)}" stroke="currentColor" fill="none"/>`
+  else if (f.a === 'pneu') out += pilotShape(xlO, -1, pl, yl)
   if (f.b === 'spring') {
     const pts = [0, 2, 4, 7, 10, 13, 16, 18].map((d, i) => `${n(xr + d)} ${n(yr + (i % 2 ? 4 : -4) * (i === 0 || i === 7 ? 0 : 1))}`)
     out += `<path d="M${pts.join('L')}" fill="none" stroke="currentColor"/>`
-  } else if (f.b === 'elec') out += solenoid(xr, 1, !!view.b, yr, 'b') + tag(xr + 6.5, yr - 8, namesB[0]) + pilotNo(xr + 14, yr + 2, pil[1], 'start')
-  else if (f.b === 'pneu') out += pilotShape(xr, 1, pr, yr)
+  } else {
+    if (sprR) out += zig(xr, 1, yr)
+    const xrO = xr + (sprR ? SPR : 0)
+    if (f.b === 'elec') out += solenoid(xrO, 1, !!view.b, yr, 'b') + tag(xrO + 6.5, yr - 8, namesB[0]) + pilotNo(xrO + 14, yr + 2, pil[1], 'start')
+    else if (f.b === 'pneu') out += pilotShape(xrO, 1, pr, yr)
+    else if (f.b === 'man') out += `<path d="M${n(xrO)} ${n(yr)}H${n(xrO + 4)}" stroke="currentColor"/><rect data-sol="b" style="cursor:pointer" x="${n(xrO + 4)}" y="${n(yr - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xrO + 6)} ${n(yr - 2)}H${n(xrO + 11)}M${n(xrO + 8.5)} ${n(yr - 2)}V${n(yr + 3)}" stroke="currentColor" fill="none"/>`
+  }
   return out
 }
 

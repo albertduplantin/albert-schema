@@ -3,10 +3,16 @@ import { RATINGS } from './transformer'
 import { motorCurrent as motorCurrentImpl } from './sim/estimate'
 
 /** Famille d'appareil, qui détermine les caractéristiques que l'on peut renseigner. */
-export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer' | 'rcd' | 'disconnector' | 'throttle'
+export type Kind = 'fuse' | 'breaker' | 'motorBreaker' | 'thermal' | 'contactor' | 'motor' | 'consumer' | 'rcd' | 'disconnector' | 'throttle' | 'pressure' | 'hpump' | 'hmotor' | 'hcyl' | 'joystick'
 
 export function kindOf(def: SymbolDef | undefined): Kind | null {
   if (!def) return null
+  const fk = def.fluid?.k
+  if (fk === 'relief' || fk === 'reducer') return 'pressure'
+  if (fk === 'valve' && (def.fluid as { prop?: boolean }).prop) return 'joystick'
+  if (def.domain === 'hydraulic' && fk === 'fpump') return 'hpump'
+  if (def.domain === 'hydraulic' && fk === 'fmotor') return 'hmotor'
+  if (def.domain === 'hydraulic' && fk === 'cyl') return 'hcyl'
   const m = def.sim
   const id = def.id
   if (m?.k === 'switch') {
@@ -56,7 +62,25 @@ const F = {
   watts: { key: 'watts', label: { fr: 'Puissance absorbée (W ou VA)', en: 'Power consumption (W or VA)' }, help: { fr: 'Puissance absorbée par le récepteur (W ou VA) : bobine de contacteur (quelques VA), voyant (1 à 3 W)… Elle sert au courant mesuré et au bilan de charge du transformateur de commande.', en: 'Power drawn by the load (W or VA): contactor coil (a few VA), lamp (1–3 W)… It feeds the measured current and the control transformer load budget.' }, list: [1, 2, 3, 5, 10, 15, 25], step: 0.5 } as FieldDef,
 }
 
+const H = {
+  joy: { key: 'joy', label: { fr: 'Joystick (−100 à +100 %)', en: 'Joystick (−100 to +100 %)' }, help: { fr: 'Position du levier du joystick : le signe choisit le sens (case de gauche ou de droite), la valeur absolue règle l’ouverture du tiroir donc le débit vers le récepteur, et donc sa vitesse. 0 = centre : tout est fermé.', en: 'Joystick lever position: the sign picks the direction (left or right cell), the absolute value sets the spool opening hence the flow to the actuator and its speed. 0 = centre: everything closed.' }, list: [-100, -75, -50, -25, 0, 25, 50, 75, 100], step: 5 } as FieldDef,
+  tarage: { key: 'set', label: { fr: 'Tarage (bar)', en: 'Setting (bar)' }, help: { fr: 'Pression de réglage du ressort. Limiteur de pression : il s’ouvre vers le réservoir quand la pression à son entrée dépasse cette valeur (il protège la pompe et le circuit : réglez-le au-dessus de la pression de travail, jamais au-delà de ce que supportent les composants). Réducteur : la pression en aval ne dépasse pas cette valeur.', en: 'Spring setting pressure. Relief valve: it opens to tank when the inlet pressure exceeds this value (it protects the pump and circuit: set it above working pressure, never beyond component ratings). Reducing valve: downstream pressure never exceeds this value.' }, list: [10, 25, 50, 70, 100, 150, 200, 250, 315], step: 1 } as FieldDef,
+  regul: { key: 'set', label: { fr: 'Pression de régulation (bar)', en: 'Compensator pressure (bar)' }, help: { fr: 'Pompe à cylindrée variable : la pompe réduit son débit pour ne pas dépasser cette pression (régulation de pression constante). Sans effet sur une pompe à cylindrée fixe.', en: 'Variable pump: it reduces its flow so as not to exceed this pressure (constant-pressure control). No effect on a fixed pump.' }, list: [50, 70, 100, 150, 200], step: 1 } as FieldDef,
+  disp: { key: 'disp', label: { fr: 'Cylindrée (cm³/tr)', en: 'Displacement (cm³/rev)' }, help: { fr: 'Volume d’huile déplacé par tour. Pompe : débit (L/min) = cylindrée × vitesse / 1000. Moteur : vitesse = débit × 1000 / cylindrée ; son couple vaut ΔP × cylindrée / 62,8.', en: 'Oil volume moved per revolution. Pump: flow (L/min) = displacement × speed / 1000. Motor: speed = flow × 1000 / displacement; its torque is ΔP × displacement / 62.8.' }, list: [10, 18, 25, 32, 50, 80, 100, 160, 250], step: 1 } as FieldDef,
+  rpm: { key: 'rpm', label: { fr: 'Vitesse d’entraînement (tr/min)', en: 'Drive speed (rpm)' }, help: { fr: 'Vitesse du moteur électrique qui entraîne la pompe (1500 tr/min pour un moteur à 4 pôles en 50 Hz). Elle fixe le débit de la pompe.', en: 'Speed of the electric motor driving the pump (1500 rpm for a 4-pole motor at 50 Hz). It sets the pump flow.' }, list: [750, 1000, 1500, 3000], step: 50 } as FieldDef,
+  mload: { key: 'load', label: { fr: 'Charge (bar de pression motrice)', en: 'Load (driving pressure, bar)' }, help: { fr: 'Pression différentielle nécessaire pour faire tourner le moteur sous charge (image du couple résistant). Plus la charge est grande, plus la pression du circuit monte, jusqu’au tarage du limiteur de pression.', en: 'Differential pressure needed to turn the motor under load (image of the resisting torque). The higher the load, the higher the circuit pressure, up to the relief valve setting.' }, list: [0, 5, 25, 50, 75, 100], step: 1 } as FieldDef,
+  bore: { key: 'bore', label: { fr: 'Alésage (mm)', en: 'Bore (mm)' }, help: { fr: 'Diamètre du piston. La force développée vaut pression × surface du piston ; la vitesse vaut débit / surface.', en: 'Piston diameter. Force = pressure × piston area; speed = flow / area.' }, list: [32, 40, 50, 63, 80, 100], step: 1 } as FieldDef,
+  rod: { key: 'rod', label: { fr: 'Diamètre de tige (mm)', en: 'Rod diameter (mm)' }, help: { fr: 'La tige réduit la section côté tige : le vérin sort plus lentement qu’il ne rentre à débit égal, et l’effort en rentrée est plus faible. Un limiteur de débit placé à l’échappement multiplie la pression côté tige par le rapport des sections.', en: 'The rod reduces the annular area: the cylinder extends more slowly than it retracts at equal flow and pushes less on retraction. A meter-out flow valve multiplies the rod-side pressure by the area ratio.' }, list: [18, 22, 28, 30, 36, 45, 56], step: 1 } as FieldDef,
+  stroke: { key: 'stroke', label: { fr: 'Course (mm)', en: 'Stroke (mm)' }, help: { fr: 'Déplacement de la tige. Elle fixe le temps de sortie ou de rentrée pour un débit donné.', en: 'Rod travel. It sets the extension or retraction time for a given flow.' }, list: [100, 200, 350, 500, 1000], step: 10 } as FieldDef,
+  cload: { key: 'load', label: { fr: 'Charge sur la tige (daN)', en: 'Load on the rod (daN)' }, help: { fr: 'Effort que la tige doit vaincre. La pression nécessaire côté fond vaut effort / surface du piston (en daN et cm², le résultat est en bar). Elle s’ajoute à la pression d’échappement.', en: 'Force the rod must overcome. The cap-side pressure needed is force / piston area (in daN and cm² the result is in bar). It adds to the exhaust-side pressure.' }, list: [0, 100, 250, 500, 1000, 2000], step: 10 } as FieldDef,
+}
+
 export const FIELDS: Record<Kind, FieldDef[]> = {
+  pressure: [H.tarage],
+  hpump: [H.disp, H.rpm, H.regul],
+  hmotor: [H.disp, H.mload],
+  hcyl: [H.bore, H.rod, H.stroke, H.cload],
+  joystick: [H.joy],
   fuse: [F.calibre, F.fuseType, F.icu],
   breaker: [F.calibre, F.curveB, F.icu],
   motorBreaker: [F.calibre, F.curveB, F.min, F.max, F.set, F.icu],
@@ -73,7 +97,7 @@ export const FIELDS: Record<Kind, FieldDef[]> = {
 export function fieldsFor(def: SymbolDef | undefined): FieldDef[] {
   const k = kindOf(def)
   if (!k) return []
-  const f = FIELDS[k]
+  const f = k === 'hpump' && def && !/variable/i.test(def.name.fr) && !(def.fluid as { variable?: boolean } | undefined)?.variable ? FIELDS[k].filter((x) => x.label.fr !== 'Pression de régulation (bar)') : FIELDS[k]
   return k === 'breaker' && def && /50_residual_current_circuit_breaker/.test(def.id) ? [...f, F.idn] : f
 }
 

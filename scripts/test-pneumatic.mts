@@ -156,12 +156,14 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   const H = (x: string) => lib.symbols.find((s: any) => s.id === 'qet:30_hydraulic/' + x)
   const [tank, pump, valve, cyl] = [H('21_tanks/bache_a_l_air_libre'), H('61_pumps/pompe_hydr_2'), H('31_control_valves/13_4-2/distributeur_4-2'), H('51_cylinders/verin-asymetrique-doubl-effet')]
   const lim = SYMBOL_MAP['flow-limiter-h'], rdu = SYMBOL_MAP['flow-rdu-h']
+  const RV = lib.symbols.find((s: any) => s.id === 'own:hyd/limiteur_pression') // limiteur de pression : sans lui la pression monterait jusqu'à faire passer tout le débit
   check('limiteur de débit et RDU : présents dans la bibliothèque hydraulique et pneumatique', [!!lim, !!rdu, !!SYMBOL_MAP['flow-limiter-p'], !!SYMBOL_MAP['flow-rdu-p']], [true, true, true, true])
   const mk = (part: any, open?: number) => {
-    const d = T.build(base, [specFor('tank', tank, 300, 330, ''), specFor('pump', pump, 150, 200, ''), specFor('v', valve, 330, 190, ''), specFor('load', cyl, 500, 60, 'A1'), ...(part ? [specFor('x', part, 420, 120, 'Q1')] : [])],
-      [['pump', pump.fluid.in, 'tank', 't0'], ['pump', pump.fluid.out, 'v', 't0'], ['v', 't1', 'tank', 't0'], ['v', 't3', 'load', cyl.fluid.rod],
+    const d = T.build(base, [specFor('tank', tank, 300, 330, ''), specFor('pump', pump, 150, 200, ''), specFor('v', valve, 330, 190, ''), specFor('load', cyl, 500, 60, 'A1'), specFor('rv', RV, 250, 330, 'RV'), ...(part ? [specFor('x', part, 420, 120, 'Q1')] : [])],
+      [['pump', pump.fluid.in, 'tank', 't0'], ['pump', pump.fluid.out, 'rv', 'p'], ['rv', 't', 'tank', 't0'], ['pump', pump.fluid.out, 'v', 't0'], ['v', 't1', 'tank', 't0'], ['v', 't3', 'load', cyl.fluid.rod],
         ...(part ? [['v', 't2', 'x', 'l'], ['x', 'r', 'load', cyl.fluid.cap]] : [['v', 't2', 'load', cyl.fluid.cap]])])
     if (part && open) d.symbols.find((s: any) => s.label === 'Q1').rated = { open }
+    d.symbols.find((s: any) => s.label === 'RV').rated = { set: 40 }
     const g = rig(d)
     return { g, V: d.symbols.find((s: any) => s.defId === valve.id).id, C: d.symbols.find((s: any) => s.defId === cyl.id).id }
   }
@@ -175,13 +177,13 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
     return g.run([], [], ms).cylPos[C]
   }
   const free = stroke(null, undefined, true, 600)
-  const half = stroke(lim, 50, true, 600)
-  check('limiteur à 50 % : la sortie est environ deux fois plus lente', [Math.round(free * 10) / 10, Math.round(half * 10) / 10], [0.5, 0.3])
-  const slowRetract = stroke(lim, 50, false, 600)
-  const fastRetract = stroke(rdu, 50, false, 600)
+  const half = stroke(lim, 10, true, 600)
+  check('limiteur à 10 % : la sortie est nettement plus lente (le débit en excès passe par le limiteur de pression)', half < free * 0.7, true)
+  const slowRetract = stroke(lim, 10, false, 600)
+  const fastRetract = stroke(rdu, 10, false, 600)
   check('RDU : retour libre par le clapet (plus rapide que le limiteur simple)', fastRetract < slowRetract, true)
-  const rduOut = stroke(rdu, 50, true, 600)
-  check('RDU : la sortie est étranglée comme avec un limiteur', Math.round(rduOut * 10) / 10, 0.3)
+  const rduOut = stroke(rdu, 10, true, 600)
+  check('RDU : la sortie est étranglée comme avec un limiteur', Math.abs(rduOut - half) < 0.05, true)
 }
 
 // ── dessin dynamique : chambres colorées, piston, cases du distributeur

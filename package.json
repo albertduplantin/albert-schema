@@ -11,7 +11,7 @@
     "bench": "tsx scripts/bench.mts",
     "audit": "tsx scripts/audit-inventory.mts",
     "test:e2e": "node scripts/e2e.mjs",
-    "test": "tsx scripts/test-sim.mts && tsx scripts/test-routing.mts && tsx scripts/test-terminals.mts && tsx scripts/test-share.mts && tsx scripts/test-export.mts && tsx scripts/test-guided.mts && tsx scripts/test-pneumatic.mts && tsx scripts/test-plc.mts && tsx scripts/test-grafcet.mts && tsx scripts/test-explain.mts && tsx scripts/audit-run.mts && node scripts/test-feedback-api.mjs && node scripts/test-admin-api.mjs && node scripts/test-examples-api.mjs && node scripts/test-classroom-api.mjs"
+    "test": "tsx scripts/test-sim.mts && tsx scripts/test-routing.mts && tsx scripts/test-terminals.mts && tsx scripts/test-share.mts && tsx scripts/test-export.mts && tsx scripts/test-guided.mts && tsx scripts/test-pneumatic.mts && tsx scripts/test-hydraulic.mts && tsx scripts/test-plc.mts && tsx scripts/test-grafcet.mts && tsx scripts/test-explain.mts && tsx scripts/audit-run.mts && node scripts/test-feedback-api.mjs && node scripts/test-admin-api.mjs && node scripts/test-examples-api.mjs && node scripts/test-classroom-api.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -63,9 +63,15 @@ export type FluidModel =
   /** pressostat : un contact électrique de même repère se ferme quand l'orifice est sous pression */
   | { k: 'fpress'; port: string }
   /** limiteur de débit : le passage de `a` vers `b` est étranglé (dans les deux sens, sauf `oneWay` : retour libre par un clapet) ; l'ouverture se règle dans les propriétés */
-  | { k: 'fthrottle'; a: string; b: string; oneWay?: boolean }
+  | { k: 'fthrottle'; a: string; b: string; oneWay?: boolean; /** régulateur de débit compensé en pression : le débit ne dépend plus de la charge */ comp?: boolean }
   /** pompe : l'orifice de refoulement `out` n'est sous pression que si l'aspiration `in` est reliée à une bâche */
-  | { k: 'fpump'; out: string; in: string }
+  | { k: 'fpump'; out: string; in: string; /** cylindrée variable, régulée en pression */ variable?: boolean; /** orifice du signal Load Sensing : la pompe maintient 14 bar de plus que la pression de charge */ ls?: string }
+  /** limiteur de pression (hydraulique) : s'ouvre vers la bâche `t` quand la pression en `p` dépasse son tarage */
+  | { k: 'relief'; p: string; t: string }
+  /** réducteur de pression (hydraulique) : la pression en aval `a` ne dépasse pas son tarage */
+  | { k: 'reducer'; p: string; a: string }
+  /** débitmètre : laisse passer le fluide de `a` vers `b` et affiche le débit */
+  | { k: 'fflow'; a: string; b: string }
   /** liaisons fixes entre orifices (pièces élémentaires, raccords, filtres) */
   | { k: 'fnet'; links: [string, string][] }
   /** moteur pneumatique : sens de rotation selon l'orifice alimenté (un seul orifice : un sens, échappement libre) */
@@ -77,7 +83,9 @@ export type FluidModel =
       act: [string, string][]
       /** commande A (gauche) et B (droite) : électrique, pneumatique, manuelle, ressort ou aucune */
       a: 'elec' | 'pneu' | 'man'
-      b: 'elec' | 'pneu' | 'spring' | 'none'
+      b: 'elec' | 'pneu' | 'spring' | 'none' | 'man'
+      /** distributeur proportionnel : la position du joystick (réglage « joy », −100 à +100 %) règle l'ouverture des passages */
+      prop?: boolean
       pilotA?: string
       pilotB?: string
       /** distributeur à trois positions : `rest` = position centrale (ressorts), `act` = case de gauche (commande A), `actB` = case de droite (commande B) */
@@ -140,6 +148,15 @@ export interface Ratings {
   ratio?: number
   /** récepteurs : puissance absorbée (W ou VA) */
   watts?: number
+  /** hydraulique : cylindrée (cm³/tr), vitesse d'entraînement (tr/min), charge (bar au moteur, daN au vérin), alésage / tige / course du vérin (mm) */
+  disp?: number
+  rpm?: number
+  load?: number
+  bore?: number
+  rod?: number
+  stroke?: number
+  /** position du joystick d'un distributeur proportionnel (−100 à +100 %) */
+  joy?: number
 }
 
 export interface PlacedSymbol {

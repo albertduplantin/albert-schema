@@ -1,4 +1,4 @@
-import type { Doc, PlacedSymbol, Wire } from './types'
+import type { Doc, PlacedSymbol, Ratings, Wire } from './types'
 import { SYMBOL_MAP } from './symbols'
 import { uid } from './geometry'
 
@@ -386,3 +386,46 @@ export const relay24V = (base: Doc): Doc => {
   }
   return d
 }
+
+// ───────────────────────── banc hydraulique (travaux pratiques)
+const HY = (t: string) => 'own:hyd/' + t
+const HTANK = 'qet:30_hydraulic/21_tanks/bache_a_l_air_libre'
+const HCYL = 'qet:30_hydraulic/51_cylinders/verin-asymetrique-doubl-effet' // fond (t0) à gauche, tige (t1) à droite
+
+/** Règle des appareils réglables d'un exemple, par repère. */
+const tune = (d: Doc, rated: Record<string, Ratings>): Doc => ({ ...d, symbols: d.symbols.map((s) => (rated[s.label] ? { ...s, rated: { ...(s.rated ?? {}), ...rated[s.label] } } : s)) })
+
+/**
+ * TP « limiteur de débit à l'admission » : groupe motopompe 18 cm³, limiteur de pression, distributeur 4/3 centre fermé, deux limiteurs de débit
+ * unidirectionnels, moteur hydraulique 100 cm³ et trois manomètres. En simulation, maintenez le clic sur une électrovanne du distributeur.
+ */
+export const hydraulicMotor = (base: Doc): Doc => tune(build(base,
+  [
+    ['t1', HTANK, 330, 700], ['t2', HTANK, 560, 560],
+    ['pump', HY('groupe_pompe_fixe'), 300, 610, 'GMP'], ['rv', HY('limiteur_pression'), 450, 500, 'LP'], ['g3', HY('manometre'), 220, 520, 'G3'],
+    ['v', HY('d43_o'), 300, 360, '1V1'],
+    ['la', HY('limiteur_debit_uni'), 150, 250, 'LA'], ['lb', HY('limiteur_debit_uni_inverse'), 470, 250, 'LB'],
+    ['m', HY('moteur_hydraulique'), 330, 120, 'M2'], ['g1', HY('manometre'), 220, 120, 'G1'], ['g2', HY('manometre'), 440, 120, 'G2'],
+  ],
+  [
+    ['pump', 'i', 't1', 't0'], ['pump', 'o', 'rv', 'p'], ['pump', 'o', 'v', 'p'], ['pump', 'o', 'g3', 'a'], ['rv', 't', 't2', 't0'], ['v', 't', 't2', 't0'],
+    ['v', 'a', 'la', 'a'], ['la', 'b', 'm', 'a'], ['v', 'b', 'lb', 'a'], ['lb', 'b', 'm', 'b'], ['m', 'a', 'g1', 'a'], ['m', 'b', 'g2', 'a'],
+  ]), { LP: { set: 100 }, LA: { open: 40 }, LB: { open: 40 }, M2: { disp: 100, load: 5 }, GMP: { disp: 18, rpm: 1500 } })
+
+/**
+ * TP « limiteur de débit à l'échappement » : vérin 50/30 course 350, limiteurs unidirectionnels placés sur le retour de chaque chambre.
+ * Observez l'effet multiplicateur de pression côté tige à la sortie.
+ */
+export const hydraulicCylinder = (base: Doc): Doc => tune(build(base,
+  [
+    ['t1', HTANK, 330, 700], ['t2', HTANK, 560, 560],
+    ['pump', HY('groupe_pompe_fixe'), 300, 610, 'GMP'], ['rv', HY('limiteur_pression'), 450, 500, 'LP'], ['g3', HY('manometre'), 220, 520, 'G3'],
+    ['v', HY('d43_o'), 300, 360, '1V1'],
+    ['la', HY('limiteur_debit_uni'), 150, 250, 'LA'], ['lb', HY('limiteur_debit_uni'), 470, 250, 'LB'],
+    ['c', HCYL, 300, 120, '1A'], ['g1', HY('manometre'), 220, 120, 'G1'], ['g2', HY('manometre'), 440, 120, 'G2'],
+  ],
+  [
+    ['pump', 'i', 't1', 't0'], ['pump', 'o', 'rv', 'p'], ['pump', 'o', 'v', 'p'], ['pump', 'o', 'g3', 'a'], ['rv', 't', 't2', 't0'], ['v', 't', 't2', 't0'],
+    // à l'échappement : la chambre est du côté 'a' (étranglé), le distributeur du côté 'b' (retour libre)
+    ['c', 't0', 'la', 'a'], ['la', 'b', 'v', 'a'], ['c', 't1', 'lb', 'a'], ['lb', 'b', 'v', 'b'], ['c', 't0', 'g1', 'a'], ['c', 't1', 'g2', 'a'],
+  ]), { LP: { set: 100 }, LA: { open: 30 }, LB: { open: 30 }, GMP: { disp: 18, rpm: 1500 }, '1A': { bore: 50, rod: 30, stroke: 350 } })

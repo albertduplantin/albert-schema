@@ -1,5 +1,6 @@
 import type { Doc, SymbolDef } from '../types'
 import { exhaustPortIds, pilotNumbers, solenoidNames } from '../fluidNames'
+import { solveHyd } from './hyd'
 
 /** Mémoire de simulation (voir engine.ts) : `p` et `dir` servent aux vérins. */
 export type FluidMemory = Record<string, { on: boolean; since: number; p?: number; dir?: number; v?: number }>
@@ -36,6 +37,8 @@ export interface FluidIn {
   coilOn: Record<string, boolean>
   pressed: ReadonlySet<string>
   toggled: ReadonlySet<string>
+  /** instant de la simulation (ms) : position des vérins */
+  now?: number
 }
 
 export interface FluidOut {
@@ -53,6 +56,9 @@ export interface FluidOut {
   cylDir: Record<string, -1 | 0 | 1>
   /** vitesse relative de chaque vérin en mouvement (1 = sans étranglement), limitée par les limiteurs de débit de son alimentation et de son échappement */
   cylSpeed: Record<string, number>
+  /** hydraulique : mesures affichées sous les appareils (pression, débit, vitesse…) et vitesse de rotation des moteurs (tr/min) */
+  info: Record<string, string>
+  rpm: Record<string, number>
 }
 
 /** Position d'un vérin (0 = rentré, 1 = sorti) à l'instant `now`. */
@@ -125,8 +131,15 @@ export function solveFluid(x: FluidIn): FluidOut {
 
         (f.a === 'man' && (x.pressed.has(s.id) || x.toggled.has(s.id))) ||
         (f.a === 'pneu' && !!f.pilotA && pilotP.has(key(s.id, f.pilotA)))
-      const bOn = (f.b === 'elec' && (coilB || x.pressed.has(s.id + ':B'))) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
+      const bOn = (f.b === 'elec' && (coilB || x.pressed.has(s.id + ':B'))) || (f.b === 'man' && x.pressed.has(s.id + ':B')) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
       const mem = x.memory['§V:' + s.id]?.on ?? false
+      if (f.prop) {
+        // proportionnel : la position du joystick choisit la case (gauche : négatif, droite : positif)
+        const joy = s.rated?.joy ?? 0
+        valveA[s.id] = joy < -2
+        valveB[s.id] = joy > 2
+        continue
+      }
       if (f.three) {
         // trois positions, centrées par ressorts : la commande A (ou B) seule déplace le tiroir, les deux ensemble le laissent au centre
         valveA[s.id] = aOn && !bOn
@@ -258,5 +271,33 @@ export function solveFluid(x: FluidIn): FluidOut {
       cylSpeed[s.id] = Math.min(sup !== undefined ? fromP.get(sup) ?? 1 : 1, exh !== undefined ? toR.get(exh) ?? 1 : 1)
     }
   }
-  return { pot: (symId, portId) => potOf(key(symId, portId)), valveA, valveB, pswitch, motor, cylDir, cylSpeed }
+  // hydraulique quantitative : pressions et débits réels, qui remplacent les états qualitatifs des circuits hydrauliques
+  let info: Record<string, string> = {}
+  let rpm: Record<string, number> = {}
+  let pot = (symId: string, portId: string): Pressure => potOf(key(symId, portId))
+  const hyd = solveHyd({ doc, defs, valveA, valveB, cylPos: (id) => { const f = defs[doc.symbols.find((c) => c.id === id)?.defId ?? '']?.fluid; return cylPos(x.memory['§C:' + id], x.now ?? 0, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0) } })
+  if (hyd) {
+    info = hyd.info
+    rpm = hyd.rpm
+    const isHyd = (symId: string) => defs[doc.symbols.find((c) => c.id === symId)?.defId ?? '']?.domain === 'hydraulic'
+    pot = (symId, portId) => {
+      if (!isHyd(symId)) return potOf(key(symId, portId))
+      const b = hyd.bar(symId, portId)
+      if (b === undefined) return null
+      return b > 0.5 ? 'P' : potOf(key(symId, portId)) === 'R' ? 'R' : null
+    }
+    for (const s of doc.symbols) {
+      const f = defs[s.defId]?.fluid
+      if (defs[s.defId]?.domain !== 'hydraulic') continue
+      if (f?.k === 'cyl' && hyd.cylX[s.id] !== undefined) {
+        const xq = hyd.cylX[s.id]
+        const dir = Math.abs(xq) > 0.02 ? (xq > 0 ? 1 : -1) : 0
+        cylDir[s.id] = dir as -1 | 0 | 1
+        const strokeCm = (s.rated?.stroke ?? 350) / 10
+        cylSpeed[s.id] = dir ? Math.max(0.02, (STROKE_S * Math.abs(hyd.cylV[s.id])) / strokeCm) : 1
+      }
+      if (f?.k === 'fmotor') motor[s.id] = (hyd.rpm[s.id] > 0.5 ? (hyd.dir[s.id] * (f.rev ? -1 : 1)) : 0) as -1 | 0 | 1
+    }
+  }
+  return { pot, valveA, valveB, pswitch, motor, cylDir, cylSpeed, info, rpm }
 }
