@@ -280,6 +280,7 @@ export function solveHyd(inp: HydIn): HydOut | null {
     const o = e.out(p)
     const q = o[0]
     out.oil[e.sym] = e.kind === 'pump' ? -q : (out.oil[e.sym] ?? 0) + q
+    if (e.kind === 'relief') out.needle[e.sym] = q > 0.15 ? 1 : 0
     if (e.kind === 'throttle') out.needle[e.sym] = Math.min(1, (e.oneWay ? Math.max(0, q) : Math.abs(q)) / 30)
     const dp = e.nodes.length >= 2 ? p[e.nodes[0]] - p[e.nodes[1]] : 0
     if (e.kind === 'pump') out.info[e.sym] = `Q = ${fmt(-q)} L/min\n${fmt(p[e.nodes[0]], 0)} bar · ${fmt((-q * p[e.nodes[0]]) / 600)} kW`

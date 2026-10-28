@@ -417,7 +417,8 @@ function pressureValves(def: SymbolDef, ports: PortInfo[]): R {
   svg += line([x0 + 3, y0 - 4], [x0 + S + 2, y0 - 14]) + arrowHead([x0 + S + 2, y0 - 14], [x0 + 3, y0 - 4])
   if (fl.k === 'relief') {
     // fermé au repos : la flèche est décalée vers le bas, hors de l'axe des orifices ; le pilotage vient de l'amont
-    svg += line([x0 + 3, y0 + S - 3.5], [x0 + S - 3, y0 + S - 3.5]) + arrowHead([x0 + S - 3, y0 + S - 3.5], [x0 + 3, y0 + S - 3.5])
+    // la flèche monte dans l'axe des orifices quand le limiteur devient passant (variable --ro)
+    svg += `<g style="transform:translateY(calc((1 - var(--ro,0)) * ${f(y0 + S - 3.5 - y)}px));transition:transform .3s ease-out">` + line([x0 + 3, y], [x0 + S - 3, y]) + arrowHead([x0 + S - 3, y], [x0 + 3, y]) + '</g>'
     svg += path(`M${f(x0 - 6)} ${f(y)}V${f(y0 + S + 6)}H${f(x0 + S * 0.52)}V${f(y0 + S)}`, `fill="none" ${DASH}`) + line([x0 - 6, y], [x0, y])
   } else {
     // ouvert au repos : la flèche est dans l'axe des orifices ; le pilotage vient de l'aval
