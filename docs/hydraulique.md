@@ -13,7 +13,7 @@ annulée par dichotomie (toutes les lois sont croissantes avec la pression du n�
 |---|---|
 | Groupe motopompe (cylindrée fixe) | Q = cylindrée × vitesse / 1000, moins une fuite de 0,07 % par bar (18 cm³, 1500 tr/min → 27 L/min) |
 | Pompe à cylindrée variable | Le débit s'annule autour de la pression de régulation (réglage « Pression de régulation ») |
-| Pompe Load Sensing | Pression maintenue à (pression du signal LS + 14 bar), sans dépasser la pression maximale |
+| Pompe Load Sensing | Pression maintenue à (pression du signal LS + 15 bar), sans dépasser la pression maximale |
 | Limiteur de pression | Q = 8 L/min par bar au-delà du tarage |
 | Réducteur de pression | Q = 10 L/min par bar, jusqu'à ce que la pression aval atteigne le tarage |
 | Limiteur de débit | Q = 14 × ouverture × √ΔP (retour libre par clapet si unidirectionnel) ; régulateur compensé : débit indépendant de ΔP |

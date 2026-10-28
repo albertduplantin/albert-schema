@@ -128,9 +128,9 @@ export function solveHyd(inp: HydIn): HydOut | null {
         const variable = f.variable || /variable/i.test(defs[s.defId].name.fr)
         const pset = dflt(r.set, 100)
         const on = tank.has(inN)
-        // Load Sensing : la pompe règle son débit pour garder 14 bar de plus que la pression de charge, sans dépasser sa pression maximale
+        // Load Sensing : la pompe règle son débit pour garder 15 bar de plus que la pression de charge, sans dépasser sa pression maximale
         const Q = (pp: number, pls: number) => {
-          const target = lsN >= 0 ? Math.min(pset, pls + 14) : pset
+          const target = lsN >= 0 ? Math.min(pset, pls + 15) : pset
           return on ? Math.max(0, Qn * (1 - 0.0007 * pp) * (variable || lsN >= 0 ? Math.min(1, Math.max(0, (target + 3 - pp) / 6)) : 1)) : 0
         }
         els.push({ sym: s.id, kind: 'pump', nodes: lsN >= 0 ? [outN, inN, lsN] : [outN, inN], out: (p) => { const q = Q(p[outN], lsN >= 0 ? p[lsN] : 0); return lsN >= 0 ? [-q, q, 0] : [-q, q] } })

@@ -131,7 +131,7 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   r = g.run([], 100); r = g.run([], 1500)
   check('proportionnel : joystick de l’autre côté → moteur dans l’autre sens', r.fluidMotor[m] !== 0 && r.motorRpm[m] > 100, true)
 }
-// ── pompe Load Sensing : la pression de la pompe suit la charge (+ 14 bar), au repos elle ne débite presque pas
+// ── pompe Load Sensing : la pression de la pompe suit la charge (+ 15 bar), au repos elle ne débite presque pas
 {
   const d = T.build(base,
     [['tank', TANK.id, 240, 300], ['pump', H('groupe_pompe_ls'), 160, 220, 'GMP'], ['gp', H('manometre'), 100, 150, 'M1'],
@@ -143,7 +143,7 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   let r = g.run([], 0); r = g.run([], 1500)
   check('Load Sensing : au repos la pompe débite à peine (régulation de pression)', num(r.fluidInfo[pump]) < 3, true)
   r = g.run([v], 100); r = g.run([v], 1500)
-  near('Load Sensing : la pression de pompe vaut la pression de charge + 14 bar environ', num(r.fluidInfo[g.id('M1')]), 40 + 12.5 + 14, 14)
+  near('Load Sensing : la pression de pompe vaut la pression de charge + 15 bar environ', num(r.fluidInfo[g.id('M1')]), 40 + 12.5 + 15, 15)
 }
 // ── exemples du banc : moteur et vérin
 {

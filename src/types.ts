@@ -65,7 +65,7 @@ export type FluidModel =
   /** limiteur de débit : le passage de `a` vers `b` est étranglé (dans les deux sens, sauf `oneWay` : retour libre par un clapet) ; l'ouverture se règle dans les propriétés */
   | { k: 'fthrottle'; a: string; b: string; oneWay?: boolean; /** régulateur de débit compensé en pression : le débit ne dépend plus de la charge */ comp?: boolean }
   /** pompe : l'orifice de refoulement `out` n'est sous pression que si l'aspiration `in` est reliée à une bâche */
-  | { k: 'fpump'; out: string; in: string; /** cylindrée variable, régulée en pression */ variable?: boolean; /** orifice du signal Load Sensing : la pompe maintient 14 bar de plus que la pression de charge */ ls?: string }
+  | { k: 'fpump'; out: string; in: string; /** cylindrée variable, régulée en pression */ variable?: boolean; /** orifice du signal Load Sensing : la pompe maintient 15 bar de plus que la pression de charge */ ls?: string }
   /** limiteur de pression (hydraulique) : s'ouvre vers la bâche `t` quand la pression en `p` dépasse son tarage */
   | { k: 'relief'; p: string; t: string }
   /** réducteur de pression (hydraulique) : la pression en aval `a` ne dépasse pas son tarage */
