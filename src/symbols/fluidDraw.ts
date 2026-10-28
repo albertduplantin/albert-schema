@@ -126,7 +126,7 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   const yl = f.a === 'pneu' && pl ? pl.y : y0 + ch / 2
   const yr = f.b === 'pneu' && pr ? pr.y : y0 + ch / 2
   const pil = pilotNumbers(def)
-  const [namesA, namesB] = solenoidNames(view.label ?? '', pil)
+  const [namesA, namesB] = solenoidNames(view.label ?? '', pil, def.domain === 'hydraulic')
   // numéros normalisés des orifices (1 alimentation, 2 et 4 utilisations, 3 et 5 échappements) et des commandes (14, 12, 10)
   const nums = portNumbers(def)
   const exhaust = new Set(exhaustPortIds(def))

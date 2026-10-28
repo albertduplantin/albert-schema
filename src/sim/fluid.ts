@@ -73,7 +73,7 @@ export function cylPos(m: FluidMemory[string] | undefined, now: number, rest = 0
 }
 
 /** Repères de commande d'un électrodistributeur : « YV1 » ou « YV1/YV2 » (bobine côté A, bobine côté B). */
-export const valveCoils = (label: string, def?: SymbolDef): [string[], string[]] => solenoidNames(label, def ? pilotNumbers(def) : undefined)
+export const valveCoils = (label: string, def?: SymbolDef): [string[], string[]] => solenoidNames(label, def ? pilotNumbers(def) : undefined, def?.domain === 'hydraulic')
 
 export function solveFluid(x: FluidIn): FluidOut {
   const { doc, defs } = x

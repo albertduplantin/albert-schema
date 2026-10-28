@@ -92,7 +92,9 @@ export function portNumbers(def: SymbolDef): Record<string, string> {
  */
 export function pilotNumbers(def: SymbolDef): [string | undefined, string | undefined] {
   const f = def.fluid
-  if (f?.k !== 'valve' || def.domain === 'hydraulic') return f?.k === 'valve' ? ['14', '12'] : [undefined, undefined]
+  if (f?.k !== 'valve') return [undefined, undefined]
+  // hydraulique : les extrémités du tiroir sont repérées par les lettres des positions, a (gauche) et b (droite)
+  if (def.domain === 'hydraulic') return ['a', 'b']
   const nums = portNumbers(def)
   const id1 = Object.keys(nums).find((k) => nums[k] === '1')
   const code = (links: [string, string][]): string => {
@@ -109,11 +111,12 @@ export function pilotNumbers(def: SymbolDef): [string | undefined, string | unde
 
 /**
  * Noms des bobines qui commandent un distributeur : [côté A (gauche), côté B (droite)].
+ * Hydraulique : électroaimants 1Y1 (côté a) et 1Y2 (côté b), 1Y3 et 1Y4 pour le distributeur suivant.
  * Distributeur « 1V1 » : bobine 1YV14 (elle relie 1 à 4 quand elle est alimentée) et 1YV12 (1 à 2) ; 1V1+ / 1V1−, 1Y1 / 1Y2 sont aussi reconnus.
  * Au-delà du premier distributeur d'un circuit, le numéro du distributeur est glissé devant : 1YV214.
  * « YV1/YV2 » (ancien usage) désigne directement les deux bobines.
  */
-export function solenoidNames(label: string, pilots?: [string | undefined, string | undefined]): [string[], string[]] {
+export function solenoidNames(label: string, pilots?: [string | undefined, string | undefined], hyd = false): [string[], string[]] {
   const norm = (v: string) => v.replace(/\s+/g, '').toUpperCase().replace(/−/g, '-')
   const parts = label.split(/[\s/,;]+/).filter(Boolean)
   if (parts.length >= 2) return [[norm(parts[0])], [norm(parts[1])]]
@@ -124,10 +127,10 @@ export function solenoidNames(label: string, pilots?: [string | undefined, strin
     const k = Number(m[2])
     const yv = (p: string | undefined, dflt: string) => `${m[1]}YV${k > 1 ? k : ''}${p ?? dflt}`
     const [pa, pb] = pilots ?? [undefined, undefined]
-    return [
-      [yv(pa, '14'), one + '+', `${m[1]}Y${2 * k - 1}`, `${m[1]}YV${k}4`, `${m[1]}YV${k}`],
-      [yv(pb, '12'), one + '-', `${m[1]}Y${2 * k}`, `${m[1]}YV${k}2`],
-    ]
+    const A = [yv(pa, '14'), one + '+', `${m[1]}Y${2 * k - 1}`, `${m[1]}YV${k}4`, `${m[1]}YV${k}`], B = [yv(pb, '12'), one + '-', `${m[1]}Y${2 * k}`, `${m[1]}YV${k}2`]
+    // hydraulique : électroaimants Y1 (côté a) et Y2 (côté b), sans les numéros 14 / 12 de la pneumatique
+    if (hyd) { A.unshift(A.splice(2, 1)[0]); B.unshift(B.splice(2, 1)[0]) }
+    return [A, B]
   }
   return [[one, one + '+'], [one + '-']]
 }

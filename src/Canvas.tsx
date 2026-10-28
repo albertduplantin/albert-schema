@@ -942,6 +942,23 @@ export default function Canvas(p: Props) {
                 )}
                 <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={{ ...(bladeVars(s.id, model, p.sim) ?? {}), ...(p.sim && (def.fluid?.k === 'fthrottle') ? ({ '--nd': (1 - (p.sim.needle?.[s.id] ?? 0)) * 32 + 'deg' } as React.CSSProperties) : {}), ...(p.sim && def.fluid?.k === 'relief' ? ({ '--ro': String(p.sim.needle?.[s.id] ?? 0) } as React.CSSProperties) : {}) }}>
                   {isDynamic(def) ? <FluidShape s={s} def={def} sim={p.sim ?? null} detectors={s.label ? p.detectors?.[s.label.replace(/\s+/g, '').toUpperCase()]?.map((d) => ({ label: d.label, at: d.at, on: !!p.sim?.closed[d.id] })) : undefined} /> : <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />}
+                  {def.domain === 'hydraulic' && (() => {
+                    // lettres normalisées des orifices des appareils hydrauliques (P pression, T réservoir, A et B utilisations, S aspiration)
+                    const f = def.fluid
+                    const m: Record<string, string> = f?.k === 'relief' ? { [f.p]: 'P', [f.t]: 'T' } : f?.k === 'reducer' ? { [f.p]: 'P', [f.a]: 'A' }
+                      : f?.k === 'cyl' ? { [f.cap]: 'A', ...(f.rod ? { [f.rod]: 'B' } : {}) } : f?.k === 'fmotor' ? { [f.a]: 'A', ...(f.b ? { [f.b]: 'B' } : {}) }
+                      : f?.k === 'fpump' ? { [f.out]: 'P', [f.in]: 'S' } : f?.k === 'fthrottle' || f?.k === 'fflow' ? { [f.a]: 'A', [f.b]: 'B' }
+                      : f?.k === 'check' ? { [f.from]: 'A', [f.to]: 'B' } : null as unknown as Record<string, string>
+                    if (!m) return null
+                    return (
+                      <g pointerEvents="none" fontSize={6} fill="currentColor" stroke="none">
+                        {def.ports.filter((q) => m[q.id]).map((q) => {
+                          const h = q.dir === 'left' || q.dir === 'right'
+                          return <text key={q.id} x={h ? q.x + (q.dir === 'left' ? 2 : -2) : q.x + 2.5} y={h ? q.y - 2.5 : q.y + (q.dir === 'up' ? 7 : -3)} textAnchor={h && q.dir === 'right' ? 'end' : 'start'}>{m[q.id]}</text>
+                        })}
+                      </g>
+                    )
+                  })()}
                   {model?.k === 'plc' && p.sim && (() => {
                     const st = p.sim.plc[s.id]
                     return (
