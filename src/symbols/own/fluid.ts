@@ -428,6 +428,20 @@ function pressureValves(def: SymbolDef, ports: PortInfo[]): R {
   return { svg }
 }
 
+/** Filtres hydrauliques : losange traversé d'un trait pointillé ; le clapet de dérivation (ressort) s'ouvre quand le filtre se colmate. */
+function hydFilters(def: SymbolDef, ports: PortInfo[]): R {
+  if (def.domain !== 'hydraulic' || !def.id.startsWith('own:hyd/filtre')) return null
+  const a = pid(ports, 'a'), b = pid(ports, 'b')
+  if (!a || !b) return null
+  const c = (a.x + b.x) / 2, y = a.y, bypass = /clapet/.test(def.id)
+  let svg = line([a.x, y], [c - 11, y]) + line([c + 11, y], [b.x, y]) + diamond(c, y, 11) + line([c, y - 11], [c, y + 11], DASH)
+  if (bypass) {
+    const yb = y - 22, xa = a.x + 8, xb = b.x - 8
+    svg += line([xa, y], [xa, yb]) + line([xa, yb], [c - 5, yb]) + line([c + 12.6, yb], [xb, yb]) + line([xb, yb], [xb, y]) + place([c, yb], 0, checkGlyph(true))
+  }
+  return { svg, name: bypass ? T('Filtre avec clapet de dérivation (colmatage)', 'Filter with bypass check valve (clogging)') : T('Filtre d’aspiration (crépine)', 'Suction filter (strainer)') }
+}
+
 /** Groupe motopompe : moteur électrique, accouplement et pompe hydraulique (cylindrée fixe ou variable régulée en pression). */
 function pumpGroup(def: SymbolDef, ports: PortInfo[]): R {
   const fl = def.fluid
@@ -448,6 +462,7 @@ function pumpGroup(def: SymbolDef, ports: PortInfo[]): R {
 const RECIPES: ((def: SymbolDef, ports: PortInfo[]) => R)[] = [
   maintenanceUnit,
   pressureValves,
+  hydFilters,
   pumpGroup,
   pumpOrMotor,
   cell,

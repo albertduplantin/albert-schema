@@ -27,6 +27,7 @@ const PRESS: [string, string] = ['Pression', 'Pressure']
 const FLOW: [string, string] = ['Débit', 'Flow']
 const CHECK: [string, string] = ['Clapets et sélecteurs', 'Check valves and shuttle']
 const MEAS: [string, string] = ['Mesure', 'Measurement']
+const FILT: [string, string] = ['Filtration', 'Filtration']
 const GROUP: [string, string] = ['Groupes et moteurs', 'Power packs and motors']
 
 const specs: Spec[] = [
@@ -44,6 +45,8 @@ const specs: Spec[] = [
   { tail: 'groupe_pompe_variable', fr: 'Groupe motopompe à cylindrée variable, régulée en pression', en: 'Pressure-compensated variable-displacement motor-pump unit', group: GROUP, cat: PUMPS, w: 74, h: 64, prefix: 'M', ports: [P('o', 52, 0, 'up'), P('i', 52, 64, 'down')], fluid: { k: 'fpump', out: 'o', in: 'i', variable: true }, score: 80 },
   { tail: 'groupe_pompe_ls', fr: 'Groupe motopompe à cylindrée variable, Load Sensing', en: 'Load Sensing variable-displacement motor-pump unit', group: GROUP, cat: PUMPS, w: 80, h: 64, prefix: 'M', ports: [P('o', 52, 0, 'up'), P('i', 52, 64, 'down'), P('x', 80, 32, 'right')], fluid: { k: 'fpump', out: 'o', in: 'i', variable: true, ls: 'x' }, score: 70 },
   { tail: 'bouchon', fr: 'Bouchon (orifice obturé)', en: 'Plug (blanked port)', group: MEAS, cat: VALVES, w: 20, h: 30, prefix: 'X', ports: [P('a', 10, 30, 'down')], fluid: { k: 'fgauge', ports: ['a'] }, score: 50 },
+  { tail: 'filtre_aspiration', fr: 'Filtre d’aspiration (crépine)', en: 'Suction filter (strainer)', group: FILT, cat: '30_hydraulic/81_filters', w: 50, h: 36, prefix: 'Z', ports: [P('a', 0, 18, 'left'), P('b', 50, 18, 'right')], fluid: { k: 'fnet', links: [['a', 'b']] }, score: 90, top: true },
+  { tail: 'filtre_clapet', fr: 'Filtre avec clapet de dérivation (colmatage)', en: 'Filter with bypass check valve (clogging)', group: FILT, cat: '30_hydraulic/81_filters', w: 60, h: 50, prefix: 'Z', ports: [P('a', 0, 36, 'left'), P('b', 60, 36, 'right')], fluid: { k: 'fnet', links: [['a', 'b']] }, score: 88, top: true },
   { tail: 'moteur_hydraulique', fr: 'Moteur hydraulique, deux sens de rotation', en: 'Hydraulic motor, both directions', group: GROUP, cat: PUMPS, w: 60, h: 50, prefix: 'M', ports: [P('a', 0, 25, 'left'), P('b', 60, 25, 'right')], fluid: { k: 'fmotor', a: 'a', b: 'b' }, score: 92, top: true },
 ]
 

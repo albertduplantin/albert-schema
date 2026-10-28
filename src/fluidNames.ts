@@ -20,6 +20,7 @@ export function isoCode(def: SymbolDef | undefined): IsoCode | null {
     case 'fpump': return { code: 'P', zero: true }
     case 'fpress': return { code: 'S', zero: true }
     case 'fgauge': return { code: 'P', zero: true }
+    case 'fnet': return def.id.startsWith('own:hyd/filtre') ? { code: 'Z', zero: true } : null
     case 'flink': return /501011_tank|501012_treatment|501013_control|501014_filter|81_filters|71_exchangers|21_tanks/.test(def.id) ? { code: 'Z', zero: true } : null
     case 'valve': return f.a === 'man' && f.b === 'none' && f.manual === 'toggle' && def.ports.length === 2 ? { code: 'V', zero: true } : { code: 'V', zero: false } // vanne d'arrêt : 0V1
     case 'check': case 'logic': case 'fthrottle': return { code: 'V', zero: false }
