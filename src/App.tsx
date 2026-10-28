@@ -785,6 +785,19 @@ function Editor() {
     })
   }
 
+  /** réglage d'un limiteur de débit ou de pression pendant la simulation (boutons − et +) */
+  const onAdjust = useCallback((id: string, key: 'open' | 'set', delta: number) => {
+    commit((d) => ({
+      ...d,
+      symbols: d.symbols.map((x) => {
+        if (x.id !== id) return x
+        const f = SYMBOL_MAP[x.defId]?.fluid
+        const cur = key === 'open' ? x.rated?.open ?? 50 : x.rated?.set ?? (f?.k === 'reducer' ? 50 : 100)
+        const next = key === 'open' ? Math.min(100, Math.max(2, cur + delta)) : Math.min(350, Math.max(0, cur + delta))
+        return { ...x, rated: { ...(x.rated ?? {}), [key]: next } }
+      }),
+    }))
+  }, [commit])
   const duplicate = useCallback(() => { copySel(); paste() }, [copySel, paste])
 
   const nudge = useCallback((dx: number, dy: number) => {
@@ -1309,6 +1322,10 @@ function Editor() {
                       <Combo options={f.list ?? []} type={f.text ? 'text' : 'number'} min={0} step={f.step ?? 'any'}
                         placeholder={f.key === 'ie' && mc?.estimated ? String(mc.value) : undefined}
                         value={String(selSym.rated?.[f.key] ?? '')} onChange={(e) => setR(f.key, e.target.value, f.text)} />
+                      {f.range && (
+                        <input type="range" className="ratingrange" min={f.range[0]} max={f.range[1]} step={f.step ?? 1} value={Number(selSym.rated?.[f.key] ?? (f.key === 'open' ? 50 : f.range[0] < 0 ? 0 : f.range[0]))} aria-label={fieldLabel(f, lang)}
+                          onChange={(e) => setR(f.key, e.target.value, f.text)} />
+                      )}
                       {advLine(f.key, selSym.rated?.[f.key])}
                     </label>
                   ))}
@@ -1576,6 +1593,8 @@ function Editor() {
             <button onClick={() => addInstrument('voltmeter', 'digital')}>{t('mVoltDigital')}</button>
             <button onClick={() => addInstrument('clamp', 'needle')}>{t('mClampNeedle')}</button>
             <button onClick={() => addInstrument('clamp', 'digital')}>{t('mClampDigital')}</button>
+            <button onClick={() => addInstrument('tacho', 'needle')}>{t('mTachoNeedle')}</button>
+            <button onClick={() => addInstrument('tacho', 'digital')}>{t('mTachoDigital')}</button>
             <p className="muted small menu-note">{t('measureHelp')}</p>
           </div>
         </details>
@@ -1673,7 +1692,7 @@ function Editor() {
       <main className="stage" data-plcdock={plcSym && !plcWin.max && !plcWin.min && plcWin.dock !== 'float' ? plcWin.dock : undefined} style={{ ['--plc-w' as string]: plcWin.w + 'px', ['--plc-h' as string]: plcWin.h + 'px' }}>
         <Canvas doc={doc} lang={lang} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel} detectors={detectors}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} onAdjust={onAdjust} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
           {pageTabs.map((pg, i) => (
             <button key={i} role="tab" aria-selected={i === (doc.page ?? 0)} className={i === (doc.page ?? 0) ? 'on' : ''}

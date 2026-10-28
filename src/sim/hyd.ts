@@ -44,6 +44,12 @@ export interface HydOut {
   dir: Record<string, 1 | -1>
   /** texte de mesure affiché sous chaque appareil */
   info: Record<string, string>
+  /** débit (L/min, signé) dans chaque appareil, du premier au second de ses orifices (pompe : de l'aspiration vers le refoulement) */
+  oil: Record<string, number>
+  /** débit (L/min, signé) dans chaque conducteur, de son origine vers son extrémité */
+  wireFlow: Record<string, number>
+  /** limiteurs de débit : passage relatif (0 fermé … 1 pleinement passant), qui fait monter l'aiguille */
+  needle: Record<string, number>
 }
 
 /** Constantes du modèle (ordres de grandeur d'un banc didactique 100 bar / 30 L/min). */
@@ -61,6 +67,10 @@ interface El {
   sym: string
   kind: string
   nodes: number[]
+  /** limiteur de débit unidirectionnel : seul le sens étranglé fait monter l'aiguille */
+  oneWay?: boolean
+  /** orifices correspondant à chaque nœud (`symbole:orifice`) */
+  ports?: string[]
   /** débits quittant chaque nœud de l'élément (positif : vers l'élément) */
   out: (p: Float64Array) => number[]
 }
@@ -89,7 +99,9 @@ export function solveHyd(inp: HydIn): HydOut | null {
     else if (f.k === 'fnet') for (const [a, b] of f.links) uf.union(key(s.id, a), key(s.id, b))
   }
   const index = new Map<string, number>()
+  let calls: string[] = []
   const node = (symId: string, portId: string): number => {
+    calls.push(key(symId, portId))
     const r = uf.find(key(symId, portId))
     if (!index.has(r)) index.set(r, index.size)
     return index.get(r)!
@@ -107,6 +119,8 @@ export function solveHyd(inp: HydIn): HydOut | null {
     const f = defs[s.defId].fluid
     if (!f) continue
     const r = s.rated ?? {}
+    calls = []
+    const first = els.length
     switch (f.k) {
       case 'fpump': {
         const outN = node(s.id, f.out), inN = node(s.id, f.in), lsN = f.ls ? node(s.id, f.ls) : -1
@@ -139,7 +153,7 @@ export function solveHyd(inp: HydIn): HydOut | null {
         const open = Math.min(1, Math.max(0.02, dflt(r.open, 50) / 100))
         const comp = !!f.comp
         els.push({
-          sym: s.id, kind: 'throttle', nodes: [aN, bN],
+          sym: s.id, kind: 'throttle', nodes: [aN, bN], oneWay: !!f.oneWay,
           out: (p) => {
             const d = p[aN] - p[bN]
             let q: number
@@ -222,6 +236,7 @@ export function solveHyd(inp: HydIn): HydOut | null {
         break
       }
     }
+    for (let k = first; k < els.length; k++) els[k].ports = els[k].kind === 'prop' ? calls.slice(2 * (k - first), 2 * (k - first) + 2) : calls.slice()
   }
 
   // ── résolution
@@ -258,11 +273,13 @@ export function solveHyd(inp: HydIn): HydOut | null {
   }
 
   // ── résultats
-  const out: HydOut = { bar: (symId, portId) => { const k = uf.find(key(symId, portId)); return index.has(k) ? p[index.get(k)!] : undefined }, cylX: {}, cylV: {}, rpm: {}, dir: {}, info: {} }
+  const out: HydOut = { bar: (symId, portId) => { const k = uf.find(key(symId, portId)); return index.has(k) ? p[index.get(k)!] : undefined }, cylX: {}, cylV: {}, rpm: {}, dir: {}, info: {}, oil: {}, wireFlow: {}, needle: {} }
   const fmt = (v: number, d = 1) => (Math.round(v * 10 ** d) / 10 ** d).toString().replace('.', ',')
   for (const e of els) {
     const o = e.out(p)
     const q = o[0]
+    out.oil[e.sym] = e.kind === 'pump' ? -q : (out.oil[e.sym] ?? 0) + q
+    if (e.kind === 'throttle') out.needle[e.sym] = Math.min(1, (e.oneWay ? Math.max(0, q) : Math.abs(q)) / 30)
     if (e.kind === 'pump') out.info[e.sym] = `Q = ${fmt(-q)} L/min`
     else if (e.kind === 'relief') out.info[e.sym] = q > 0.15 ? `ouvert · ${fmt(q)} L/min` : 'fermé'
     else if (e.kind === 'prop') out.info[e.sym] = 'joystick ' + fmt(Math.abs(dflt(doc.symbols.find((x) => x.id === e.sym)?.rated?.joy, 0)), 0) + ' %'
@@ -283,6 +300,62 @@ export function solveHyd(inp: HydIn): HydOut | null {
   for (const s of hydSyms) {
     const f = defs[s.defId].fluid
     if (f?.k === 'fgauge' && f.ports[0]) { const v = out.bar(s.id, f.ports[0]); if (v !== undefined) out.info[s.id] = `${fmt(v, 0)} bar` }
+  }
+
+  // débit dans chaque conducteur : conservation du débit sur le réseau des conducteurs et des liaisons internes (arbre couvrant de chaque nœud)
+  const inj = new Map<string, number>()
+  for (const e of els) {
+    const o = e.out(p)
+    e.ports?.forEach((k, i) => inj.set(k, (inj.get(k) ?? 0) - o[i]))
+  }
+  type Edge = { to: string; wire?: string; sign: 1 | -1 }
+  const adjV = new Map<string, Edge[]>()
+  const addEdge = (a: string, b: string, wire?: string) => {
+    if (!adjV.has(a)) adjV.set(a, [])
+    if (!adjV.has(b)) adjV.set(b, [])
+    adjV.get(a)!.push({ to: b, wire, sign: 1 })
+    adjV.get(b)!.push({ to: a, wire, sign: -1 })
+  }
+  for (const w of doc.wires) addEdge(key(w.from.symId, w.from.portId), key(w.to.symId, w.to.portId), w.id)
+  for (const s of hydSyms) {
+    const f = defs[s.defId].fluid
+    if (!f || (f.k === 'valve' && f.prop)) continue
+    if (f.k === 'valve') for (const [a, b] of f.three ? (inp.valveA[s.id] ? f.act : inp.valveB[s.id] ? f.actB ?? f.rest : f.rest) : inp.valveA[s.id] ? f.act : f.rest) addEdge(key(s.id, a), key(s.id, b))
+    else if (f.k === 'flink') for (const q of f.ports.slice(1)) addEdge(key(s.id, f.ports[0]), key(s.id, q))
+    else if (f.k === 'fnet') for (const [a, b] of f.links) addEdge(key(s.id, a), key(s.id, b))
+  }
+  const tankPorts = new Set<string>()
+  for (const s of hydSyms) { const f = defs[s.defId].fluid; if (f?.k === 'fsink') for (const q of f.ports) tankPorts.add(key(s.id, q)) }
+  const seen = new Set<string>()
+  for (const root of adjV.keys()) {
+    if (seen.has(root)) continue
+    // parcours en largeur : ordre, parent et arête de chaque sommet
+    const order: string[] = [root]
+    const parent = new Map<string, { v: string; edge: Edge } | null>([[root, null]])
+    seen.add(root)
+    for (let i = 0; i < order.length; i++) {
+      const v = order[i]
+      for (const e of adjV.get(v) ?? []) {
+        if (parent.has(e.to)) continue
+        parent.set(e.to, { v, edge: e })
+        seen.add(e.to)
+        order.push(e.to)
+      }
+    }
+    const sum = new Map<string, number>(order.map((v) => [v, inj.get(v) ?? 0]))
+    // le réservoir absorbe ou fournit le déséquilibre
+    const tk = order.find((v) => tankPorts.has(v))
+    if (tk) sum.set(tk, (sum.get(tk) ?? 0) - order.reduce((t, v) => t + (inj.get(v) ?? 0), 0))
+    for (let i = order.length - 1; i > 0; i--) {
+      const v = order[i], par = parent.get(v)!
+      const flow = sum.get(v) ?? 0 // débit de v vers son parent
+      sum.set(par.v, (sum.get(par.v) ?? 0) + flow)
+      if (par.edge.wire) {
+        // l'arête a été parcourue du parent vers v : sign = 1 si le fil va du parent à v
+        const wireFrom = par.edge.sign === 1 ? par.v : v
+        out.wireFlow[par.edge.wire] = wireFrom === v ? flow : -flow
+      }
+    }
   }
   return out
 }

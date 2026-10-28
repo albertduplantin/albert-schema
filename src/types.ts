@@ -232,7 +232,7 @@ export type Paper = 'A4' | 'A3' | 'A2' | 'A1'
 /** Appareil de mesure posé sur la feuille : voltmètre (deux pointes de touche) ou pince ampèremétrique. */
 export interface Instrument {
   id: string
-  kind: 'voltmeter' | 'clamp'
+  kind: 'voltmeter' | 'clamp' | 'tacho'
   /** affichage : aiguille ou numérique */
   style: 'needle' | 'digital'
   x: number

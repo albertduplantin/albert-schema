@@ -59,6 +59,10 @@ export interface FluidOut {
   /** hydraulique : mesures affichées sous les appareils (pression, débit, vitesse…) et vitesse de rotation des moteurs (tr/min) */
   info: Record<string, string>
   rpm: Record<string, number>
+  /** hydraulique : débit dans chaque appareil et chaque conducteur (L/min), passage relatif des limiteurs de débit */
+  oil: Record<string, number>
+  wireFlow: Record<string, number>
+  needle: Record<string, number>
 }
 
 /** Position d'un vérin (0 = rentré, 1 = sorti) à l'instant `now`. */
@@ -274,11 +278,17 @@ export function solveFluid(x: FluidIn): FluidOut {
   // hydraulique quantitative : pressions et débits réels, qui remplacent les états qualitatifs des circuits hydrauliques
   let info: Record<string, string> = {}
   let rpm: Record<string, number> = {}
+  let oil: Record<string, number> = {}
+  let wireFlow: Record<string, number> = {}
+  let needle: Record<string, number> = {}
   let pot = (symId: string, portId: string): Pressure => potOf(key(symId, portId))
   const hyd = solveHyd({ doc, defs, valveA, valveB, cylPos: (id) => { const f = defs[doc.symbols.find((c) => c.id === id)?.defId ?? '']?.fluid; return cylPos(x.memory['§C:' + id], x.now ?? 0, f?.k === 'cyl' && f.single === 'pull' ? 1 : 0) } })
   if (hyd) {
     info = hyd.info
     rpm = hyd.rpm
+    oil = hyd.oil
+    wireFlow = hyd.wireFlow
+    needle = hyd.needle
     const isHyd = (symId: string) => defs[doc.symbols.find((c) => c.id === symId)?.defId ?? '']?.domain === 'hydraulic'
     pot = (symId, portId) => {
       if (!isHyd(symId)) return potOf(key(symId, portId))
@@ -299,5 +309,5 @@ export function solveFluid(x: FluidIn): FluidOut {
       if (f?.k === 'fmotor') motor[s.id] = (hyd.rpm[s.id] > 0.5 ? (hyd.dir[s.id] * (f.rev ? -1 : 1)) : 0) as -1 | 0 | 1
     }
   }
-  return { pot, valveA, valveB, pswitch, motor, cylDir, cylSpeed, info, rpm }
+  return { pot, valveA, valveB, pswitch, motor, cylDir, cylSpeed, info, rpm, oil, wireFlow, needle }
 }

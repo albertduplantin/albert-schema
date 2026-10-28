@@ -135,6 +135,29 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   r = g.run([v], 100); r = g.run([v], 2000)
   check('exemple moteur : un clic sur l’électrovanne fait tourner le moteur', r.motorRpm[m] > 20, true)
   check('exemple moteur : les trois manomètres affichent des bar', ['G1', 'G2', 'G3'].every((l) => /bar/.test(r.fluidInfo[g.id(l)] ?? '')), true)
+  // circulation de l'huile : débit dans chaque conducteur
+  const wire = (a: string, ap: string, b: string, bp: string) => d.wires.find((w: any) => w.from.symId === g.id(a) && w.from.portId === ap && w.to.symId === g.id(b) && w.to.portId === bp)?.id
+  const wf = (a: string, ap: string, b: string, bp: string) => r.oilWire[wire(a, ap, b, bp)] ?? 0
+  near('circulation : la pompe refoule ≈ 26 L/min vers le distributeur', wf('GMP', 'o', '1V1', 'p'), 26, 2)
+  near('circulation : rien ne passe vers le limiteur de pression (fermé)', wf('GMP', 'o', 'LP', 'p'), 0, 0.5)
+  near('circulation : l’huile arrive au moteur par le côté B', wf('1V1', 'b', 'LB', 'a'), 26, 2)
+  near('circulation : et repart par le côté A (sens inverse du fil)', wf('LA', 'b', 'M2', 'a'), -26, 2)
+  check('limiteur de débit : l’aiguille monte quand il devient passant', (r.needle[g.id('LB')] ?? 0) > 0.5, true)
+  // tachymètre posé sur le moteur
+  const { defaultInstrument, readSpeed, JAW } = await import(ROOT + '/src/instruments.ts')
+  const mot = d.symbols.find((s: any) => s.id === m)
+  const md = SYMBOL_MAP[mot.defId]
+  const tacho = defaultInstrument('tacho', 'digital', 0, 0)
+  tacho.x = mot.x + md.w / 2 - JAW.x
+  tacho.y = mot.y + md.h / 2 - JAW.y
+  const reading = readSpeed(tacho, d.symbols, SYMBOL_MAP, r)
+  check('tachymètre : lit la vitesse du moteur hydraulique', [reading.found, Math.abs(reading.rpm - r.motorRpm[m]) < 0.01], [true, true])
+  tacho.x += 300
+  check('tachymètre : loin du moteur, il ne lit rien', readSpeed(tacho, d.symbols, SYMBOL_MAP, r).found, false)
+  // réglage des limiteurs de débit
+  for (const id of [g.id('LA'), g.id('LB')]) d.symbols.find((s: any) => s.id === id).rated = { open: 10 }
+  r = g.run([v], 200); r = g.run([v], 2000)
+  check('réglage : limiteur presque fermé, le moteur ralentit et l’aiguille retombe', [r.motorRpm[m] < 200, (r.needle[g.id('LB')] ?? 1) < 0.9], [true, true])
 }
 {
   const d = T.hydraulicCylinder(base)

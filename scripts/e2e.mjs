@@ -242,9 +242,16 @@ try {
   await sleep(900)
   await p4.evaluate(() => [...document.querySelectorAll('button')].find((x) => /Simuler/.test(x.textContent))?.click())
   await sleep(600)
+  // réglage d'un limiteur de débit sans quitter la simulation : le bouton + augmente l'ouverture
+  const before = await p4.evaluate(() => [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent).filter((t) => /^\d+ %$/.test(t)))
+  const plus = await p4.evaluate(() => { const r = document.querySelector('svg.canvas [data-adj$="|open|5"]')?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
+  if (plus) { await p4.mouse.move(plus.x, plus.y); await p4.mouse.down(); await p4.mouse.up(); await sleep(400) }
+  const after = await p4.evaluate(() => [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent).filter((t) => /^\d+ %$/.test(t)))
+  check('limiteur de débit : le bouton + de la simulation augmente l’ouverture', !!plus && JSON.stringify(before) !== JSON.stringify(after), JSON.stringify([before, after]))
   const hs = await p4.evaluate(() => { const r = document.querySelector('svg.canvas [data-sol="a"]')?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null })
   if (hs) { await p4.mouse.move(hs.x, hs.y); await p4.mouse.down(); await sleep(1500) }
   check('banc hydraulique : pressions en bar et vitesse du moteur affichées', await p4.evaluate(() => { const t = [...document.querySelectorAll('svg.canvas text')].map((e) => e.textContent); return t.some((x) => /\d+ bar/.test(x)) && t.some((x) => /tr\/min/.test(x)) }))
+  check('circulation d’huile : des traits animés sur les conducteurs', await p4.evaluate(() => document.querySelectorAll('svg.canvas polyline[stroke-dasharray="0.5 6"]').length > 2))
   await p4.screenshot({ path: process.env.TEMP + '/hyd.png' })
   await p4.mouse.up()
   await p4.close()

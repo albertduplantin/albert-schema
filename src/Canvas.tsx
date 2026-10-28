@@ -7,7 +7,7 @@ import { junctionPoints, routeAll } from './routing'
 import { autoConnect } from './splice'
 import { fontCss } from './fonts'
 import InstrumentView from './InstrumentView'
-import { jawPoint, pickAt, probesOf, readCurrent, readVoltage, stepRange, type PickContext } from './instruments'
+import { jawPoint, pickAt, probesOf, readCurrent, readSpeed, readVoltage, stepRange, type PickContext } from './instruments'
 import { ShapeView, arcPath, dashArray, insideOf, polyPoints, resizeRotated, shapeBox, shapeHandles, snapTargets, snapTo, straighten } from './shapes'
 import type { Doc, Instrument, Lang, PlacedSymbol, PortRef, Shape } from './types'
 import { SYMBOL_MAP } from './symbols'
@@ -44,13 +44,13 @@ function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | nul
 }
 
 /** Rotor : trois pales qui tournent dans le cercle du moteur. */
-function Rotor({ cx, cy, r, dir = 1 }: { cx: number; cy: number; r: number; dir?: 1 | -1 }) {
+function Rotor({ cx, cy, r, dir = 1, dur = 0.8 }: { cx: number; cy: number; r: number; dir?: 1 | -1; dur?: number }) {
   const R = r * 0.78
   return (
     <g transform={`translate(${cx} ${cy})`} pointerEvents="none">
       <circle r={R + 1} fill="#fff" fillOpacity={0.82} stroke="none" />
       <g stroke="#1f8f3a" strokeWidth={1.8} strokeLinecap="round" fill="none">
-        <animateTransform attributeName="transform" type="rotate" from={dir === 1 ? '0' : '360'} to={dir === 1 ? '360' : '0'} dur="0.8s" repeatCount="indefinite" />
+        <animateTransform attributeName="transform" type="rotate" from={dir === 1 ? '0' : '360'} to={dir === 1 ? '360' : '0'} dur={`${dur}s`} repeatCount="indefinite" />
         <path d={`M0 0L${R} 0M0 0L${-R / 2} ${R * 0.866}M0 0L${-R / 2} ${-R * 0.866}`} />
         <circle r={R} strokeOpacity={0.35} strokeWidth={1} />
       </g>
@@ -96,6 +96,8 @@ interface Props {
   sim: SimResult | null
   onSimPress: (id: string, down: boolean) => void
   onSimToggle: (id: string) => void
+  /** réglage d'un limiteur de débit (ouverture, %) ou d'un limiteur / réducteur de pression (tarage, bar) pendant la simulation */
+  onAdjust?: (id: string, key: 'open' | 'set', delta: number) => void
   /** défauts injectés (fils coupés, appareils ouverts) et bascule d'un défaut */
   faults?: ReadonlySet<string>
   /** projet à plusieurs feuilles : symboles des autres feuilles, feuille de chaque symbole, et repère « n/N » de la feuille affichée */
@@ -404,6 +406,12 @@ export default function Canvas(p: Props) {
         const ins = (doc.instruments ?? []).find((i) => i.id === id)
         if (ins) { inter.current = { kind: 'instr', id, sx: pt.x, sy: pt.y, ox: ins.x, oy: ins.y, moved: false }; return }
       }
+    }
+    const adj = p.sim ? (e.target as Element).closest('[data-adj]') : null
+    if (adj) {
+      const [id, k, d] = adj.getAttribute('data-adj')!.split('|')
+      p.onAdjust?.(id, k as 'open' | 'set', Number(d))
+      return
     }
     // une électrovanne de distributeur reste cliquable même sous l'étiquette d'un repère
     const stack = p.sim ? document.elementsFromPoint(e.clientX, e.clientY) : []
@@ -824,6 +832,11 @@ export default function Canvas(p: Props) {
                     <animate attributeName="stroke-dashoffset" from="0" to={p.sim.current[wr.id] > 0 ? '-8' : '8'} dur="0.45s" repeatCount="indefinite" />
                   </polyline>
                 )}
+                {Math.abs(p.sim?.oilWire?.[wr.id] ?? 0) > 0.15 && (
+                  <polyline points={pointsAttr(pts)} fill="none" stroke="#fff" strokeOpacity={0.95} strokeWidth={1.5} strokeLinecap="round" strokeDasharray="0.5 6" pointerEvents="none">
+                    <animate attributeName="stroke-dashoffset" from="0" to={(p.sim!.oilWire[wr.id] ?? 0) > 0 ? '-13' : '13'} dur={`${Math.max(0.25, Math.min(3, 16 / Math.abs(p.sim!.oilWire[wr.id] ?? 1)))}s`} repeatCount="indefinite" />
+                  </polyline>
+                )}
                 {txt && <text x={mx + 4} y={my - 4} fontSize={7} fill={wr.color === 'gnye' ? '#2e9b2e' : wr.color} stroke="none">{txt}</text>}
               </g>
             )
@@ -854,7 +867,28 @@ export default function Canvas(p: Props) {
                     <rect x={b.x1 - 3} y={b.y1 - 3} width={b.x2 - b.x1 + 6} height={b.y2 - b.y1 + 6} rx={6} fill={col} fillOpacity={bad ? 0.3 : 0.4} stroke={col} strokeWidth={bad ? 2 : 1.2} strokeDasharray={bad ? '4 2' : undefined} />
                   )
                 })()}
-                {def.fluid?.k === 'fthrottle' && <text x={b.x1 + (b.x2 - b.x1) / 2} y={b.y1 - 2} textAnchor="middle" fontSize={8} stroke="none" fill="#555" pointerEvents="none">{s.rated?.open ?? 50} %</text>}
+                {def.fluid?.k === 'fthrottle' && !p.sim && <text x={b.x1 + (b.x2 - b.x1) / 2} y={b.y1 - 2} textAnchor="middle" fontSize={8} stroke="none" fill="#555" pointerEvents="none">{s.rated?.open ?? 50} %</text>}
+                {p.sim && (def.fluid?.k === 'fthrottle' || def.fluid?.k === 'relief' || def.fluid?.k === 'reducer') && (() => {
+                  const isThr = def.fluid!.k === 'fthrottle'
+                  const key = isThr ? 'open' : 'set'
+                  const val = isThr ? s.rated?.open ?? 50 : s.rated?.set ?? (def.fluid!.k === 'relief' ? 100 : 50)
+                  const step = 5
+                  const cx = (b.x1 + b.x2) / 2, cy = isThr ? b.y1 - 5 : b.y1 - 2
+                  const btn = (dx: number, sign: number) => (
+                    <g data-adj={`${s.id}|${key}|${sign * step}`} style={{ cursor: 'pointer' }}>
+                      <rect x={cx + dx - 5} y={cy - 8} width={10} height={10} rx={2} fill="#e8f0fe" stroke="#1565c0" strokeWidth={0.8} />
+                      <text x={cx + dx} y={cy - 0.5} textAnchor="middle" fontSize={10} fontWeight={700} fill="#1565c0" stroke="none" pointerEvents="none">{sign > 0 ? '+' : '−'}</text>
+                      <title>{key === 'open' ? (p.lang === 'fr' ? 'Régler l’ouverture du limiteur de débit' : 'Adjust the flow limiter opening') : (p.lang === 'fr' ? 'Régler le tarage (bar)' : 'Adjust the setting (bar)')}</title>
+                    </g>
+                  )
+                  return (
+                    <g>
+                      {btn(-22, -1)}
+                      <text x={cx} y={cy - 0.5} textAnchor="middle" fontSize={8} fontWeight={700} fill="#0d47a1" stroke="#fff" strokeWidth={2.2} paintOrder="stroke" pointerEvents="none">{val} {isThr ? '%' : 'bar'}</text>
+                      {btn(22, 1)}
+                    </g>
+                  )
+                })()}
                 {p.sim?.tripped.has(s.id) && <text x={b.x2 + 3} y={b.y1 + 9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{kindOf(def) === 'fuse' ? p.lang === 'fr' ? 'FONDU' : 'BLOWN' : p.lang === 'fr' ? 'DÉCLENCHÉ' : 'TRIPPED'}</text>}
                 {p.sim && model === undefined && def.fluid?.k === 'valve' && !isDynamic(def) && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={p.sim.valveA[s.id] ? '#35c759' : '#fff'} stroke={p.sim.valveA[s.id] ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
@@ -899,7 +933,7 @@ export default function Canvas(p: Props) {
                 {closedState !== undefined && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={closedState ? '#35c759' : '#fff'} stroke={closedState ? '#1f8f3a' : '#888'} strokeWidth={0.8} />
                 )}
-                <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={bladeVars(s.id, model, p.sim)}>
+                <g transform={`translate(${s.x} ${s.y}) rotate(${s.rot} ${cx} ${cy})`} style={{ ...(bladeVars(s.id, model, p.sim) ?? {}), ...(p.sim && (def.fluid?.k === 'fthrottle') ? ({ '--nd': (1 - (p.sim.needle?.[s.id] ?? 0)) * 32 + 'deg' } as React.CSSProperties) : {}) }}>
                   {isDynamic(def) ? <FluidShape s={s} def={def} sim={p.sim ?? null} detectors={s.label ? p.detectors?.[s.label.replace(/\s+/g, '').toUpperCase()]?.map((d) => ({ label: d.label, at: d.at, on: !!p.sim?.closed[d.id] })) : undefined} /> : <g dangerouslySetInnerHTML={{ __html: def.svg.replace(/var\(--bg\)/g, '#fff') }} />}
                   {model?.k === 'plc' && p.sim && (() => {
                     const st = p.sim.plc[s.id]
@@ -935,6 +969,34 @@ export default function Canvas(p: Props) {
                         <text x={def.w - 6} y={46} fontSize={6.5} textAnchor="end" stroke="none" fontWeight={700} fill={st ? '#1f8f3a' : '#999'}>{st ? 'RUN' : 'STOP'}</text>
                       </g>
                     )
+                  })()}
+                  {p.sim && def.fluid && def.domain === 'hydraulic' && (() => {
+                    const f = def.fluid
+                    const q = p.sim.oilFlow?.[s.id]
+                    const pair: [string, string] | null = f.k === 'fthrottle' ? [f.a, f.b] : f.k === 'check' ? [f.from, f.to] : f.k === 'relief' ? [f.p, f.t] : f.k === 'reducer' ? [f.p, f.a] : f.k === 'fflow' ? [f.a, f.b] : f.k === 'fpump' ? [f.in, f.out] : null
+                    const out: React.ReactNode[] = []
+                    if (pair && q !== undefined && Math.abs(q) > 0.15) {
+                      const A = def.ports.find((x) => x.id === pair[0]), B = def.ports.find((x) => x.id === pair[1])
+                      // limiteur de débit unidirectionnel : le retour libre passe par la dérivation du clapet, sous l'étrangleur
+                      const bypass = f.k === 'fthrottle' && f.oneWay && q < 0 && A && B
+                      const pts = bypass
+                        ? (() => { const cxm = (A!.x + B!.x) / 2, dxl = A!.x < B!.x ? 1 : -1; return `${cxm + 19 * dxl},${A!.y} ${cxm + 19 * dxl},${A!.y + 22} ${cxm - 19 * dxl},${A!.y + 22} ${cxm - 19 * dxl},${A!.y}` })()
+                        : A && B ? `${A.x},${A.y} ${B.x},${B.y}` : ''
+                      if (A && B) out.push(
+                        <polyline key="oil" points={pts} fill="none" stroke="#fff" strokeWidth={1.4} strokeLinecap="round" strokeDasharray="0.5 5" pointerEvents="none">
+                          <animate attributeName="stroke-dashoffset" from="0" to={bypass || q > 0 ? '-11' : '11'} dur={`${Math.max(0.25, Math.min(3, 14 / Math.abs(q)))}s`} repeatCount="indefinite" />
+                        </polyline>,
+                      )
+                    }
+                    if (f.k === 'fmotor') {
+                      const rpm = p.sim.motorRpm?.[s.id] ?? 0
+                      if (rpm > 0.5) {
+                        const vertical = def.ports.some((x) => x.dir === 'up' || x.dir === 'down')
+                        const mc = vertical ? { x: def.ports[0].x, y: def.h / 2 } : { x: def.w / 2, y: def.h / 2 }
+                        out.push(<Rotor key="rot" cx={mc.x} cy={mc.y} r={17} dir={(p.sim.fluidMotor[s.id] ?? 1) >= 0 ? 1 : -1} dur={Math.max(0.35, Math.min(6, 200 / rpm))} />)
+                      }
+                    }
+                    return out.length ? <g pointerEvents="none">{out}</g> : null
                   })()}
                   {model?.k === 'source' && isSourceBlock(def.id) && (
                     <g stroke="none" fill="currentColor" pointerEvents="none">
@@ -1091,6 +1153,10 @@ export default function Canvas(p: Props) {
               const [a, b] = probesOf(ins)
               touching = [!!pickAt(a, ctx).node, !!pickAt(b, ctx).node]
               value = p.sim ? readVoltage(ins, ctx, p.sim, simDoc, SYMBOL_MAP) : undefined
+            } else if (ins.kind === 'tacho') {
+              const r = p.sim ? readSpeed(ins, doc.symbols, SYMBOL_MAP, p.sim) : undefined
+              touching = [!!r?.found]
+              value = r ? r.rpm : undefined
             } else {
               const c = p.sim ? readCurrent(ins, ctx, p.sim) : undefined
               touching = [!!pickAt(jawPoint(ins), ctx, 9).wire]

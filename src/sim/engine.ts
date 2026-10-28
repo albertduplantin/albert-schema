@@ -80,6 +80,10 @@ export interface SimResult {
   /** hydraulique : mesures affichées sous les appareils (pression, débit, vitesse) et vitesse des moteurs (tr/min) */
   fluidInfo: Record<string, string>
   motorRpm: Record<string, number>
+  /** hydraulique : débit (L/min) dans chaque appareil et chaque conducteur, passage relatif des limiteurs de débit */
+  oilFlow: Record<string, number>
+  oilWire: Record<string, number>
+  needle: Record<string, number>
 }
 
 export const DEFAULT_DELAY_S = 3
@@ -836,5 +840,8 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     fluidMotor: fl.motor,
     fluidInfo: fl.info,
     motorRpm: fl.rpm,
+    oilFlow: fl.oil,
+    oilWire: fl.wireFlow,
+    needle: fl.needle,
   }
 }

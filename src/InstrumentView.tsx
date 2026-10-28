@@ -35,7 +35,7 @@ const compact = (n: number) => (n >= 1000 ? n / 1000 + 'k' : String(n))
 /** Voltmètre ou pince ampèremétrique, à aiguille ou numérique, avec ses pointes de touche (voltmètre) et son calibre. */
 export default function InstrumentView({ instr, value, touching, lang }: Props) {
   const { kind, style, range } = instr
-  const unit = kind === 'voltmeter' ? 'V' : 'A'
+  const unit = kind === 'voltmeter' ? 'V' : kind === 'clamp' ? 'A' : 'tr/min'
   const w = BODY[kind].w
   const h = BODY[kind].h
   const ranges = RANGES[kind] as readonly number[]
@@ -59,7 +59,7 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
         {value === null && <title>{lang === 'fr' ? 'Mesure indéterminée : les deux pointes touchent des circuits séparés (par exemple le primaire et le secondaire d’un transformateur, sans terre commune).' : 'Undetermined reading: the two probes touch separate circuits (for example the primary and secondary of a transformer, with no common earth).'}</title>}
         <text x={x + ww - 5} y={y + hh - 6} textAnchor="end" fontSize={fs} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{txt}</text>
         <text x={x + ww - 4} y={y + 8} textAnchor="end" fontSize={7} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{unit}</text>
-        <text x={x + 4} y={y + 8} fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill="#46503b" stroke="none">AC</text>
+        {kind !== 'tacho' && <text x={x + 4} y={y + 8} fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill="#46503b" stroke="none">AC</text>}
       </g>
     )
   }
@@ -89,7 +89,7 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
           const t = pt(f, R - 15)
           return <text key={f} x={t.x} y={t.y + 2} textAnchor="middle" fontSize={6.5} fill="#222" stroke="none">{compact(Math.round(range * f * 100) / 100)}</text>
         })}
-        <text x={cx} y={cy - R * 0.45} textAnchor="middle" fontSize={9} fontWeight={700} fill="#222" stroke="none">{unit}~</text>
+        <text x={cx} y={cy - R * 0.45} textAnchor="middle" fontSize={kind === 'tacho' ? 6.5 : 9} fontWeight={700} fill="#222" stroke="none">{kind === 'tacho' ? unit : unit + '~'}</text>
         <g transform={`rotate(${needleAngle} ${cx} ${cy})`}>
           <line x1={cx} y1={cy + 6} x2={cx} y2={cy - R + 4} stroke="#c0211b" strokeWidth={1.2} strokeLinecap="round" />
         </g>
@@ -152,6 +152,18 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
           <text x={s.x} y={s.y + 18} textAnchor="middle" fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill={style === 'needle' ? '#e5e9ec' : '#2b2208'} stroke="none">{i === 0 ? 'COM' : 'V'}</text>
         </g>
       ))}
+    </g>
+  ) : kind === 'tacho' ? (
+    <g>
+      {/* tête de mesure : un disque réfléchissant visé sur l'arbre du moteur */}
+      <circle cx={JAW.x} cy={JAW.y} r={20} fill="#26364a" stroke="#111" strokeWidth={1.6} />
+      <circle cx={JAW.x} cy={JAW.y} r={12} fill="#9fb4c8" stroke="#0e1620" strokeWidth={1} />
+      <path d={`M${JAW.x - 8} ${JAW.y}H${JAW.x + 8}M${JAW.x} ${JAW.y - 8}V${JAW.y + 8}`} stroke="#0e1620" strokeWidth={1} />
+      <rect x={14} y={60} width={62} height={h - 62} rx={11} fill="#1e88e5" stroke="#222" strokeWidth={1.4} />
+      {style === 'digital' ? lcd(17, 66, 56, 42) : dial(45, 100, 32, 20, 66, 50, 44)}
+      {controls}
+      <text x={w / 2} y={h - 6} textAnchor="middle" fontSize={5.2} fontFamily="'IBM Plex Mono', monospace" fill="#06233f" stroke="none">TACHY · ALBERT</text>
+      <circle cx={JAW.x} cy={JAW.y} r={26} fill={touching[0] ? '#2f9e4433' : 'none'} stroke={touching[0] ? '#2f9e44' : '#999'} strokeWidth={1.2} strokeDasharray={touching[0] ? undefined : '3 3'} />
     </g>
   ) : (
     <g>

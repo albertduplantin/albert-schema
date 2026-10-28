@@ -329,7 +329,7 @@ function inlineParts(def: SymbolDef, ports: PortInfo[]): R {
     const c: Pt = [(a.x + b.x) / 2, (a.y + b.y) / 2]
     // passage continu ; deux arcs qui l'étranglent ; flèche de réglage oblique
     let svg = line([a.x, a.y], [b.x, b.y]) + path(`M${f(c[0] - 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] - 5)} ${f(c[1] + 8)}M${f(c[0] + 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] + 5)} ${f(c[1] + 8)}`, 'fill="none"')
-    svg += line([c[0] - 10, c[1] + 11], [c[0] + 10, c[1] - 11]) + arrowHead([c[0] + 10, c[1] - 11], [c[0] - 10, c[1] + 11])
+    svg += `<g class="needle" style="transform-box:fill-box;transform-origin:50% 50%;transform:rotate(var(--nd,0deg));transition:transform .35s ease-out">` + line([c[0] - 10, c[1] + 11], [c[0] + 10, c[1] - 11]) + arrowHead([c[0] + 10, c[1] - 11], [c[0] - 10, c[1] + 11]) + '</g>'
     if (fl.comp) {
       // régulateur compensé : le cadre de la balance de pression et son triangle (côté amont) entourent l'étrangleur
       svg += rect(c[0] - 14, c[1] - 14, 28, 28, 'fill="none"') + path(`M${f(c[0] - 6)} ${f(c[1])}L${f(c[0] - 12)} ${f(c[1] - 3)}V${f(c[1] + 3)}Z`, 'fill="currentColor"')

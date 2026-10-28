@@ -3,7 +3,7 @@ import type { Domain, SymbolDef } from '../types'
 /** Corps commun : trait de passage, deux arcs qui étranglent le passage et flèche de réglage oblique. */
 const throttleBody = (y: number, x0 = 20, x1 = 40) =>
   `<path d="M${x0} ${y - 6}Q${(x0 + x1) / 2} ${y}  ${x1} ${y - 6}" fill="none"/><path d="M${x0} ${y + 6}Q${(x0 + x1) / 2} ${y} ${x1} ${y + 6}" fill="none"/>` +
-  `<path d="M${x0 + 2} ${y + 10}L${x1 - 2} ${y - 10}"/><path d="M${x1 - 2} ${y - 10}L${x1 - 7} ${y - 8.5}L${x1 - 4.5} ${y - 4.5}Z" fill="currentColor"/>`
+  `<g class="needle" style="transform-box:fill-box;transform-origin:50% 50%;transform:rotate(var(--nd,0deg));transition:transform .35s ease-out"><path d="M${x0 + 2} ${y + 10}L${x1 - 2} ${y - 10}"/><path d="M${x1 - 2} ${y - 10}L${x1 - 7} ${y - 8.5}L${x1 - 4.5} ${y - 4.5}Z" fill="currentColor"/></g>`
 
 const limiter = (domain: Domain, cat: string, group: SymbolDef['group']): SymbolDef => ({
   id: domain === 'hydraulic' ? 'flow-limiter-h' : 'flow-limiter-p', domain, prefix: 'LD',
