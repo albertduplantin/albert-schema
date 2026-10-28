@@ -22,5 +22,14 @@ console.log(weak.length ? `info : ${weak.length} composants avec explication gé
 if (process.argv[2] === '--list') console.log(weak.join('\n'))
 check('fiches : un contacteur explique la bobine et le repère', /repère|tag/i.test(explain(lib.symbols.find((s: any) => /01_coils\/bobine3$/.test(s.id)), 'fr').params.map((p: any) => p.name).join()), true)
 check('fiches : un distributeur électrique explique le repère 1YV14', explain(lib.symbols.find((s: any) => s.fluid?.k === 'valve' && s.fluid.a === 'elec'), 'fr').params.some((p: any) => /1YV14/.test(p.name)), true)
+// fiches des exemples intégrés : chaque exemple de la galerie a sa fiche complète, en français et en anglais
+{
+  const { BUILTIN_META } = await import('../src/galleryMeta.ts')
+  const { EXAMPLE_GUIDES } = await import('../src/exampleGuides.ts')
+  const bad = BUILTIN_META.flatMap((m: any) => (['fr', 'en'] as const).filter((l) => { const g = (EXAMPLE_GUIDES as any)[m.key]?.[l]; return !(g && g.purpose?.length > 40 && g.learn?.length >= 2 && g.simulate?.length >= 2) }).map((l) => m.key + ':' + l))
+  check('exemples : tous ont une fiche (à quoi ça sert, ce qu’on apprend, à simuler) en FR et EN', bad, [])
+  const unknown = Object.keys(EXAMPLE_GUIDES).filter((k) => !BUILTIN_META.some((m: any) => m.key === k))
+  check('exemples : aucune fiche orpheline', unknown, [])
+}
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests des fiches passent')
 process.exit(fails ? 1 : 0)

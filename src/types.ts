@@ -333,6 +333,8 @@ export interface Doc {
   page?: number
   /** échelle des repères et désignations des composants (1 = taille normale) */
   labelScale?: number
+  /** exemple intégré dont ce schéma est parti (clé de galleryMeta) : sa fiche reste consultable */
+  example?: string
   /** afficher le nom (type) de chaque composant sous son symbole */
   showNames?: boolean
   nameStyle?: NameStyle

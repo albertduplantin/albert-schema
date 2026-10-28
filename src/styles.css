@@ -747,3 +747,12 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 
 /* case « Ne plus afficher » de la fenêtre feuille vide : lisible sur le fond clair */
 .empty .chk { color: var(--ui-text); font-size: 12px; padding: 4px 0 10px; text-transform: none; letter-spacing: 0; }
+
+/* fiche d'un exemple : panneau repliable posé sur la feuille */
+.exguide { position: absolute; left: 14px; bottom: 54px; width: min(430px, calc(100% - 28px)); max-height: 60%; overflow: auto; z-index: 20; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-top: 5px solid var(--accent-olive); border-radius: 12px; padding: 14px 18px 12px; box-shadow: 0 10px 30px #0003; text-align: left; font-size: 13px; line-height: 1.45; }
+.exguide h3 { margin: 0 24px 6px 0; font-size: 15px; }
+.exguide h4 { margin: 10px 0 3px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ui-muted); }
+.exguide p, .exguide ul { margin: 0; }
+.exguide ul { padding-left: 18px; }
+.exguide li { margin: 2px 0; }
+.exguide-x { position: absolute; top: 8px; right: 8px; }

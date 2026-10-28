@@ -79,6 +79,7 @@ const GuidedList = lz(() => import('./GuidedPanel').then((m) => ({ default: m.Gu
 const GuidedPanel = lz(() => import('./GuidedPanel').then((m) => ({ default: m.GuidedPanel })))
 const PlcEditor = lz(() => import('./PlcEditor'))
 const Feedback = lz(() => import('./Feedback'))
+const ExampleGuide = lz(() => import('./ExampleGuide'))
 /** Les 130 Ko d'exercices guidés ne sont chargés que si on ouvre la liste, un exercice ou un lien d'exercice. */
 let guidedMod: typeof import('./guidedData') | null = null
 const loadGuided = () => import('./guidedData').then((m) => (guidedMod = m))
@@ -912,9 +913,11 @@ function Editor() {
     })
   }
 
-  const startTemplate = (fn: (b: Doc) => Doc) => {
-    commit((d) => fn(d))
+  const [showExample, setShowExample] = useState(false)
+  const startTemplate = (fn: (b: Doc) => Doc, key?: string) => {
+    commit((d) => ({ ...fn(d), ...(key ? { example: key } : {}) }))
     setSel([])
+    if (key) setShowExample(true) // la fiche s'ouvre d'elle-même ; le bouton ⓘ de la barre d'outils la rouvre
   }
 
   // bibliothèque étendue (collection QElectroTech) : chargée à la demande, affichée seulement si l'utilisateur l'a activée
@@ -1635,6 +1638,7 @@ function Editor() {
           <button aria-label={t('labelSize') + ' +'} disabled={(doc.labelScale ?? 1) >= 2.5} onClick={() => commit((d) => ({ ...d, labelScale: Math.min(2.5, Math.round(((d.labelScale ?? 1) + 0.25) * 100) / 100) }))}><span style={{ fontSize: 15 }}>A</span>+</button>
         </div>
 
+        {doc.example && <button className={showExample ? 'on' : ''} onClick={() => setShowExample((v) => !v)} title={t('exampleGuideHelp')}>ⓘ {t('exampleGuide')}</button>}
         <button onClick={() => setShowGuided(true)} title={t('guidedTitle')}>🎓 {t('exercises')}</button>
         <button className="editonly" onClick={() => setShowCheck(true)} title={t('checkTitle')}>{t('check')}{issueCount.e > 0 && <span className="pill err"> ⛔{issueCount.e}</span>}{issueCount.w > 0 && <span className="pill warn"> ⚠{issueCount.w}</span>}</button>
 
@@ -1752,6 +1756,7 @@ function Editor() {
             <button onClick={keepCopy}>{t('shareKeep')}</button>
           </div>
         )}
+        {showExample && doc.example && <ExampleGuide exKey={doc.example} title={t(doc.example as Key)} lang={lang} labels={{ what: t('exampleWhat'), learn: t('exampleLearn'), sim: t('exampleSim'), close: t('close') }} onClose={() => setShowExample(false)} />}
         {showMachine && <MachineView doc={doc} sim={sim} lang={lang} onClose={() => setShowMachine(false)} />}
         {sim && signalNames.length > 0 && (
           <Chrono rows={trace.current.rows} names={signalNames} now={chronoNow} lang={lang}
@@ -1768,7 +1773,7 @@ function Editor() {
                 <button key={ex.id} onClick={() => openRemote(ex)}>{ex.title[lang] || ex.title.fr}</button>
               ))}
               {GALLERY.filter((g) => !remoteEx.hidden.includes(g.key)).map((g) => (
-                <button key={g.key} onClick={() => startTemplate(g.fn)}>{t(g.key)}</button>
+                <button key={g.key} onClick={() => startTemplate(g.fn, g.key)}>{t(g.key)}</button>
               ))}
             </div>
           </div>
@@ -2115,7 +2120,7 @@ function Editor() {
                   <strong>{t(g.key)}</strong>
                   <span className="lvl">{'★'.repeat(g.level)}{'☆'.repeat(3 - g.level)} {t(('level' + g.level) as Key)}</span>
                   <p className="muted">{g.about[lang]}</p>
-                  <button onClick={() => { if (!doc.symbols.length || window.confirm(tr(lang, 'galleryReplace'))) { startTemplate(g.fn); setShowGallery(false) } }}>{t('galleryLoad')}</button>
+                  <button onClick={() => { if (!doc.symbols.length || window.confirm(tr(lang, 'galleryReplace'))) { startTemplate(g.fn, g.key); setShowGallery(false) } }}>{t('galleryLoad')}</button>
                 </div>
               ))}
             </div>
