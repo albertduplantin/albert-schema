@@ -79,6 +79,8 @@ export interface SimResult {
   fluidMotor: Record<string, -1 | 0 | 1>
   /** hydraulique : mesures affichées sous les appareils (pression, débit, vitesse) et vitesse des moteurs (tr/min) */
   fluidInfo: Record<string, string>
+  /** pression (bar) à chaque orifice fluide `symbole:orifice` */
+  fluidBars: Record<string, number>
   motorRpm: Record<string, number>
   /** hydraulique : débit (L/min) dans chaque appareil et chaque conducteur, passage relatif des limiteurs de débit */
   oilFlow: Record<string, number>
@@ -839,6 +841,7 @@ function simulateOnce(docRaw: Doc, defsRaw: Record<string, SymbolDef>, previous:
     plc: plcLive,
     fluidMotor: fl.motor,
     fluidInfo: fl.info,
+    fluidBars: fl.bars,
     motorRpm: fl.rpm,
     oilFlow: fl.oil,
     oilWire: fl.wireFlow,

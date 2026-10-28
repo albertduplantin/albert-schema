@@ -237,14 +237,14 @@ export type Paper = 'A4' | 'A3' | 'A2' | 'A1'
 /** Appareil de mesure posé sur la feuille : voltmètre (deux pointes de touche) ou pince ampèremétrique. */
 export interface Instrument {
   id: string
-  kind: 'voltmeter' | 'clamp' | 'tacho'
+  kind: 'voltmeter' | 'clamp' | 'tacho' | 'pressure'
   /** affichage : aiguille ou numérique */
   style: 'needle' | 'digital'
   x: number
   y: number
   /** calibre : volts (voltmètre) ou ampères (pince) */
   range: number
-  /** voltmètre : position des deux pointes de touche (COM, V) ; par défaut sous le boîtier */
+  /** voltmètre : position des deux pointes de touche (COM, V) ; par défaut sous le boîtier. Manomètre : seule la première pointe sert */
   probes?: [{ x: number; y: number }, { x: number; y: number }]
 }
 

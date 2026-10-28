@@ -255,6 +255,25 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   near('TP9 : vitesse du moteur ≈ 300 tr/min', t.r.motorRpm[t.g.id('M2')], 300, 30)
 }
 
+// ── manomètre dans les instruments de mesure : la pointe posée sur un orifice lit la pression calculée
+{
+  const d = T.hydraulicTP8(base)
+  const g = rig(d)
+  g.run([], 0); const r = g.run([], 1500)
+  const { defaultInstrument, readPressure } = await import(ROOT + '/src/instruments.ts')
+  const { portPos } = await import(ROOT + '/src/geometry.ts')
+  const pump = d.symbols.find((s: any) => s.label === 'GMP')
+  const at = portPos(pump, 'o')
+  const ins = defaultInstrument('pressure', 'needle', 0, 0)
+  ins.probes = [at, { x: 0, y: 0 }]
+  const ctx = { symbols: d.symbols, defs: SYMBOL_MAP, routes: {}, wires: d.wires }
+  const rd = readPressure(ins, ctx, r)
+  check('manomètre : la pointe sur le refoulement de la pompe touche un orifice', rd.found, true)
+  near('manomètre : il lit la pression de régulation de la pompe (≈ 100 bar)', rd.bar, 100, 6)
+  ins.probes = [{ x: 5000, y: 5000 }, { x: 0, y: 0 }]
+  check('manomètre : pointe en l’air : aucune lecture', readPressure(ins, ctx, r).found, false)
+}
+
 // grille : chaque orifice d'un appareil hydraulique tombe sur un multiple de 10 (sinon les fils sont de travers)
 {
   const off = lib.symbols.filter((s: any) => s.domain === 'hydraulic').flatMap((s: any) => s.ports.filter((p: any) => p.x % 10 || p.y % 10).map((p: any) => `${s.id}:${p.id}(${p.x},${p.y})`))

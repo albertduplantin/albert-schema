@@ -9,6 +9,7 @@ export const RANGES = {
   voltmeter: [6, 15, 30, 60, 150, 300, 600, 1000],
   clamp: [1, 10, 100, 400],
   tacho: [100, 300, 1000, 3000],
+  pressure: [10, 25, 60, 160, 400],
 } as const
 
 /** Encombrement du boîtier sur la feuille (unités du dessin). */
@@ -16,17 +17,20 @@ export const BODY = {
   voltmeter: { w: 110, h: 172 },
   clamp: { w: 90, h: 206 },
   tacho: { w: 90, h: 206 },
+  pressure: { w: 110, h: 172 },
 } as const
 
 /** Prises du voltmètre (COM noire, V rouge) et centre de la mâchoire de la pince, en coordonnées du boîtier. */
 export const SOCKETS: [P, P] = [{ x: 32, y: 158 }, { x: 78, y: 158 }]
+/** Prise unique du manomètre (raccord du flexible), en coordonnées du boîtier. */
+export const PRESS_SOCKET: P = { x: 55, y: 158 }
 export const JAW: P = { x: 45, y: 34 }
 
 export function defaultInstrument(kind: Instrument['kind'], style: Instrument['style'], x: number, y: number): Instrument {
-  const range = kind === 'voltmeter' ? 600 : kind === 'tacho' ? 1000 : 10
+  const range = kind === 'voltmeter' ? 600 : kind === 'tacho' ? 1000 : kind === 'pressure' ? 160 : 10
   return {
     id: Math.random().toString(36).slice(2, 9), kind, style, x, y, range,
-    ...(kind === 'voltmeter' ? { probes: [{ x: x + 10, y: y + 245 }, { x: x + 100, y: y + 245 }] as [P, P] } : {}),
+    ...(kind === 'voltmeter' || kind === 'pressure' ? { probes: [{ x: x + 10, y: y + 245 }, { x: x + 100, y: y + 245 }] as [P, P] } : {}),
   }
 }
 
@@ -126,6 +130,17 @@ export function formatReading(value: number, range: number, lang: 'fr' | 'en'): 
   const dec = range < 10 ? 3 : range < 100 ? 2 : range < 1000 ? 1 : 0
   const s = Math.abs(value).toFixed(dec)
   return lang === 'fr' ? s.replace('.', ',') : s
+}
+
+/**
+ * Pression (bar) lue par le manomètre : sa pointe doit toucher un orifice ou un conducteur d'un circuit pneumatique ou hydraulique.
+ * Pointe en l'air ou sur un circuit électrique : pas de lecture (found = false).
+ */
+export function readPressure(instr: Instrument, ctx: PickContext, sim: SimResult): { bar: number; found: boolean } {
+  const pk = pickAt(probesOf(instr)[0], ctx)
+  if (!pk.node) return { bar: 0, found: false }
+  const bar = sim.fluidBars?.[pk.node]
+  return bar === undefined ? { bar: 0, found: false } : { bar, found: true }
 }
 
 /**

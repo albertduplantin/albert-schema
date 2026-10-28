@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Instrument, Lang } from './types'
-import { BODY, JAW, RANGES, SOCKETS, formatReading, probesOf } from './instruments'
+import { BODY, JAW, PRESS_SOCKET, RANGES, SOCKETS, formatReading, probesOf } from './instruments'
 
 interface Props {
   instr: Instrument
@@ -35,7 +35,8 @@ const compact = (n: number) => (n >= 1000 ? n / 1000 + 'k' : String(n))
 /** Voltmètre ou pince ampèremétrique, à aiguille ou numérique, avec ses pointes de touche (voltmètre) et son calibre. */
 export default function InstrumentView({ instr, value, touching, lang }: Props) {
   const { kind, style, range } = instr
-  const unit = kind === 'voltmeter' ? 'V' : kind === 'clamp' ? 'A' : 'tr/min'
+  const unit = kind === 'voltmeter' ? 'V' : kind === 'clamp' ? 'A' : kind === 'pressure' ? 'bar' : 'tr/min'
+  const volt = kind === 'voltmeter' || kind === 'pressure' // même boîtier que le voltmètre
   const w = BODY[kind].w
   const h = BODY[kind].h
   const ranges = RANGES[kind] as readonly number[]
@@ -43,11 +44,11 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
   const frac = value == null ? 0 : Math.min(1.08, Math.abs(value) / range)
   const smooth = useSmooth(frac)
   const over = value != null && Math.abs(value) > range * 1.0001
-  const knobY = kind === 'voltmeter' ? 122 : 150
-  const knobX = kind === 'voltmeter' ? 55 : 45
-  const knobR = kind === 'voltmeter' ? 19 : 13
+  const knobY = volt ? 122 : 150
+  const knobX = volt ? 55 : 45
+  const knobR = volt ? 19 : 13
   const knobAngle = -120 + (ranges.length > 1 ? (idx * 240) / (ranges.length - 1) : 0)
-  const btnDx = kind === 'voltmeter' ? 41 : 21
+  const btnDx = volt ? 41 : 21
 
   const lcd = (x: number, y: number, ww: number, hh: number) => {
     const txt = value === undefined || value === null ? '----' : over ? 'OL' : (value < 0 ? '-' : '') + formatReading(value, range, lang)
@@ -59,7 +60,7 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
         {value === null && <title>{lang === 'fr' ? 'Mesure indéterminée : les deux pointes touchent des circuits séparés (par exemple le primaire et le secondaire d’un transformateur, sans terre commune).' : 'Undetermined reading: the two probes touch separate circuits (for example the primary and secondary of a transformer, with no common earth).'}</title>}
         <text x={x + ww - 5} y={y + hh - 6} textAnchor="end" fontSize={fs} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{txt}</text>
         <text x={x + ww - 4} y={y + 8} textAnchor="end" fontSize={7} fontFamily="'IBM Plex Mono', monospace" fontWeight={600} fill="#1d2418" stroke="none">{unit}</text>
-        {kind !== 'tacho' && <text x={x + 4} y={y + 8} fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill="#46503b" stroke="none">AC</text>}
+        {(kind === 'voltmeter' || kind === 'clamp') && <text x={x + 4} y={y + 8} fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill="#46503b" stroke="none">AC</text>}
       </g>
     )
   }
@@ -89,7 +90,7 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
           const t = pt(f, R - 15)
           return <text key={f} x={t.x} y={t.y + 2} textAnchor="middle" fontSize={6.5} fill="#222" stroke="none">{compact(Math.round(range * f * 100) / 100)}</text>
         })}
-        <text x={cx} y={cy - R * 0.45} textAnchor="middle" fontSize={kind === 'tacho' ? 6.5 : 9} fontWeight={700} fill="#222" stroke="none">{kind === 'tacho' ? unit : unit + '~'}</text>
+        <text x={cx} y={cy - R * 0.45} textAnchor="middle" fontSize={kind === 'tacho' || kind === 'pressure' ? 6.5 : 9} fontWeight={700} fill="#222" stroke="none">{kind === 'tacho' || kind === 'pressure' ? unit : unit + '~'}</text>
         <g transform={`rotate(${needleAngle} ${cx} ${cy})`}>
           <line x1={cx} y1={cy + 6} x2={cx} y2={cy - R + 4} stroke="#c0211b" strokeWidth={1.2} strokeLinecap="round" />
         </g>
@@ -137,19 +138,19 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
     </g>
   )
 
-  const body = kind === 'voltmeter' ? (
+  const body = volt ? (
     <g>
-      <rect x={0} y={0} width={w} height={h} rx={11} fill={style === 'needle' ? '#4a5258' : '#f1c232'} stroke="#222" strokeWidth={1.4} />
+      <rect x={0} y={0} width={w} height={h} rx={11} fill={kind === 'pressure' ? (style === 'needle' ? '#2f6b57' : '#7fb069') : style === 'needle' ? '#4a5258' : '#f1c232'} stroke="#222" strokeWidth={1.4} />
       <rect x={4} y={4} width={w - 8} height={h - 8} rx={8} fill="none" stroke="#00000030" strokeWidth={1} />
       {style === 'digital' ? lcd(12, 22, w - 24, 52) : dial(55, 84, 56, 10, 20, 90, 64 + 4)}
       {controls}
-      <text x={w / 2} y={h - 4} textAnchor="middle" fontSize={5.5} fontFamily="'IBM Plex Mono', monospace" fill={style === 'needle' ? '#cfd6db' : '#4d3a05'} stroke="none">ALBERT·MESURE</text>
+      <text x={w / 2} y={h - 4} textAnchor="middle" fontSize={5.5} fontFamily="'IBM Plex Mono', monospace" fill={style === 'needle' ? '#cfd6db' : '#4d3a05'} stroke="none">{kind === 'pressure' ? 'MANO·ALBERT' : 'ALBERT·MESURE'}</text>
       {/* prises */}
-      {SOCKETS.map((s, i) => (
+      {(kind === 'pressure' ? [PRESS_SOCKET] : SOCKETS).map((s, i) => (
         <g key={i}>
           <circle cx={s.x} cy={s.y} r={8} fill="#111" stroke="#888" strokeWidth={0.8} />
           <circle cx={s.x} cy={s.y} r={3.4} fill={i === 0 ? '#222' : '#d12a22'} stroke="#bbb" strokeWidth={0.6} />
-          <text x={s.x} y={s.y + 18} textAnchor="middle" fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill={style === 'needle' ? '#e5e9ec' : '#2b2208'} stroke="none">{i === 0 ? 'COM' : 'V'}</text>
+          <text x={s.x} y={s.y + 18} textAnchor="middle" fontSize={6} fontFamily="'IBM Plex Mono', monospace" fill={style === 'needle' ? '#e5e9ec' : '#2b2208'} stroke="none">{kind === 'pressure' ? 'P' : i === 0 ? 'COM' : 'V'}</text>
         </g>
       ))}
     </g>
@@ -178,14 +179,14 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
     </g>
   )
 
-  const probes = kind === 'voltmeter' ? probesOf(instr) : null
+  const probes = kind === 'voltmeter' ? probesOf(instr) : kind === 'pressure' ? [probesOf(instr)[0]] : null
   return (
     <g>
-      {probes && SOCKETS.map((s, i) => {
+      {probes && (kind === 'pressure' ? [PRESS_SOCKET] : SOCKETS).map((s, i) => {
         const t = probes[i]
         const sx = instr.x + s.x
         const sy = instr.y + s.y
-        return <path key={'l' + i} d={`M${sx} ${sy + 8} C${sx} ${sy + 70} ${t.x} ${t.y - 120} ${t.x} ${t.y - 42}`} fill="none" stroke={i === 0 ? '#111' : '#d12a22'} strokeWidth={2.4} strokeLinecap="round" />
+        return <path key={'l' + i} d={`M${sx} ${sy + 8} C${sx} ${sy + 70} ${t.x} ${t.y - 120} ${t.x} ${t.y - 42}`} fill="none" stroke={kind === 'pressure' ? '#1a1a1a' : i === 0 ? '#111' : '#d12a22'} strokeWidth={kind === 'pressure' ? 3.2 : 2.4} strokeLinecap="round" />
       })}
       <g transform={`translate(${instr.x} ${instr.y})`}>
         {body}
@@ -197,7 +198,7 @@ export default function InstrumentView({ instr, value, touching, lang }: Props) 
         <g key={'p' + i} transform={`translate(${t.x} ${t.y})`}>
           <line x1={0} y1={0} x2={0} y2={-10} stroke="#b9b9b9" strokeWidth={1.6} strokeLinecap="round" />
           <rect x={-3.6} y={-14} width={7.2} height={5} rx={1.5} fill="#ddd" stroke="#555" strokeWidth={0.5} />
-          <rect x={-4} y={-44} width={8} height={31} rx={3.5} fill={i === 0 ? '#1d1d1d' : '#d12a22'} stroke="#222" strokeWidth={0.8} />
+          <rect x={-4} y={-44} width={8} height={31} rx={3.5} fill={kind === 'pressure' ? '#2f6b57' : i === 0 ? '#1d1d1d' : '#d12a22'} stroke="#222" strokeWidth={0.8} />
           <circle cx={0} cy={0} r={touching[i] ? 4 : 2.4} fill={touching[i] ? '#2f9e44' : '#999'} stroke="#fff" strokeWidth={0.8} />
           {/* zone de saisie large : toute la poignée, la pointe et leurs abords */}
           <rect data-probe={`${instr.id}|${i}`} x={-12} y={-56} width={24} height={68} rx={8} fill="transparent" stroke="none" style={{ cursor: 'grab' }} pointerEvents="all" />

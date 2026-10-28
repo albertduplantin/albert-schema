@@ -7,7 +7,7 @@ import { junctionPoints, routeAll } from './routing'
 import { autoConnect } from './splice'
 import { fontCss } from './fonts'
 import InstrumentView from './InstrumentView'
-import { jawPoint, pickAt, probesOf, readCurrent, readSpeed, readVoltage, stepRange, type PickContext } from './instruments'
+import { jawPoint, pickAt, probesOf, readCurrent, readPressure, readSpeed, readVoltage, stepRange, type PickContext } from './instruments'
 import { ShapeView, arcPath, dashArray, insideOf, polyPoints, resizeRotated, shapeBox, shapeHandles, snapTargets, snapTo, straighten } from './shapes'
 import type { Doc, Instrument, Lang, PlacedSymbol, PortRef, Shape } from './types'
 import { SYMBOL_MAP } from './symbols'
@@ -1211,6 +1211,9 @@ export default function Canvas(p: Props) {
               const [a, b] = probesOf(ins)
               touching = [!!pickAt(a, ctx).node, !!pickAt(b, ctx).node]
               value = p.sim ? readVoltage(ins, ctx, p.sim, simDoc, SYMBOL_MAP) : undefined
+            } else if (ins.kind === 'pressure') {
+              touching = [!!pickAt(probesOf(ins)[0], ctx).node]
+              value = p.sim ? readPressure(ins, ctx, p.sim).bar : undefined
             } else if (ins.kind === 'tacho') {
               const r = p.sim ? readSpeed(ins, doc.symbols, SYMBOL_MAP, p.sim) : undefined
               touching = [!!r?.found]

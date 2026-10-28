@@ -63,6 +63,8 @@ export interface FluidOut {
   oil: Record<string, number>
   wireFlow: Record<string, number>
   needle: Record<string, number>
+  /** pression (bar) à chaque orifice `symbole:orifice` : calculée en hydraulique, 6 bar sous pression et 0 à l'échappement en pneumatique */
+  bars: Record<string, number>
 }
 
 /** Position d'un vérin (0 = rentré, 1 = sorti) à l'instant `now`. */
@@ -309,5 +311,14 @@ export function solveFluid(x: FluidIn): FluidOut {
       if (f?.k === 'fmotor') motor[s.id] = (hyd.rpm[s.id] > 0.5 ? (hyd.dir[s.id] * (f.rev ? -1 : 1)) : 0) as -1 | 0 | 1
     }
   }
-  return { pot, valveA, valveB, pswitch, motor, cylDir, cylSpeed, info, rpm, oil, wireFlow, needle }
+  const bars: Record<string, number> = {}
+  for (const s of doc.symbols) {
+    const d = defs[s.defId]
+    if (!d?.fluid) continue
+    for (const p of d.ports) {
+      if (d.domain === 'hydraulic' && hyd) { const b = hyd.bar(s.id, p.id); if (b !== undefined) bars[key(s.id, p.id)] = Math.round(b * 10) / 10 }
+      else if (d.domain === 'pneumatic') { const pr = pot(s.id, p.id); if (pr === 'P') bars[key(s.id, p.id)] = 6; else if (pr === 'R') bars[key(s.id, p.id)] = 0 }
+    }
+  }
+  return { pot, valveA, valveB, pswitch, motor, cylDir, cylSpeed, info, rpm, oil, wireFlow, needle, bars }
 }

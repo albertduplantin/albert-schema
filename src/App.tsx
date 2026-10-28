@@ -1622,6 +1622,8 @@ function Editor() {
             <button onClick={() => addInstrument('voltmeter', 'digital')}>{t('mVoltDigital')}</button>
             <button onClick={() => addInstrument('clamp', 'needle')}>{t('mClampNeedle')}</button>
             <button onClick={() => addInstrument('clamp', 'digital')}>{t('mClampDigital')}</button>
+            <button onClick={() => addInstrument('pressure', 'needle')}>{t('mPressNeedle')}</button>
+            <button onClick={() => addInstrument('pressure', 'digital')}>{t('mPressDigital')}</button>
             <button onClick={() => addInstrument('tacho', 'needle')}>{t('mTachoNeedle')}</button>
             <button onClick={() => addInstrument('tacho', 'digital')}>{t('mTachoDigital')}</button>
             <p className="muted small menu-note">{t('measureHelp')}</p>
