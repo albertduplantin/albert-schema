@@ -25,6 +25,9 @@ import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from 
 import { describeInfo, transformerInfo, transformerTopology, termsWithTopology } from './transformer'
 import { fieldLabel, fieldsFor, kindOf, motorCurrent } from './ratings'
 import { FONTS } from './fonts'
+import { CloudError, createSave, fetchSave, getVault, hasContent, normalizeCode, setVault, updateSave } from './cloud'
+import type { SyncState } from './CloudDialog'
+import { cloudErrorText } from './cloudText'
 import { settingsAdvice, wireAdvice as computeWireAdvice, type Suggestion } from './settings'
 import { DEFAULT_DELAY_S, isOperableDef, simulate, type SimInputs, type SimMemory } from './sim/engine'
 import Chrono, { type TraceRow } from './Chrono'
@@ -80,6 +83,7 @@ const GuidedPanel = lz(() => import('./GuidedPanel').then((m) => ({ default: m.G
 const PlcEditor = lz(() => import('./PlcEditor'))
 const Feedback = lz(() => import('./Feedback'))
 const ExampleGuide = lz(() => import('./ExampleGuide'))
+const CloudDialog = lz(() => import('./CloudDialog'))
 /** Les 130 Ko d'exercices guidés ne sont chargés que si on ouvre la liste, un exercice ou un lien d'exercice. */
 let guidedMod: typeof import('./guidedData') | null = null
 const loadGuided = () => import('./guidedData').then((m) => (guidedMod = m))
@@ -907,16 +911,53 @@ function Editor() {
         await ensureDefs(d)
         commit(() => sanitize(d))
         setSel([])
+        detachVault()
       } catch {
         say(t('toastInvalid'))
       }
     })
   }
 
+  // sauvegarde en ligne par code de reprise : copie mise à jour toute seule dès que le code existe
+  const [vault, setVaultState] = useState<string | null>(getVault)
+  const [sync, setSync] = useState<SyncState>('idle')
+  const [syncAt, setSyncAt] = useState<number | null>(null)
+  const [showCloud, setShowCloud] = useState(false)
+  const [nudgeOff, setNudgeOff] = useState(() => { try { return localStorage.getItem('albertschema.cloudNudge') === '1' } catch { return true } })
+  const changeVault = (c: string | null) => { setVault(c); setVaultState(c) }
+  /** Un autre schéma remplace celui qui était sauvegardé : on arrête la mise à jour automatique pour ne pas écraser la copie en ligne. */
+  const detachVault = () => { if (getVault()) { changeVault(null); setSync('idle'); say(lang === 'fr' ? 'Sauvegarde en ligne arrêtée : ce nouveau schéma a besoin de son propre code (Fichier → Sauvegarde en ligne).' : 'Online backup stopped: this new diagram needs its own code (File → Online backup).') } }
+  const pushSave = async (code: string, d: Doc) => {
+    setSync('saving')
+    try { await updateSave(code, d); setSync('ok'); setSyncAt(Date.now()) } catch (e) {
+      if (e instanceof CloudError && e.status === 404) { changeVault(null); setSync('idle') } // la copie a expiré : on repart de zéro
+      else setSync('error')
+    }
+  }
+  useEffect(() => {
+    if (!vault || !hasContent(doc)) return
+    const id = window.setTimeout(() => { pushSave(vault, docRef.current) }, 4000)
+    return () => window.clearTimeout(id)
+  }, [doc, vault]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cloudCreate = async (): Promise<string | null> => {
+    try { const code = await createSave(docRef.current); changeVault(code); setSync('ok'); setSyncAt(Date.now()); return null } catch (e) { return cloudErrorText(lang, e instanceof CloudError ? e.status : 0) }
+  }
+  const cloudRestore = async (raw: string, prev: boolean): Promise<string | null> => {
+    if (hasContent(docRef.current) && !window.confirm(lang === 'fr' ? 'Remplacer le schéma affiché par la copie en ligne ?' : 'Replace the displayed diagram with the online copy?')) return null
+    try {
+      const d = await fetchSave(raw, prev)
+      await ensureDefs(d)
+      commit(() => sanitize(d)); setSel([])
+      changeVault(normalizeCode(raw)); setSync('ok'); setSyncAt(Date.now()); setShowCloud(false)
+      return null
+    } catch (e) { return cloudErrorText(lang, e instanceof CloudError ? e.status : 0) }
+  }
+  const showNudge = !vault && !nudgeOff && doc.symbols.length >= 6
   const [showExample, setShowExample] = useState(false)
   const startTemplate = (fn: (b: Doc) => Doc, key?: string) => {
     commit((d) => ({ ...fn(d), ...(key ? { example: key } : {}) }))
     setSel([])
+    detachVault()
     if (key) setShowExample(true) // la fiche s'ouvre d'elle-même ; le bouton ⓘ de la barre d'outils la rouvre
   }
 
@@ -1503,9 +1544,10 @@ function Editor() {
         <details className="menu" ref={exportRef}>
           <summary>{t('file')} ▾</summary>
           <div className="menu-list" onClick={closeMenu}>
-            <button onClick={() => { if (!doc.symbols.length || confirm(t('newConfirm'))) { commit(() => emptyDoc()); setSel([]) } }}>{t('new')}</button>
+            <button onClick={() => { if (!doc.symbols.length || confirm(t('newConfirm'))) { commit(() => emptyDoc()); setSel([]); detachVault() } }}>{t('new')}</button>
             <button onClick={() => fileRef.current?.click()}>{t('open')}</button>
             <button onClick={() => { saveJson(doc); say(t('toastSaved')) }}><span>{t('save')}</span><kbd>Ctrl+S</kbd></button>
+            <button onClick={() => setShowCloud(true)}>☁ {lang === 'fr' ? 'Sauvegarde en ligne…' : 'Online backup…'}</button>
             {canAutoFile && (autoFile
               ? <button onClick={() => { fileHandle.current = null; setAutoFile(null) }}>{lang === 'fr' ? 'Arrêter l’enregistrement auto' : 'Stop autosave'} ({autoFile})</button>
               : <button onClick={chooseAutoFile}>{lang === 'fr' ? 'Enregistrement auto dans un fichier…' : 'Autosave to a file…'}</button>)}
@@ -1659,6 +1701,7 @@ function Editor() {
         </div>
 
         <span className="grow" />
+        {vault && <button className={'cloudbtn ' + sync} onClick={() => setShowCloud(true)} title={lang === 'fr' ? 'Sauvegarde en ligne' : 'Online backup'}>☁ {sync === 'error' ? '!' : sync === 'saving' ? '…' : '✓'}</button>}
         <span className="saved" aria-live="polite" title={t('saved')}>✓</span>
         <button className="icon feedback-btn" onClick={() => setShowFeedback(true)} title={`${t('feedback')} — ${t('feedbackHelp')}`} aria-label={t('feedback')}>💬</button>
         <button className="icon" onClick={() => setShowKeys(true)} title={`${t('shortcuts')} (?)`} aria-label={t('shortcuts')}>?</button>
@@ -1757,6 +1800,17 @@ function Editor() {
           </div>
         )}
         {showExample && doc.example && <ExampleGuide exKey={doc.example} title={t(doc.example as Key)} lang={lang} labels={{ what: t('exampleWhat'), learn: t('exampleLearn'), sim: t('exampleSim'), close: t('close') }} onClose={() => setShowExample(false)} />}
+        {showNudge && (
+          <div className="cloud-nudge" role="status">
+            <p>{lang === 'fr' ? 'Ce schéma n’existe que dans ce navigateur. Gardez-en une copie en ligne, sans compte, pour ne pas le perdre.' : 'This diagram only exists in this browser. Keep an online copy, no account needed, so you do not lose it.'}</p>
+            <div className="row">
+              <button onClick={() => setShowCloud(true)}>{lang === 'fr' ? 'Sauvegarder en ligne' : 'Back up online'}</button>
+              <button onClick={() => { setNudgeOff(true); try { localStorage.setItem('albertschema.cloudNudge', '1') } catch { /* ignoré */ } }}>{lang === 'fr' ? 'Plus tard' : 'Later'}</button>
+            </div>
+          </div>
+        )}
+        {showCloud && <CloudDialog lang={lang} code={vault} sync={sync} at={syncAt} hasContent={hasContent(doc)} onCreate={cloudCreate} onSaveNow={() => { if (vault) pushSave(vault, docRef.current) }}
+          onForget={() => { changeVault(null); setSync('idle') }} onRestore={cloudRestore} onClose={() => setShowCloud(false)} />}
         {showMachine && <MachineView doc={doc} sim={sim} lang={lang} onClose={() => setShowMachine(false)} />}
         {sim && signalNames.length > 0 && (
           <Chrono rows={trace.current.rows} names={signalNames} now={chronoNow} lang={lang}

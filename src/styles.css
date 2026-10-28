@@ -756,3 +756,17 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .exguide ul { padding-left: 18px; }
 .exguide li { margin: 2px 0; }
 .exguide-x { position: absolute; top: 8px; right: 8px; }
+
+/* sauvegarde en ligne */
+.cloud { max-width: 460px; }
+.cloud h4 { margin: 14px 0 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ui-muted); }
+.cloud-code { font: 600 26px/1.2 'IBM Plex Mono', monospace; letter-spacing: .12em; text-align: center; padding: 10px 6px; background: var(--ui-bg); border: 1px dashed var(--ui-line); border-radius: 8px; user-select: all; }
+.cloud-input { flex: 1; font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: .08em; }
+.cloud-state.ok { color: #2b8a3e; } .cloud-state.error { color: #c0211b; } .cloud-state.saving { color: var(--ui-muted); }
+.cloud-msg { color: #c0211b; font-weight: 600; }
+.linkish { background: none; border: 0; padding: 0; text-decoration: underline; color: var(--ui-muted); cursor: pointer; font-size: inherit; }
+.cloudbtn { font-size: 12px; padding: 2px 8px; }
+.cloudbtn.error { color: #c0211b; }
+.cloud-nudge { position: absolute; right: 14px; bottom: 54px; z-index: 19; max-width: 340px; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-left: 5px solid var(--accent-olive); border-radius: 10px; padding: 10px 14px; box-shadow: 0 6px 20px #0003; font-size: 13px; }
+.cloud-nudge p { margin: 0 0 8px; }
+.cloud-nudge .row { display: flex; gap: 8px; }

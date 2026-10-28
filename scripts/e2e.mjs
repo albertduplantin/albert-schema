@@ -263,6 +263,11 @@ try {
   check('circulation d’huile : des traits animés sur les conducteurs', await p4.evaluate(() => document.querySelectorAll('svg.canvas polyline[stroke-dasharray="0.5 6"]').length > 2))
   await p4.screenshot({ path: process.env.TEMP + '/hyd.png' })
   await p4.mouse.up()
+  // sauvegarde en ligne : la fenêtre s'ouvre depuis le menu Fichier
+  await p4.evaluate(() => [...document.querySelectorAll('.menu-list button')].find((x) => /Sauvegarde en ligne/.test(x.textContent))?.click())
+  await sleep(500)
+  check('sauvegarde en ligne : la fenêtre propose de créer une sauvegarde et de reprendre avec un code', await p4.evaluate(() => { const t = document.querySelector('.cloud')?.textContent ?? ''; return /Créer ma sauvegarde en ligne/.test(t) && /Reprendre avec un code/.test(t) }))
+  await p4.evaluate(() => [...document.querySelectorAll('.cloud button')].find((x) => /Fermer/.test(x.textContent))?.click())
   // textes dessinés dans les symboles : déplaçables à la souris hors simulation
   await p4.click('.simbtn'); await sleep(400)
   const tg = await p4.evaluate(() => { const e = document.querySelector('svg.canvas [data-tag="sa"]'); const r = e?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2, t: e.textContent } : null })
