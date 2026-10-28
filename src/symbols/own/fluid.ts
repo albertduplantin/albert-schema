@@ -304,6 +304,10 @@ function valves(def: SymbolDef, ports: PortInfo[]): R {
   return { svg, name: T(`Vanne ${kind}${how}`, 'Valve') }
 }
 
+/** Clapet anti-retour : passage libre vers +x. Siège en V (pointe en amont), bille dans sa bouche ; le ressort pousse la bille contre le siège. */
+const checkGlyph = (spring: boolean): string =>
+  path('M1.2 -5.5L-5 0L1.2 5.5', 'fill="none"') + circle(3.6, 0, 3.4, BG) + (spring ? path('M7 0l1.4 -2.6l2.8 5.2l1.4 -2.6', 'fill="none"') : '')
+
 function inlineParts(def: SymbolDef, ports: PortInfo[]): R {
   const fl = def.fluid
   if (fl?.k === 'check') {
@@ -311,9 +315,10 @@ function inlineParts(def: SymbolDef, ports: PortInfo[]): R {
     if (!from || !to) return null
     const c: Pt = [(from.x + to.x) / 2, from.y]
     const dir = to.x > from.x ? 1 : -1
-    let svg = line([from.x, from.y], [c[0] - dir * 10, c[1]]) + line([c[0] + dir * 10, c[1]], [to.x, to.y])
     const spring = !/sans ressort/i.test(def.name.fr) && /ressort/i.test(def.name.fr)
-    svg += place(c, dir > 0 ? 0 : 180, circle(-3, 0, 3.2, BG) + path('M3 -6L9 0L3 6', 'fill="none"') + (spring ? path('M-10 0l1.2 -2.6l2.4 5.2l1.2 -2.6', 'fill="none"') : line([-10, 0], [-6.2, 0])) + line([6.5, 0], [10, 0]))
+    // passage libre de `from` vers `to` : le siège (V) est en amont, la bille en aval ; le ressort pousse la bille contre le siège
+    let svg = line([from.x, from.y], [c[0] - dir * 10, c[1]]) + line([c[0] + dir * 10, c[1]], [to.x, to.y])
+    svg += place(c, dir > 0 ? 0 : 180, checkGlyph(spring))
     const pilot = fl.pilot ? pid(ports, fl.pilot) : undefined
     if (pilot) svg += line([pilot.x, pilot.y], [pilot.x, c[1] - 12], DASH) + line([pilot.x, c[1] - 12], [c[0], c[1] - 12], DASH) + line([c[0], c[1] - 12], [c[0], c[1] - 5], DASH)
     return { svg, name: pilot ? T('Clapet anti-retour piloté', 'Pilot-operated check valve') : spring ? T('Clapet anti-retour à ressort', 'Spring-loaded check valve') : T('Clapet anti-retour', 'Check valve') }
@@ -322,10 +327,20 @@ function inlineParts(def: SymbolDef, ports: PortInfo[]): R {
     const a = pid(ports, fl.a), b = pid(ports, fl.b)
     if (!a || !b) return null
     const c: Pt = [(a.x + b.x) / 2, (a.y + b.y) / 2]
-    let svg = line([a.x, a.y], [c[0] - 9, a.y]) + line([c[0] + 9, b.y], [b.x, b.y]) + path(`M${f(c[0] - 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] - 5)} ${f(c[1] + 8)}M${f(c[0] + 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] + 5)} ${f(c[1] + 8)}`, 'fill="none"')
+    // passage continu ; deux arcs qui l'étranglent ; flèche de réglage oblique
+    let svg = line([a.x, a.y], [b.x, b.y]) + path(`M${f(c[0] - 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] - 5)} ${f(c[1] + 8)}M${f(c[0] + 5)} ${f(c[1] - 8)}Q${f(c[0])} ${f(c[1])} ${f(c[0] + 5)} ${f(c[1] + 8)}`, 'fill="none"')
     svg += line([c[0] - 10, c[1] + 11], [c[0] + 10, c[1] - 11]) + arrowHead([c[0] + 10, c[1] - 11], [c[0] - 10, c[1] + 11])
-    if (fl.oneWay) svg += line([c[0] - 6, c[1] + 17], [c[0] + 6, c[1] + 17]) + circle(c[0], c[1] + 14, 3, BG)
-    if (fl.comp) svg += rect(c[0] - 14, c[1] - 14, 28, 28, 'fill="none"')
+    if (fl.comp) {
+      // régulateur compensé : le cadre de la balance de pression et son triangle (côté amont) entourent l'étrangleur
+      svg += rect(c[0] - 14, c[1] - 14, 28, 28, 'fill="none"') + path(`M${f(c[0] - 6)} ${f(c[1])}L${f(c[0] - 12)} ${f(c[1] - 3)}V${f(c[1] + 3)}Z`, 'fill="currentColor"')
+    }
+    if (fl.oneWay) {
+      // retour libre : clapet dans une dérivation sous le passage, entre deux points de raccordement
+      const x0 = c[0] - 19, x1 = c[0] + 19, y = c[1] + 22
+      svg += circle(x0, c[1], 1.8, 'fill="currentColor"') + circle(x1, c[1], 1.8, 'fill="currentColor"')
+      svg += path(`M${f(x0)} ${f(c[1])}V${f(y)}H${f(c[0] - 6.5)}M${f(c[0] + 5)} ${f(y)}H${f(x1)}V${f(c[1])}`, 'fill="none"')
+      svg += place([c[0], y], 180, checkGlyph(false)) // le passage libre va de b vers a
+    }
     if (a.x > b.x) svg = `<g transform="translate(${f(a.x + b.x)} 0) scale(-1 1)">${svg}</g>`
     return { svg, name: fl.comp ? T('Régulateur de débit compensé en pression, unidirectionnel', 'Pressure-compensated flow regulator, one-way') : fl.oneWay ? T('Limiteur de débit unidirectionnel', 'One-way flow control valve') : T('Limiteur de débit réglable', 'Adjustable flow restrictor') }
   }
@@ -394,18 +409,20 @@ function pressureValves(def: SymbolDef, ports: PortInfo[]): R {
   if (fl?.k !== 'relief' && fl?.k !== 'reducer') return null
   const p = pid(ports, fl.p), t = pid(ports, fl.k === 'relief' ? fl.t : fl.a)
   if (!p || !t) return null
-  const y = p.y, x0 = def.w / 2 - 11
-  const spring = path(`M${f(x0 + 11)} ${f(y - 11)}l-3 -2l6 -3l-6 -3l6 -3l-6 -3l3 -2`, 'fill="none"')
-  const adj = line([x0 + 3, y - 14], [x0 + 21, y - 28]) + arrowHead([x0 + 21, y - 28], [x0 + 3, y - 14])
-  let svg = line([p.x, p.y], [x0, y]) + line([x0 + 22, t.y], [t.x, t.y]) + rect(x0, y - 11, 22, 22, BG) + spring + adj
+  const y = p.y, S = 24, x0 = def.w / 2 - S / 2, y0 = y - S / 2
+  // carré traversé par les orifices à mi-hauteur ; ressort réglable au-dessus
+  let svg = line([p.x, y], [x0, y]) + line([x0 + S, t.y], [t.x, t.y]) + rect(x0, y0, S, S, BG)
+  const sx = x0 + S * 0.6
+  svg += path(`M${f(sx)} ${f(y0)}l-3.2 -2l6.4 -3l-6.4 -3l6.4 -3l-6.4 -3l3.2 -2`, 'fill="none"')
+  svg += line([x0 + 3, y0 - 4], [x0 + S + 2, y0 - 14]) + arrowHead([x0 + S + 2, y0 - 14], [x0 + 3, y0 - 4])
   if (fl.k === 'relief') {
-    // fermé au repos : la flèche est décalée par rapport aux orifices ; le pilotage vient de l'amont
-    svg += line([x0 + 6, y + 8], [x0 + 6, y - 8]) + arrowHead([x0 + 6, y - 8], [x0 + 6, y + 8])
-    svg += path(`M${f(p.x + 10)} ${f(y)}V${f(y + 20)}H${f(x0 + 11)}V${f(y + 11)}`, `fill="none" ${DASH}`)
+    // fermé au repos : la flèche est décalée vers le bas, hors de l'axe des orifices ; le pilotage vient de l'amont
+    svg += line([x0 + 3, y0 + S - 3.5], [x0 + S - 3, y0 + S - 3.5]) + arrowHead([x0 + S - 3, y0 + S - 3.5], [x0 + 3, y0 + S - 3.5])
+    svg += path(`M${f(x0 - 6)} ${f(y)}V${f(y0 + S + 6)}H${f(x0 + S * 0.52)}V${f(y0 + S)}`, `fill="none" ${DASH}`) + line([x0 - 6, y], [x0, y])
   } else {
-    // ouvert au repos : la flèche relie les orifices ; le pilotage vient de l'aval
-    svg += line([x0 + 3, y], [x0 + 19, y]) + arrowHead([x0 + 19, y], [x0 + 3, y])
-    svg += path(`M${f(t.x - 10)} ${f(y)}V${f(y + 20)}H${f(x0 + 11)}V${f(y + 11)}`, `fill="none" ${DASH}`)
+    // ouvert au repos : la flèche est dans l'axe des orifices ; le pilotage vient de l'aval
+    svg += line([x0 + 3, y], [x0 + S - 3, y]) + arrowHead([x0 + S - 3, y], [x0 + 3, y])
+    svg += path(`M${f(x0 + S + 6)} ${f(y)}V${f(y0 + S + 6)}H${f(x0 + S * 0.48)}V${f(y0 + S)}`, `fill="none" ${DASH}`)
   }
   return { svg }
 }

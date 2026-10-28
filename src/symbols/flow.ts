@@ -19,8 +19,9 @@ const rdu = (domain: Domain, cat: string, group: SymbolDef['group']): SymbolDef 
   id: domain === 'hydraulic' ? 'flow-rdu-h' : 'flow-rdu-p', domain, prefix: 'RDU',
   name: { fr: 'Régulateur de débit unidirectionnel (RDU)', en: 'One-way flow control valve (throttle check)' }, std: 'ISO 1219-1', w: 60, h: 60,
   svg: `<path d="M0 30H60"/>${throttleBody(30)}` +
-    `<path d="M10 30V48H21"/><circle cx="24" cy="48" r="3"/><path d="M28 43L33 48L28 53" fill="none"/><path d="M33 48H50V30"/>` +
-    `<rect x="5" y="14" width="50" height="42" fill="none" stroke-dasharray="3 2"/>`,
+    // dérivation sous le passage : clapet dont le passage libre va de droite à gauche (siège en V à droite, bille à gauche)
+    `<circle cx="10" cy="30" r="1.8" fill="currentColor"/><circle cx="50" cy="30" r="1.8" fill="currentColor"/><path d="M10 30V52H23.5M35 52H50V30" fill="none"/>` +
+    `<g transform="translate(30 52) scale(-1 1)"><path d="M1.2 -5.5L-5 0L1.2 5.5" fill="none"/><circle cx="3.6" cy="0" r="3.4" fill="var(--bg)"/></g>`,
   ports: [{ id: 'l', x: 0, y: 30, dir: 'left' }, { id: 'r', x: 60, y: 30, dir: 'right' }],
   cat, group, score: 96, top: true, decor: false,
   fluid: { k: 'fthrottle', a: 'l', b: 'r', oneWay: true },
