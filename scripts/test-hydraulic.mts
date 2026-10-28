@@ -208,5 +208,11 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   check('vérin : 1000 daN (≈ 51 bar) : la tige sort', r2.cylPos[cc] > 0.9, true)
 }
 
+// grille : chaque orifice d'un appareil hydraulique tombe sur un multiple de 10 (sinon les fils sont de travers)
+{
+  const off = lib.symbols.filter((s: any) => s.domain === 'hydraulic').flatMap((s: any) => s.ports.filter((p: any) => p.x % 10 || p.y % 10).map((p: any) => `${s.id}:${p.id}(${p.x},${p.y})`))
+  check('grille : tous les orifices hydrauliques sont sur la grille de 10', off, [])
+}
+
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests hydrauliques passent')
 process.exit(fails ? 1 : 0)
