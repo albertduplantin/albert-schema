@@ -260,6 +260,11 @@ try {
   check('circulation d’huile : des traits animés sur les conducteurs', await p4.evaluate(() => document.querySelectorAll('svg.canvas polyline[stroke-dasharray="0.5 6"]').length > 2))
   await p4.screenshot({ path: process.env.TEMP + '/hyd.png' })
   await p4.mouse.up()
+  // textes dessinés dans les symboles : déplaçables à la souris hors simulation
+  await p4.click('.simbtn'); await sleep(400)
+  const tg = await p4.evaluate(() => { const e = document.querySelector('svg.canvas [data-tag="sa"]'); const r = e?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2, t: e.textContent } : null })
+  if (tg) { await p4.mouse.move(tg.x, tg.y); await p4.mouse.down(); await p4.mouse.move(tg.x + 25, tg.y + 14, { steps: 4 }); await p4.mouse.up(); await sleep(300) }
+  check('texte de symbole : le repère d’électroaimant se déplace à la souris', !!tg && await p4.evaluate(() => [...document.querySelectorAll('svg.canvas [data-tag="sa"]')].some((e) => e.hasAttribute('transform'))))
   await p4.close()
   await p3.keyboard.press('Escape')
   await p3.close()

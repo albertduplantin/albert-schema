@@ -1041,19 +1041,22 @@ function Editor() {
   const [showTitleBlock, setShowTitleBlock] = useState(false)
   // fenêtre « Propriétés » flottante d'un symbole (clic droit, double-clic ou Entrée) : repère, tensions, caractéristiques, réglages, bornes
   // édition d'un texte sur place (double-clic sur une annotation, un nom de composant ou un repère)
-  const [textEdit, setTextEdit] = useState<{ kind: 'note' | 'name' | 'label'; id: string; x: number; y: number } | null>(null)
+  const [textEdit, setTextEdit] = useState<{ kind: 'note' | 'name' | 'label' | 'tag'; id: string; x: number; y: number } | null>(null)
   const textDone = useRef(false) // évite une double validation (Entrée puis perte de focus)
-  const textEditValue = (te: { kind: 'note' | 'name' | 'label'; id: string }) => {
+  const textEditValue = (te: { kind: 'note' | 'name' | 'label' | 'tag'; id: string }) => {
     if (te.kind === 'note') return (doc.notes ?? []).find((n) => n.id === te.id)?.text ?? ''
+    // texte dessiné dans un symbole : id = « symbole|clé » ; on part du texte affiché
+    if (te.kind === 'tag') { const [sid, key] = te.id.split('|'); return doc.symbols.find((x) => x.id === sid)?.tagText?.[key] ?? document.querySelector(`[data-solof="${sid}"] [data-tag="${key}"], [data-tagof="${sid}"][data-tag="${key}"]`)?.textContent ?? '' }
     const s = doc.symbols.find((x) => x.id === te.id)
     if (!s) return ''
     return te.kind === 'label' ? s.label : s.nameText || SYMBOL_MAP[s.defId].name[lang]
   }
-  const commitText = (te: { kind: 'note' | 'name' | 'label'; id: string }, value: string) => {
+  const commitText = (te: { kind: 'note' | 'name' | 'label' | 'tag'; id: string }, value: string) => {
     const v = te.kind === 'note' ? value : value.trim()
     const cur = textEditValue(te)
     if (v === cur) return
-    if (te.kind === 'note') commit((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === te.id ? { ...n, text: v } : n)) }))
+    if (te.kind === 'tag') { const [sid, key] = te.id.split('|'); commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === sid ? { ...s, tagText: { ...(s.tagText ?? {}), [key]: v } } : s)) })) }
+    else if (te.kind === 'note') commit((d) => ({ ...d, notes: (d.notes ?? []).map((n) => (n.id === te.id ? { ...n, text: v } : n)) }))
     else if (te.kind === 'label') { if (isTerminal(doc.symbols.find((s) => s.id === te.id)?.defId ?? '')) setActiveStrip(v); commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === te.id ? { ...s, label: v } : s)) })) }
     else commit((d) => ({ ...d, symbols: d.symbols.map((s) => (s.id === te.id ? { ...s, nameText: v && v !== SYMBOL_MAP[s.defId].name[lang] ? v : undefined } : s)) }))
   }

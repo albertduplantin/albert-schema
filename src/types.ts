@@ -195,6 +195,9 @@ export interface PlacedSymbol {
   det?: { cyl: string; at: number }
   /** décalage du repère et de la description par rapport à leur position par défaut (déplacés à la souris) */
   labelOff?: { x: number; y: number }
+  /** textes dessinés dans le symbole (lettres d'orifices, repères d'électroaimants…) : décalage et texte modifié, par clé (« p:a », « sa »…) */
+  tagOff?: Record<string, { x: number; y: number }>
+  tagText?: Record<string, string>
 }
 
 export interface PortRef {

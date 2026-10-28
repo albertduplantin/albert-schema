@@ -35,7 +35,7 @@ export function FluidShape({ s, def, sim, detectors }: { s: PlacedSymbol; def: S
   const vpos = useEased(valveTarget, 9) // une case en environ 0,11 s
   const cpos = useEased(cylTarget, 2.2)
   let html = ''
-  if (f?.k === 'valve') html = valveSvg(def, { pos: vpos, pot: (id) => (sim ? pot(id) : null), a: sim ? !!sim.valveA[s.id] : false, b: sim ? !!sim.valveB[s.id] : false, label: s.label })
+  if (f?.k === 'valve') html = valveSvg(def, { pos: vpos, pot: (id) => (sim ? pot(id) : null), a: sim ? !!sim.valveA[s.id] : false, b: sim ? !!sim.valveB[s.id] : false, label: s.label, tagOff: s.tagOff, tagText: s.tagText })
   else if (f?.k === 'cyl') html = cylinderSvg(def, { detectors, p: cpos, potCap: sim ? pot(f.cap) : null, potRod: sim && f.rod ? pot(f.rod) : null })
   return <g data-solof={s.id} dangerouslySetInnerHTML={{ __html: html.replace(/var\(--bg\)/g, '#fff') }} />
 }

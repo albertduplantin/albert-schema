@@ -39,6 +39,9 @@ export interface ValveView {
   b?: boolean
   /** repère du distributeur : sert à afficher le nom des électroaimants (1V1+ et 1V1−) */
   label?: string
+  /** textes du symbole déplacés ou modifiés à la main (clé → décalage / texte) */
+  tagOff?: Record<string, { x: number; y: number }>
+  tagText?: Record<string, string>
 }
 
 /** Case active d'un distributeur selon son état. */
@@ -127,18 +130,26 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
   const yr = f.b === 'pneu' && pr ? pr.y : y0 + ch / 2
   const pil = pilotNumbers(def)
   const [namesA, namesB] = solenoidNames(view.label ?? '', pil, def.domain === 'hydraulic')
+  /** texte du symbole : déplaçable (data-tag) et modifiable ; une valeur vide le masque */
+  const tx = (key: string, x: number, y: number, size: number, anchor: string, dflt: string | undefined) => {
+    const c = view.tagText?.[key] ?? dflt
+    if (!c) return ''
+    const o = view.tagOff?.[key]
+    const esc = c.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    return `<text data-tag="${key}" style="cursor:move;font-size:calc(${size}px * var(--ls,1))" x="${n(x)}" y="${n(y)}" text-anchor="${anchor}"${o ? ` transform="translate(${n(o.x)} ${n(o.y)})"` : ''} fill="currentColor" stroke="rgba(0,0,0,0)" stroke-width="3">${esc}</text>`
+  }
   // numéros normalisés des orifices (1 alimentation, 2 et 4 utilisations, 3 et 5 échappements) et des commandes (14, 12, 10)
   const nums = portNumbers(def)
   const exhaust = new Set(exhaustPortIds(def))
   for (const p of fp) {
     const t = nums[p.id]
     const sil = exhaust.has(p.id)
-    if (t) out += `<text x="${n(p.x + (sil ? 6 : 2.5))}" y="${n(p.dir === 'up' ? -2 : H + 7)}" style="font-size:calc(6px * var(--ls,1))" fill="currentColor" stroke="none">${t}</text>`
+    out += tx('p:' + p.id, p.x + (sil ? 6 : 2.5), p.dir === 'up' ? -2 : H + 7, 6, 'start', t)
     // silencieux d'échappement posé sur l'orifice : triangle dont la pointe regarde l'atmosphère
     if (sil) { const s = p.dir === 'up' ? -1 : 1, y = p.dir === 'up' ? 0 : H; out += `<path d="M${n(p.x - 3.5)} ${n(y + s * 1)}L${n(p.x + 3.5)} ${n(y + s * 1)}L${n(p.x)} ${n(y + s * 8)}Z" fill="var(--bg)" stroke="currentColor" stroke-width="1"/>` }
   }
-  const tag = (x: number, y: number, t: string | undefined) => (t ? `<text x="${n(x)}" y="${n(y)}" style="font-size:calc(6px * var(--ls,1))" text-anchor="middle" fill="currentColor" stroke="none">${t.replace('-', '−')}</text>` : '')
-  const pilotNo = (x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => (t ? `<text x="${n(x)}" y="${n(y)}" style="font-size:calc(5.5px * var(--ls,1))" text-anchor="${anchor}" fill="currentColor" stroke="none">${t}</text>` : '')
+  const tag = (key: string, x: number, y: number, t: string | undefined) => tx(key, x, y, 6, 'middle', t?.replace('-', '−'))
+  const pilotNo = (key: string, x: number, y: number, t: string | undefined, anchor: 'start' | 'end') => tx(key, x, y, 5.5, anchor, t)
   const yS = y0 + ch * 0.27
   const hS = ch * 0.45
   /** commande en bas de la case d'extrémité : électroaimant (carré à diagonale) ou levier */
@@ -152,12 +163,12 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
     out += zig(xl, -1, yS) + zig(xr, 1, yS)
     const leverL = f.a === 'man', leverR = f.b === 'man'
     out += bottomBox(xl, -1, !!view.a, 'a', leverL) + bottomBox(xr, 1, !!view.b, 'b', leverR)
-    if (!leverL) out += tag(xl - 10, yS - 6, namesA[0]) + pilotNo(xl - 22, y1 - 2, pil[0], 'end')
-    if (!leverR) out += tag(xr + 10, yS - 6, namesB[0]) + pilotNo(xr + 22, y1 - 2, pil[1], 'start')
+    if (!leverL) out += tag('sa', xl - 10, yS - 6, namesA[0]) + pilotNo('pa', xl - 22, y1 - 2, pil[0], 'end')
+    if (!leverR) out += tag('sb', xr + 10, yS - 6, namesB[0]) + pilotNo('pb', xr + 22, y1 - 2, pil[1], 'start')
   } else {
     if (sprL) out += zig(xl, -1, yl)
     const xlO = xl - (sprL ? SPR : 0)
-    if (f.a === 'elec') out += solenoid(xlO, -1, !!view.a, yl, 'a') + tag(xlO - 6.5, yl - 8, namesA[0]) + pilotNo(xlO - 14, yl + 2, pil[0], 'end')
+    if (f.a === 'elec') out += solenoid(xlO, -1, !!view.a, yl, 'a') + tag('sa', xlO - 6.5, yl - 8, namesA[0]) + pilotNo('pa', xlO - 14, yl + 2, pil[0], 'end')
     else if (f.a === 'man') out += `<path d="M${n(xlO)} ${n(yl)}H${n(xlO - 4)}" stroke="currentColor"/><rect data-sol="a" style="cursor:pointer" x="${n(xlO - 13)}" y="${n(yl - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xlO - 11)} ${n(yl - 2)}H${n(xlO - 6)}M${n(xlO - 8.5)} ${n(yl - 2)}V${n(yl + 3)}" stroke="currentColor" fill="none"/>`
     else if (f.a === 'pneu') out += pilotShape(xlO, -1, pl, yl)
     if (f.b === 'spring') {
@@ -166,7 +177,7 @@ export function valveSvg(def: SymbolDef, view: ValveView): string {
     } else {
       if (sprR) out += zig(xr, 1, yr)
       const xrO = xr + (sprR ? SPR : 0)
-      if (f.b === 'elec') out += solenoid(xrO, 1, !!view.b, yr, 'b') + tag(xrO + 6.5, yr - 8, namesB[0]) + pilotNo(xrO + 14, yr + 2, pil[1], 'start')
+      if (f.b === 'elec') out += solenoid(xrO, 1, !!view.b, yr, 'b') + tag('sb', xrO + 6.5, yr - 8, namesB[0]) + pilotNo('pb', xrO + 14, yr + 2, pil[1], 'start')
       else if (f.b === 'pneu') out += pilotShape(xrO, 1, pr, yr)
       else if (f.b === 'man') out += `<path d="M${n(xrO)} ${n(yr)}H${n(xrO + 4)}" stroke="currentColor"/><rect data-sol="b" style="cursor:pointer" x="${n(xrO + 4)}" y="${n(yr - 5)}" width="9" height="10" fill="var(--bg)" stroke="currentColor"/><path d="M${n(xrO + 6)} ${n(yr - 2)}H${n(xrO + 11)}M${n(xrO + 8.5)} ${n(yr - 2)}V${n(yr + 3)}" stroke="currentColor" fill="none"/>`
     }

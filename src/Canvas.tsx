@@ -111,7 +111,7 @@ interface Props {
   /** double-clic sur un symbole : ouvre ses propriétés */
   onEditSymbol?: (id: string, x: number, y: number) => void
   /** double-clic sur un texte (annotation, nom de composant, repère) : édition sur place */
-  onEditText?: (kind: 'note' | 'name' | 'label', id: string, x: number, y: number) => void
+  onEditText?: (kind: 'note' | 'name' | 'label' | 'tag', id: string, x: number, y: number) => void
   onSimFault?: (id: string) => void
   /** outil de dessin actif (rectangle, ellipse, ligne), style des nouvelles formes, et fin de l'outil après le tracé */
   dark?: boolean
@@ -134,6 +134,7 @@ type Interaction =
   | { kind: 'drag'; sx: number; sy: number; orig: Record<string, { x: number; y: number }>; so: Record<string, { x: number; y: number }>; no: Record<string, { x: number; y: number }>; vias: Record<string, Pt[]>; moved: boolean }
   | { kind: 'draw'; x0: number; y0: number }
   | { kind: 'sresize'; id: string; code: string; orig: Shape; moved: boolean }
+  | { kind: 'tag'; id: string; key: string; rot: number; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'label'; id: string; part: 'labelOff' | 'nameOff'; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'note'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
   | { kind: 'instr'; id: string; sx: number; sy: number; ox: number; oy: number; moved: boolean }
@@ -492,6 +493,18 @@ export default function Canvas(p: Props) {
         return
       }
     }
+    // texte dessiné dans un symbole (lettre d'orifice, repère d'électroaimant…) : on le déplace à la souris
+    // les lettres d'orifices touchent les orifices : le texte prime sur la zone de câblage qui le recouvre
+    const tagEl = !p.sim ? (document.elementsFromPoint(e.clientX, e.clientY).find((el) => el.hasAttribute('data-tag')) ?? null) : null
+    if (tagEl) {
+      const sy = doc.symbols.find((x) => x.id === (tagEl.closest('[data-solof]')?.getAttribute('data-solof') ?? tagEl.getAttribute('data-tagof')))
+      if (sy) {
+        p.setSel([sy.id])
+        const key = tagEl.getAttribute('data-tag')!
+        inter.current = { kind: 'tag', id: sy.id, key, rot: sy.rot, sx: pt.x, sy: pt.y, ox: sy.tagOff?.[key]?.x ?? 0, oy: sy.tagOff?.[key]?.y ?? 0, moved: false }
+        return
+      }
+    }
     const lblEl = (e.target as Element).closest('[data-lbl]')
     if (lblEl) {
       const id = lblEl.getAttribute('data-lbl')!
@@ -649,6 +662,20 @@ export default function Canvas(p: Props) {
         p.checkpoint()
       }
       if (it.moved) p.update((d) => ({ ...d, instruments: (d.instruments ?? []).map((i) => (i.id === it.id ? { ...i, x: nx, y: ny } : i)) }))
+    } else if (it.kind === 'tag') {
+      // le texte est dans le repère du symbole : le déplacement est ramené dans ce repère (rotation inverse)
+      const a = (-it.rot * Math.PI) / 180, dx = pt.x - it.sx, dy = pt.y - it.sy
+      const off = { x: it.ox + Math.round(dx * Math.round(Math.cos(a)) - dy * Math.round(Math.sin(a))), y: it.oy + Math.round(dx * Math.round(Math.sin(a)) + dy * Math.round(Math.cos(a))) }
+      if (!it.moved && (off.x !== it.ox || off.y !== it.oy)) {
+        it.moved = true
+        p.checkpoint()
+      }
+      if (it.moved) p.update((d) => ({ ...d, symbols: d.symbols.map((s) => {
+        if (s.id !== it.id) return s
+        const t = { ...(s.tagOff ?? {}) }
+        if (off.x || off.y) t[it.key] = off; else delete t[it.key]
+        return { ...s, tagOff: Object.keys(t).length ? t : undefined }
+      }) }))
     } else if (it.kind === 'label') {
       const off = { x: it.ox + Math.round(pt.x - it.sx), y: it.oy + Math.round(pt.y - it.sy) }
       if (!it.moved && (off.x !== it.ox || off.y !== it.oy)) {
@@ -794,6 +821,8 @@ export default function Canvas(p: Props) {
         if (polyRef.current) { finishPolyRef.current(false); return }
         if ((e.target as Element).closest('[data-titleblock]')) { p.onEditTitle?.(); return }
         const tgt = e.target as Element
+        const tagD = !p.sim ? (document.elementsFromPoint(e.clientX, e.clientY).find((el) => el.hasAttribute('data-tag')) ?? null) : null
+        if (tagD) { const sid = tagD.closest('[data-solof]')?.getAttribute('data-solof') ?? tagD.getAttribute('data-tagof'); if (sid) { p.onEditText?.('tag', sid + '|' + tagD.getAttribute('data-tag'), e.clientX, e.clientY); return } }
         const txt = tgt.closest('[data-note]') ? (['note', tgt.closest('[data-note]')!.getAttribute('data-note')!] as const) : tgt.closest('[data-nm]') ? (['name', tgt.closest('[data-nm]')!.getAttribute('data-nm')!] as const) : tgt.closest('[data-lbl]') ? (['label', tgt.closest('[data-lbl]')!.getAttribute('data-lbl')!] as const) : null
         if (txt) { p.onEditText?.(txt[0], txt[1], e.clientX, e.clientY); return }
         const symEl = (e.target as Element).closest('[data-sym]')
@@ -955,10 +984,11 @@ export default function Canvas(p: Props) {
                       : f?.k === 'check' ? { [f.from]: 'A', [f.to]: 'B' } : null as unknown as Record<string, string>
                     if (!m) return null
                     return (
-                      <g pointerEvents="none" fontSize={6 * ls} fill="currentColor" stroke="none">
+                      <g fontSize={6 * ls} fill="currentColor" stroke="none">
                         {def.ports.filter((q) => m[q.id]).map((q) => {
                           const h = q.dir === 'left' || q.dir === 'right'
-                          return <text key={q.id} x={h ? q.x + (q.dir === 'left' ? 2 : -2) : q.x + 2.5} y={h ? q.y - 2.5 : q.y + (q.dir === 'up' ? 7 : -3)} textAnchor={h && q.dir === 'right' ? 'end' : 'start'}>{m[q.id]}</text>
+                          const key = 'p:' + q.id, o = s.tagOff?.[key], c = s.tagText?.[key] ?? m[q.id]
+                          return c ? <text key={q.id} data-tag={key} data-tagof={s.id} style={{ pointerEvents: p.sim ? 'none' : 'all', cursor: p.sim ? undefined : 'move' }} stroke="rgba(0,0,0,0)" strokeWidth={3} transform={o ? `translate(${o.x} ${o.y})` : undefined} x={h ? q.x + (q.dir === 'left' ? 2 : -2) : q.x + 2.5} y={h ? q.y - 2.5 : q.y + (q.dir === 'up' ? 7 : -3)} textAnchor={h && q.dir === 'right' ? 'end' : 'start'}>{c}</text> : null
                         })}
                       </g>
                     )
