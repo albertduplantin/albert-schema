@@ -14,6 +14,9 @@ Source : « correction.pdf » (88 pages, scan). TP1 à TP4 sont déjà des exemp
 | 12 | Pompe fixe + KVM10 | Distributeur à 4 cases KVM10, pompe fixe, moteur et vérin | limiteur du KVM10 120 bar | Essais 1 et 2 comme TP11 (commentaires laissés vides dans le corrigé) |
 | 13 | Accumulateur | Accumulateur 2 L (pression de gonflage 40 bar) avec bloc de sécurité (limiteur, vanne de remplissage, vanne de mise à vide, manomètre), distributeurs vérin et moteur | limiteur 80 puis 130 bar | Plus la pression du circuit est élevée, plus le volume d'huile stocké est grand, donc plus de rentrées / sorties du vérin. Gonflage vérifié : l'aiguille du manomètre chute lentement puis brusquement à la pression de gonflage de l'azote |
 
+## Fait : exemples TP5 à TP9
+Cinq exemples de la galerie reprennent les montages, avec les réglages du corrigé, et leurs valeurs sont vérifiées par `scripts/test-hydraulic.mts` (moteur 300 / 200 tr/min ; secondaires 80 et 40 bar ; réducteur 50 bar ; clapets croisés ; pompe régulée à 100 bar, débit = consommation ; Load Sensing + 15 bar). Pas de distributeur BY-PASS dans ces exemples : sans récepteur commandé, la pompe débite par le limiteur principal. Le moteur de ces exemples a une cylindrée de 50 cm³ (300 tr/min = 15 L/min avec une pompe de 27 L/min).
+
 ## Ce que l'application sait déjà faire
 - TP5, TP6, TP7, TP8, TP9 : tous les appareils existent (limiteur et réducteur de pression, limiteurs de débit, clapets pilotés, pompe variable régulée, pompe Load Sensing, sélecteur de circuit, distributeurs 4/3 et 4/2). Il manque les exemples câblés avec leurs consignes et les valeurs attendues.
 - Chiffres du modèle : le Load Sensing garde maintenant **+ 15 bar** (valeur du corrigé, elle était à 14).

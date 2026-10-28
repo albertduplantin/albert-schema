@@ -429,3 +429,65 @@ export const hydraulicCylinder = (base: Doc): Doc => tune(build(base,
     // à l'échappement : la chambre est du côté 'a' (étranglé), le distributeur du côté 'b' (retour libre)
     ['c', 't0', 'la', 'a'], ['la', 'b', 'v', 'a'], ['c', 't1', 'lb', 'a'], ['lb', 'b', 'v', 'b'], ['c', 't0', 'g1', 'a'], ['c', 't1', 'g2', 'a'],
   ]), { LP: { set: 100 }, LA: { open: 30 }, LB: { open: 30 }, GMP: { disp: 18, rpm: 1500 }, '1A': { bore: 50, rod: 30, stroke: 350 } })
+
+// ───────────────────────── travaux pratiques TP5 à TP9 du banc (cahier SHCOV2)
+/** Alimentation commune : bâches, groupe motopompe, limiteur de pression principal et manomètre de pompe. */
+const hydSupply = (pump: string): [Spec[], Link[]] => [
+  [['t1', HTANK, 330, 700], ['t2', HTANK, 780, 560], ['pump', HY(pump), 300, 610, 'GMP'], ['rv', HY('limiteur_pression'), 450, 500, 'LP'], ['g3', HY('manometre'), 220, 520, 'G3']],
+  [['pump', 'i', 't1', 't0'], ['pump', 'o', 'rv', 'p'], ['pump', 'o', 'g3', 'a'], ['rv', 't', 't2', 't0']],
+]
+/** Moteur hydraulique commandé par un 4/3 et deux limiteurs de débit à l'admission (x0 : décalage horizontal du circuit). */
+const hydMotorLeg = (x0: number, supply: string): [Spec[], Link[]] => [
+  [['vm', HY('d43_o'), x0 + 100, 360, '1V1'], ['la', HY('limiteur_debit_uni'), x0 + 30, 250, 'LA'], ['lb', HY('limiteur_debit_uni_inverse'), x0 + 270, 250, 'LB'],
+    ['m', HY('moteur_hydraulique'), x0 + 130, 120, 'M2'], ['g1', HY('manometre'), x0 + 50, 120, 'G1'], ['g2', HY('manometre'), x0 + 250, 120, 'G2']],
+  [[supply, 'o', 'vm', 'p'], ['vm', 't', 't2', 't0'], ['vm', 'a', 'la', 'a'], ['la', 'b', 'm', 'a'], ['vm', 'b', 'lb', 'a'], ['lb', 'b', 'm', 'b'], ['m', 'a', 'g1', 'a'], ['m', 'b', 'g2', 'a']],
+]
+const MOTOR_TP: Record<string, Ratings> = { M2: { disp: 50, torque: 5 }, GMP: { disp: 18, rpm: 1500 } }
+
+/**
+ * TP5 « limiteur de pression secondaire » : moteur (limiteurs de débit) et vérin en parallèle ; un limiteur de pression secondaire sur
+ * chaque ligne du vérin (80 bar côté fond, 40 bar côté tige) sous le limiteur principal à 100 bar.
+ */
+export const hydraulicTP5 = (base: Doc): Doc => {
+  const [s0, l0] = hydSupply('groupe_pompe_fixe'), [s1, l1] = hydMotorLeg(0, 'pump')
+  return tune(build(base,
+    [...s0, ...s1, ['vc', HY('d43_o'), 620, 360, '1V2'], ['c', HCYL, 640, 120, '1A'], ['g4', HY('manometre'), 570, 120, 'G4'], ['g5', HY('manometre'), 860, 120, 'G5'],
+      ['ra', HY('limiteur_pression'), 540, 240, 'RA'], ['rb', HY('limiteur_pression'), 800, 240, 'RB']],
+    [...l0, ...l1, ['pump', 'o', 'vc', 'p'], ['vc', 't', 't2', 't0'], ['vc', 'a', 'c', 't0'], ['vc', 'b', 'c', 't1'], ['c', 't0', 'g4', 'a'], ['c', 't1', 'g5', 'a'],
+      ['c', 't0', 'ra', 'p'], ['ra', 't', 't2', 't0'], ['c', 't1', 'rb', 'p'], ['rb', 't', 't2', 't0']]),
+  { ...MOTOR_TP, LP: { set: 100 }, RA: { set: 80 }, RB: { set: 40 }, LA: { open: 8 }, LB: { open: 12 }, '1A': { bore: 50, rod: 30, stroke: 350 } })
+}
+
+/** TP6 « réducteur de pression » : même banc, un réducteur réglé à 50 bar en amont du distributeur du vérin. */
+export const hydraulicTP6 = (base: Doc): Doc => {
+  const [s0, l0] = hydSupply('groupe_pompe_fixe'), [s1, l1] = hydMotorLeg(0, 'pump')
+  return tune(build(base,
+    [...s0, ...s1, ['rd', HY('reducteur_pression'), 540, 480, 'RP'], ['vc', HY('d43_o'), 620, 360, '1V2'], ['c', HCYL, 640, 120, '1A'], ['g4', HY('manometre'), 570, 120, 'G4'], ['g5', HY('manometre'), 860, 120, 'G5']],
+    [...l0, ...l1, ['pump', 'o', 'rd', 'p'], ['rd', 'a', 'vc', 'p'], ['vc', 't', 't2', 't0'], ['vc', 'a', 'c', 't0'], ['vc', 'b', 'c', 't1'], ['c', 't0', 'g4', 'a'], ['c', 't1', 'g5', 'a']]),
+  { ...MOTOR_TP, LP: { set: 100 }, RP: { set: 50 }, LA: { open: 8 }, LB: { open: 12 }, '1A': { bore: 50, rod: 30, stroke: 350 } })
+}
+
+/** TP7 « clapet anti-retour piloté » : deux clapets croisés (le pilotage de chacun vient de l'autre ligne) immobilisent le vérin. */
+export const hydraulicTP7 = (base: Doc): Doc => {
+  const [s0, l0] = hydSupply('groupe_pompe_fixe')
+  return tune(build(base,
+    [...s0, ['v', HY('d43_y'), 300, 360, '1V1'], ['ca', HY('clapet_pilote'), 230, 250, 'CA'], ['cb', HY('clapet_pilote'), 410, 250, 'CB'],
+      ['c', HCYL, 300, 120, '1A'], ['g1', HY('manometre'), 220, 120, 'G1'], ['g2', HY('manometre'), 440, 120, 'G2']],
+    [...l0, ['pump', 'o', 'v', 'p'], ['v', 't', 't2', 't0'], ['v', 'a', 'ca', 'a'], ['ca', 'b', 'c', 't0'], ['v', 'b', 'cb', 'a'], ['cb', 'b', 'c', 't1'],
+      ['v', 'b', 'ca', 'x'], ['v', 'a', 'cb', 'x'], ['c', 't0', 'g1', 'a'], ['c', 't1', 'g2', 'a']]),
+  { GMP: { disp: 18, rpm: 1500 }, LP: { set: 100 }, '1A': { bore: 50, rod: 30, stroke: 350 } })
+}
+
+/** TP8 « régulation de pression constante » : pompe à cylindrée variable (100 bar), limiteur de sécurité à 120 bar, moteur et limiteurs de débit. */
+export const hydraulicTP8 = (base: Doc): Doc => {
+  const [s0, l0] = hydSupply('groupe_pompe_variable'), [s1, l1] = hydMotorLeg(0, 'pump')
+  return tune(build(base, [...s0, ...s1], [...l0, ...l1]), { ...MOTOR_TP, GMP: { disp: 18, rpm: 1500, set: 100 }, LP: { set: 120 }, LA: { open: 8 }, LB: { open: 12 } })
+}
+
+/** TP9 « Load Sensing » : la pompe garde 15 bar de plus que la plus forte pression des deux lignes du moteur, relevée par un sélecteur de circuit. */
+export const hydraulicTP9 = (base: Doc): Doc => {
+  const [s0, l0] = hydSupply('groupe_pompe_ls'), [s1, l1] = hydMotorLeg(0, 'pump')
+  return tune(build(base, [...s0, ...s1, ['sel', HY('selecteur_circuit'), 150, 320, 'SC']],
+    [...l0, ...l1, ['m', 'a', 'sel', 'a'], ['m', 'b', 'sel', 'b'], ['sel', 's', 'pump', 'x']]),
+  { ...MOTOR_TP, LP: { set: 120 }, LA: { open: 19 }, LB: { open: 28 } }) // ΔP constant de 15 bar aux bornes des limiteurs : l'ouverture fixe le débit
+}

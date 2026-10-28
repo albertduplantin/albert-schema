@@ -261,10 +261,12 @@ export function solveHyd(inp: HydIn): HydOut | null {
       const before = p[i]
       let v: number
       if (net(i, 0) >= -1e-9) v = 0
-      else if (net(i, PMAX) <= 0) v = PMAX
+      else if (net(i, PMAX) < -1e-9) v = PMAX
       else {
+        // plus petite pression qui équilibre le nœud : si les débits sont nuls sur toute une plage (réducteur fermé sur un vérin en butée),
+        // la pression est celle où le dernier appareil s'est fermé (le tarage), pas le maximum
         let lo = 0, hi = PMAX
-        for (let it = 0; it < 28; it++) { const mid = (lo + hi) / 2; if (net(i, mid) > 0) hi = mid; else lo = mid }
+        for (let it = 0; it < 28; it++) { const mid = (lo + hi) / 2; if (net(i, mid) >= -1e-9) hi = mid; else lo = mid }
         v = (lo + hi) / 2
       }
       moved = Math.max(moved, Math.abs(v - before))

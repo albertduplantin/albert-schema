@@ -208,6 +208,49 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
   check('vérin : 1000 daN (≈ 51 bar) : la tige sort', r2.cylPos[cc] > 0.9, true)
 }
 
+// ── TP5 à TP9 du banc : valeurs du corrigé
+{
+  const info = (r: any, g: any, l: string) => num(r.fluidInfo[g.id(l)])
+  const play = (doc: any, key: string, ms = 2500) => { const g = rig(doc); g.run([], 0); g.run([], 1500); const id = g.id(key.split(':')[0]) + (key.includes(':') ? ':B' : ''); g.run([id], 100); return { g, r: g.run([id], ms) } }
+  const d5 = T.hydraulicTP5(base)
+  let t = play(d5, '1V1')
+  near('TP5 : moteur croisé ≈ 300 tr/min (limiteur B)', t.r.motorRpm[t.g.id('M2')], 300, 25)
+  t = play(d5, '1V1:B')
+  near('TP5 : moteur parallèle ≈ 200 tr/min (limiteur A)', t.r.motorRpm[t.g.id('M2')], 200, 25)
+  t = play(d5, '1V2', 6000)
+  near('TP5 : vérin en butée côté tige : la pression monte au limiteur secondaire B (40 bar)', info(t.r, t.g, 'G5'), 40, 5)
+  t = play(d5, '1V2:B', 6000)
+  near('TP5 : vérin en butée côté fond : la pression monte au limiteur secondaire A (80 bar)', info(t.r, t.g, 'G4'), 80, 5)
+  { // moteur et vérin ensemble : le vérin en butée limite la pression à son secondaire, le ΔP des limiteurs du moteur baisse, le moteur ralentit
+    const g = rig(d5); g.run([], 0); g.run([], 1500)
+    const both = [g.id('1V1') + ':B', g.id('1V2') + ':B']
+    g.run(both, 100)
+    const r = g.run(both, 7000)
+    check('TP5 : en butée, le moteur tourne moins vite qu’en travaillant seul (≈ 200 tr/min)', r.motorRpm[g.id('M2')] < 195, true)
+    near('TP5 : la pression de pompe est celle du limiteur secondaire du vérin (≈ 80 bar)', info(r, g, 'G3'), 80, 6)
+  }
+  const d6 = T.hydraulicTP6(base)
+  t = play(d6, '1V2:B', 6000)
+  near('TP6 : réducteur : la pression du vérin reste à 50 bar en butée', info(t.r, t.g, 'G4'), 50, 3)
+  t = play(d6, '1V1')
+  near('TP6 : le moteur garde sa vitesse (≈ 300 tr/min) pendant que le vérin est réduit', t.r.motorRpm[t.g.id('M2')], 300, 25)
+  const d7 = T.hydraulicTP7(base)
+  t = play(d7, '1V1:B', 6000)
+  near('TP7 : clapets croisés : pression côté fond au limiteur de pression (≈ 100 bar)', info(t.r, t.g, 'G1'), 100, 8)
+  { const g = rig(d7); g.run([], 0); const r = g.run([], 3000); check('TP7 : au centre du distributeur le vérin reste immobile', info(r, g, 'G1') + info(r, g, 'G2') < 8, true) }
+  const d8 = T.hydraulicTP8(base)
+  { const g = rig(d8); g.run([], 0); const r = g.run([], 1500)
+    near('TP8 : au repos la pompe garde sa pression de régulation (≈ 100 bar)', info(r, g, 'G3'), 100, 6)
+    check('TP8 : au repos la pompe ne débite presque rien', num(r.fluidInfo[g.id('GMP')]) < 2, true) }
+  t = play(d8, '1V1')
+  near('TP8 : en charge la pompe ne fournit que le débit du moteur (≈ 15 L/min)', num(t.r.fluidInfo[t.g.id('GMP')]), 15, 3)
+  near('TP8 : et reste à la pression de régulation (≈ 100 bar)', info(t.r, t.g, 'G3'), 100, 6)
+  const d9 = T.hydraulicTP9(base)
+  t = play(d9, '1V1')
+  near('TP9 : Load Sensing : pression de pompe = pression de charge + 15 bar', info(t.r, t.g, 'G3') - info(t.r, t.g, 'G2'), 15, 3)
+  near('TP9 : vitesse du moteur ≈ 300 tr/min', t.r.motorRpm[t.g.id('M2')], 300, 30)
+}
+
 // grille : chaque orifice d'un appareil hydraulique tombe sur un multiple de 10 (sinon les fils sont de travers)
 {
   const off = lib.symbols.filter((s: any) => s.domain === 'hydraulic').flatMap((s: any) => s.ports.filter((p: any) => p.x % 10 || p.y % 10).map((p: any) => `${s.id}:${p.id}(${p.x},${p.y})`))
