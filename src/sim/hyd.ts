@@ -69,6 +69,8 @@ interface El {
   nodes: number[]
   /** limiteur de débit unidirectionnel : seul le sens étranglé fait monter l'aiguille */
   oneWay?: boolean
+  /** réducteur : tarage (bar) */
+  pset?: number
   /** orifices correspondant à chaque nœud (`symbole:orifice`) */
   ports?: string[]
   /** débits quittant chaque nœud de l'élément (positif : vers l'élément) */
@@ -145,7 +147,7 @@ export function solveHyd(inp: HydIn): HydOut | null {
       case 'reducer': {
         const pN = node(s.id, f.p), aN = node(s.id, f.a)
         const pset = dflt(r.set, 50)
-        els.push({ sym: s.id, kind: 'reducer', nodes: [pN, aN], out: (p) => { const q = K_REDUCER * Math.max(0, Math.min(p[pN] - p[aN], pset - p[aN])); return [q, -q] } })
+        els.push({ sym: s.id, kind: 'reducer', nodes: [pN, aN], pset, out: (p) => { const q = K_REDUCER * Math.max(0, Math.min(p[pN] - p[aN], pset - p[aN])); return [q, -q] } })
         break
       }
       case 'fthrottle': {
@@ -283,6 +285,8 @@ export function solveHyd(inp: HydIn): HydOut | null {
     const q = o[0]
     out.oil[e.sym] = e.kind === 'pump' ? -q : (out.oil[e.sym] ?? 0) + q
     if (e.kind === 'relief') out.needle[e.sym] = q > 0.15 ? 1 : 0
+    // réducteur : ouvert tant que la pression aval n'a pas atteint le tarage, il se referme (flèche décalée) dès qu'elle l'atteint
+    if (e.kind === 'reducer') out.needle[e.sym] = p[e.nodes[1]] >= (e.pset ?? 0) - 1 ? 1 : 0
     if (e.kind === 'throttle') out.needle[e.sym] = Math.min(1, (e.oneWay ? Math.max(0, q) : Math.abs(q)) / 30)
     const dp = e.nodes.length >= 2 ? p[e.nodes[0]] - p[e.nodes[1]] : 0
     if (e.kind === 'pump') out.info[e.sym] = `Q = ${fmt(-q)} L/min\n${fmt(p[e.nodes[0]], 0)} bar · ${fmt((-q * p[e.nodes[0]]) / 600)} kW`

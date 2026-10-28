@@ -422,7 +422,8 @@ function pressureValves(def: SymbolDef, ports: PortInfo[]): R {
     svg += path(`M${f(x0 - 6)} ${f(y)}V${f(y0 + S + 6)}H${f(x0 + S * 0.52)}V${f(y0 + S)}`, `fill="none" ${DASH}`) + line([x0 - 6, y], [x0, y])
   } else {
     // ouvert au repos : la flèche est dans l'axe des orifices ; le pilotage vient de l'aval
-    svg += line([x0 + 3, y], [x0 + S - 3, y]) + arrowHead([x0 + S - 3, y], [x0 + 3, y])
+    // la flèche glisse hors de l'axe quand la pression aval atteint le tarage et que le réducteur se referme (variable --rc)
+    svg += `<g style="transform:translateY(calc(var(--rc,0) * ${f(y0 + S - 3.5 - y)}px));transition:transform .3s ease-out">` + line([x0 + 3, y], [x0 + S - 3, y]) + arrowHead([x0 + S - 3, y], [x0 + 3, y]) + '</g>'
     svg += path(`M${f(x0 + S + 6)} ${f(y)}V${f(y0 + S + 6)}H${f(x0 + S * 0.48)}V${f(y0 + S)}`, `fill="none" ${DASH}`)
   }
   return { svg }
