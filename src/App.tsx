@@ -1,14 +1,11 @@
-import { ExplainCard } from './ExplainCard'
-import MachineView from './MachineView'
+
 import { clearReview, restoreHidden, hasKept, isDeleted, isHidden, isKept, isRedo, mark as markReview, reviewCounts, reviewExport, reviewListeners } from './review'
 import { matchesQuery } from './searchTerms'
 import { nextFluidLabel, pilotNumbers, renumberFluid, solenoidNames } from './fluidNames'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createElement, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType } from 'react'
 import { addVersion, loadVersions, removeVersion, type Version } from './versions'
 import Combo from './Combo'
-import { GuidedList, GuidedPanel } from './GuidedPanel'
-import { GUIDED, guidedById } from './guidedData'
-import PlcEditor from './PlcEditor'
+
 import { usePlcWin } from './PlcWindow'
 import { customExercise, type CustomExo } from './customEx'
 import type { GExercise } from './guided'
@@ -21,7 +18,7 @@ import { tr, type Key } from './i18n'
 import { PAPER_SIZE, symBBox, uid } from './geometry'
 import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
-import Feedback from './Feedback'
+
 import { bomRows, exportCsv, exportDxf, exportWiringCsv, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows, fileBase } from './exporters'
 import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticPlc, hydraulicMotor, hydraulicCylinder, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
@@ -70,6 +67,21 @@ function sanitize(d: Doc): Doc {
   const cur = clean(d)
   return d.pages ? { ...cur, pages: d.pages.map(clean) } : cur
 }
+
+/** Composant chargé à la demande : son code n'est téléchargé qu'à la première utilisation (démarrage plus rapide). */
+function lz<C extends ComponentType<any>>(load: () => Promise<{ default: C }>): (p: ComponentProps<C>) => ReturnType<typeof createElement> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const L = lazy(load) as unknown as ComponentType<any> // eslint-disable-line @typescript-eslint/no-explicit-any
+  return (p) => createElement(Suspense, { fallback: null }, createElement(L, p))
+}
+const ExplainCard = lz(() => import('./ExplainCard').then((m) => ({ default: m.ExplainCard })))
+const MachineView = lz(() => import('./MachineView'))
+const GuidedList = lz(() => import('./GuidedPanel').then((m) => ({ default: m.GuidedList })))
+const GuidedPanel = lz(() => import('./GuidedPanel').then((m) => ({ default: m.GuidedPanel })))
+const PlcEditor = lz(() => import('./PlcEditor'))
+const Feedback = lz(() => import('./Feedback'))
+/** Les 130 Ko d'exercices guidés ne sont chargés que si on ouvre la liste, un exercice ou un lien d'exercice. */
+let guidedMod: typeof import('./guidedData') | null = null
+const loadGuided = () => import('./guidedData').then((m) => (guidedMod = m))
 
 const libListeners = new Set<() => void>()
 /** Charge la bibliothèque étendue si le document utilise des symboles qu'elle seule connaît (ancien fichier, schéma partagé…). */
@@ -235,7 +247,12 @@ function Editor() {
     fetch('/api/exos').then((r) => (r.ok ? r.json() : { items: [] })).then((d: { items?: CustomExo[] }) => setCustomRaw(Array.isArray(d.items) ? d.items : [])).catch(() => { /* hors ligne ou développement : aucun exercice publié */ })
   }, [])
   const customs = useMemo(() => customRaw.flatMap((x) => { try { return [customExercise(x)] } catch { return [] } }), [customRaw])
-  const allGuided = useMemo(() => [...GUIDED, ...customs], [customs])
+  const [guidedTick, setGuidedTick] = useState(0)
+  useEffect(() => {
+    if (guidedMod || !(showGuided || guidedId)) return
+    loadGuided().then(() => setGuidedTick((n) => n + 1))
+  }, [showGuided, guidedId])
+  const allGuided = useMemo(() => [...(guidedMod?.GUIDED ?? []), ...customs], [customs, guidedTick]) // eslint-disable-line react-hooks/exhaustive-deps
   const guidedEx = guidedId ? allGuided.find((g) => g.id === guidedId) : undefined
   const chooseGuided = (id: string | null) => { setGuidedId(id); try { if (id) localStorage.setItem('albertschema.guided', id); else localStorage.removeItem('albertschema.guided') } catch { /* ignoré */ } }
   // visite guidée : proposée une seule fois, sur une feuille vierge, et relançable depuis l'aide (?)
@@ -432,11 +449,14 @@ function Editor() {
     const exo = q.get('exo'), code = q.get('classe')
     if (!exo && !code) return
     if (code && /^[A-Za-z0-9-]{3,24}$/.test(code)) setClass(code, classInfo.pseudo)
-    const ex = exo ? guidedById(exo) : undefined
     history.replaceState(null, '', location.pathname + location.hash)
-    if (ex) startGuided(ex)
-    else if (exo?.startsWith('u-')) pendingExo.current = exo // exercice publié : on attend sa réception
-    else if (code) setShowGuided(true)
+    const go = (ex: GExercise | undefined) => {
+      if (ex) startGuided(ex)
+      else if (exo?.startsWith('u-')) pendingExo.current = exo // exercice publié : on attend sa réception
+      else if (code) setShowGuided(true)
+    }
+    if (exo) loadGuided().then((m) => { setGuidedTick((n) => n + 1); go(m.guidedById(exo)) })
+    else go(undefined)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const id = pendingExo.current
@@ -2247,10 +2267,17 @@ export default function App() {
   useEffect(() => {
     loadLibrary()
       .then(async () => {
-        // bibliothèque étendue : activée par l'utilisateur, ou nécessaire à l'ouvrage en cours
+        // l'éditeur s'ouvre dès la bibliothèque de base chargée ; la bibliothèque étendue (1,9 Mo) ne bloque l'écran que si
+        // l'ouvrage en cours en a besoin, sinon elle arrive en arrière-plan et la palette se met à jour
         try {
           const raw = JSON.parse(localStorage.getItem(STORE) || 'null') as Doc | null
-          if (localStorage.getItem('albertschema.ext') !== '0' || hasKept() || (raw && needsExtended([raw, ...(raw.pages ?? [])]))) await loadExtended()
+          const wanted = localStorage.getItem('albertschema.ext') !== '0' || hasKept()
+          if (hasKept() || (raw && needsExtended([raw, ...(raw.pages ?? [])]))) await loadExtended()
+          else if (wanted) {
+            const later = () => loadExtended().then(() => libListeners.forEach((f) => f()), () => {})
+            if ('requestIdleCallback' in window) window.requestIdleCallback(() => { later() }, { timeout: 3000 })
+            else setTimeout(later, 800)
+          }
         } catch { /* stockage indisponible */ }
       })
       .then(() => setState('ready'), () => setState('error'))

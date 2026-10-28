@@ -3,19 +3,74 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Albert Duplantin Studio</title>
-    <meta name="description" content="Éditeur gratuit en ligne de schémas électriques, pneumatiques et hydrauliques : bibliothèque de plus de 1 600 symboles, simulation des circuits de commande, export SVG/PNG/PDF et nomenclature. Aucun compte, vos schémas restent sur votre appareil." />
+    <title>Albert Schema Studio : schémas électriques, pneumatiques, hydrauliques</title>
+    <meta name="description" content="Éditeur et simulateur gratuit de schémas électriques, pneumatiques et hydrauliques : plus de 1 600 symboles, simulation des circuits (bar, L/min, tr/min), exercices guidés, export SVG, PNG, PDF et nomenclature. Sans compte, vos schémas restent sur votre appareil." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://albert-schema.vercel.app/" />
     <meta name="theme-color" content="#0b6bcb" />
+    <meta name="application-name" content="Albert Schema Studio" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Albert Duplantin Studio" />
-    <meta property="og:description" content="Dessinez et simulez vos schémas électriques, pneumatiques et hydrauliques dans le navigateur. Gratuit, sans compte." />
+    <meta property="og:site_name" content="Albert Schema Studio" />
+    <meta property="og:url" content="https://albert-schema.vercel.app/" />
+    <meta property="og:title" content="Albert Schema Studio : schémas électriques, pneumatiques, hydrauliques" />
+    <meta property="og:description" content="Dessinez et simulez vos schémas électriques, pneumatiques et hydrauliques dans le navigateur. Gratuit, sans compte, avec exercices guidés." />
     <meta property="og:locale" content="fr_FR" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:image" content="https://albert-schema.vercel.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Albert Schema Studio : un schéma hydraulique avec distributeur, moteur et limiteurs de débit" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Albert Schema Studio : schémas électriques, pneumatiques, hydrauliques" />
+    <meta name="twitter:description" content="Éditeur et simulateur gratuit de schémas électriques, pneumatiques et hydrauliques, dans le navigateur." />
+    <meta name="twitter:image" content="https://albert-schema.vercel.app/og.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <!-- chargement parallèle de ce dont le premier affichage a besoin : symboles de base et polices de l'interface -->
+    <link rel="preload" href="./library-core.json?v=__BUILD__" as="fetch" crossorigin="anonymous" />
+    <link rel="preload" href="./fonts/public-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href="./fonts/saira-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Albert Schema Studio",
+        "url": "https://albert-schema.vercel.app/",
+        "applicationCategory": "DesignApplication",
+        "applicationSubCategory": "Éditeur et simulateur de schémas électriques, pneumatiques et hydrauliques",
+        "operatingSystem": "Tout système avec un navigateur web",
+        "inLanguage": ["fr", "en"],
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "audience": { "@type": "EducationalAudience", "educationalRole": "teacher" },
+        "description": "Éditeur gratuit de schémas électriques, pneumatiques et hydrauliques avec simulation des circuits, exercices guidés et export SVG, PNG, PDF.",
+        "featureList": [
+          "Plus de 1 600 symboles électriques, pneumatiques et hydrauliques",
+          "Simulation des circuits de commande et de puissance",
+          "Simulation hydraulique chiffrée : pressions, débits, vitesses, couples et efforts",
+          "Exercices guidés et mode classe pour les enseignants",
+          "Export SVG, PNG, PDF, DXF et nomenclature",
+          "Fonctionne dans le navigateur et hors connexion, sans compte"
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- contenu lisible par les moteurs de recherche avant l'exécution de l'application ; remplacé dès son démarrage -->
+      <main style="font-family: system-ui, sans-serif; max-width: 46rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5">
+        <h1>Albert Schema Studio : éditeur et simulateur de schémas électriques, pneumatiques et hydrauliques</h1>
+        <p>Dessinez vos schémas dans le navigateur, simulez-les et exportez-les. Gratuit, sans compte : vos schémas restent sur votre appareil.</p>
+        <ul>
+          <li>Plus de 1 600 symboles normalisés : électricité (CEI 60617), pneumatique et hydraulique (ISO 1219).</li>
+          <li>Simulation des circuits : contacteurs, relais, automates, distributeurs, vérins, moteurs hydrauliques, limiteurs de pression et de débit.</li>
+          <li>Hydraulique chiffrée : pression en bar, débit en L/min, vitesse des moteurs et des vérins, couple et effort.</li>
+          <li>Exercices guidés et mode classe pour l'enseignement (STI2D, électrotechnique, automatisme, hydraulique).</li>
+          <li>Export SVG, PNG, PDF, DXF, nomenclature et liste de câblage.</li>
+        </ul>
+        <p>Albert Schema Studio requires JavaScript. It is a free online editor and simulator for electrical, pneumatic and hydraulic schematics.</p>
+      </main>
+    </div>
     <noscript>Albert Schema Studio nécessite JavaScript pour fonctionner. / Albert Schema Studio requires JavaScript.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>

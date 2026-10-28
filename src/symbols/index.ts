@@ -29,7 +29,8 @@ export let extendedLoaded = false
 export const extendedAvailable = !import.meta.env?.VITE_NO_EXTENDED
 
 const fetchLib = (file: string) =>
-  fetch((import.meta.env?.BASE_URL ?? '/') + file).then((r) => {
+  // ?v= : l'adresse change à chaque déploiement, le navigateur peut donc garder le fichier en cache sans durée limite
+  fetch((import.meta.env?.BASE_URL ?? '/') + file + '?v=' + (typeof __BUILD__ === 'string' ? __BUILD__ : 'dev')).then((r) => {
     if (!r.ok) throw new Error(file + ' ' + r.status)
     return r.json() as Promise<Library>
   })
