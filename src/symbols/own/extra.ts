@@ -41,7 +41,7 @@ export const extraSymbols: SymbolDef[] = [
   multi('commutateur_2no', [false, false], 'rotate', 'toggle', 'Commutateur à tête tournante, 2 contacts à fermeture (2 NO)', 'Rotary switch, 2 make contacts (2 NO)'),
   multi('commutateur_2nf', [true, true], 'rotate', 'toggle', 'Commutateur à tête tournante, 2 contacts à ouverture (2 NF)', 'Rotary switch, 2 break contacts (2 NC)'),
   multi('commutateur_no_nf', [false, true], 'rotate', 'toggle', 'Commutateur à tête tournante, 1 contact à fermeture + 1 à ouverture (1 NO + 1 NF)', 'Rotary switch, 1 make + 1 break contact (1 NO + 1 NC)'),
-  multi('commutateur_3pos_no_nf', [false, true], 'key', 'toggle', 'Commutateur verrouillable à 3 positions (1-0-2), 1 NO (position 1) + 1 NF (position 2), centre sans contact actionné', 'Lockable 3-position switch (1-0-2), 1 NO (position 1) + 1 NC (position 2), centre actuates no contact', [1, 2]),
+  multi('commutateur_3pos_2no', [false, false], 'key', 'toggle', 'Commutateur verrouillable à 3 positions (1-0-2), 2 NO (un par position), centre sans contact actionné', 'Lockable 3-position switch (1-0-2), 2 NO (one per position), centre actuates no contact', [1, 2]),
   {
     id: ILS_ID,
     domain: 'electrical',

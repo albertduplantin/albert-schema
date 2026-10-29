@@ -765,14 +765,14 @@ function rig(doc: any) {
     check(`poussoir ${t} : repos puis appuyé`, [run(pbId(t), false), run(pbId(t), true)], w)
     check(`commutateur ${t.replace('poussoir', 'commutateur')} : position 0 puis 1`, [run(rotId(t.replace('poussoir', 'commutateur')), false), run(rotId(t.replace('poussoir', 'commutateur')), true)], w)
   }
-  // commutateur verrouillable 1-0-2 : le NO se ferme en position 1, le NF s'ouvre en position 2, rien n'est actionné au centre
+  // commutateur verrouillable 1-0-2 à 2 NO : le premier se ferme en position 1, le second en position 2, aucun au centre
   {
-    const id = rotId('commutateur_3pos_no_nf')
+    const id = rotId('commutateur_3pos_2no')
     const d = T.build(base, [['src', 'sim-src1', 100, 30], ['x', id, 100, 100, 'S1'], ['h1', LAMP, 100, 240, 'H1'], ['h2', LAMP, 260, 240, 'H2']],
       [['src', 'a', 'x', 't0'], ['src', 'a', 'x', 't2'], ['x', 't1', 'h1', 't0'], ['x', 't3', 'h2', 't0'], ['h1', 't1', 'src', 'b'], ['h2', 't1', 'src', 'b']])
     const g = rig(d), x = d.symbols.find((v: any) => v.label === 'S1').id
     const st = (t: string[]) => { const r = g.run([], t); return [g.on(r, 'H1'), g.on(r, 'H2')] }
-    check('commutateur 3 positions 1 NO + 1 NF : centre, position 1, position 2', [st([]), st([x]), st([x + ':2'])], [[false, true], [true, true], [false, false]])
+    check('commutateur 3 positions 2 NO : centre, position 1, position 2', [st([]), st([x]), st([x + ':2'])], [[false, false], [true, false], [false, true]])
   }
   const terms = effectiveTerms([{ id: 'a', defId: pbId('poussoir_no_nf'), x: 0, y: 0, rot: 0 } as any], SYMBOL_MAP).a
   check('poussoir 1 NO + 1 NF : bornes 13-14 et 21-22', [terms.t0, terms.t1, terms.t2, terms.t3], ['13', '14', '21', '22'])
