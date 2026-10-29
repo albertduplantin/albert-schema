@@ -3,6 +3,7 @@
 //   GET  /api/admin?action=list            -> { total, items: [{ …retour, status, note }] }   (300 plus récents)
 //   GET  /api/admin?action=doc&id=<id>     -> schéma joint (JSON brut)
 //   POST /api/admin { action: 'status' | 'note' | 'delete', id, status?, note? }
+//   POST /api/admin { action: 'mailed', id, mailed?: false }   -> repère « auteur prévenu par e-mail » (date), retiré avec mailed: false
 //   GET  /api/admin?action=examples        -> { items: [exemples enregistrés, sans le schéma], hidden: [clés d'exemples intégrés masqués] }
 //   GET  /api/admin?action=exos            -> { items: [exercices guidés publiés, sans le schéma] }
 //   POST /api/admin { action: 'xo-save', id?, domain, level, minutes, order, title, summary, brief:[…], expect:[…], doc } | { action: 'xo-delete', id }
@@ -123,7 +124,7 @@ export default async function handler(req, res) {
       for (const row of rows ?? []) {
         try {
           const e = JSON.parse(row)
-          items.push({ ...e, status: state[e.id]?.status ?? 'new', note: state[e.id]?.note ?? '' })
+          items.push({ ...e, status: state[e.id]?.status ?? 'new', note: state[e.id]?.note ?? '', ...(state[e.id]?.mailed ? { mailed: state[e.id].mailed } : {}) })
         } catch { /* entrée illisible ignorée */ }
       }
       res.status(200).json({ total: Number(total ?? items.length), items })
@@ -250,6 +251,15 @@ export default async function handler(req, res) {
       if (body.action === 'status' && STATUSES.has(body.status)) {
         await redis([['HSET', STATUS, id, JSON.stringify({ ...prev, status: body.status })]])
         res.status(200).json({ ok: true })
+        return
+      }
+      if (body.action === 'mailed') {
+        // l'auteur du retour a été prévenu par e-mail (date), ou le repère est retiré
+        const next = { ...prev }
+        if (body.mailed === false) delete next.mailed
+        else next.mailed = new Date().toISOString()
+        await redis([['HSET', STATUS, id, JSON.stringify(next)]])
+        res.status(200).json({ ok: true, mailed: next.mailed ?? null })
         return
       }
       if (body.action === 'note' && typeof body.note === 'string') {

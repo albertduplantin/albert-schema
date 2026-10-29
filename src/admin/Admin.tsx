@@ -16,6 +16,8 @@ interface Item {
   hasDoc: boolean
   status: Status
   note: string
+  /** date à laquelle l'auteur a été prévenu par e-mail */
+  mailed?: string
 }
 
 const KEY = 'albertschema.admin'
@@ -52,6 +54,23 @@ function download(name: string, blob: Blob) {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
+/** Message prêt à envoyer à l'auteur d'un retour (dans sa langue), pour le prévenir que sa demande est prise en compte ou traitée. */
+function reply(it: Item, kind: 'seen' | 'done'): { subject: string; body: string } {
+  const en = it.meta.lang === 'en'
+  const what = it.type === 'bug' ? (en ? 'bug report' : 'signalement') : it.type === 'idea' ? (en ? 'suggestion' : 'demande d’amélioration') : (en ? 'question' : 'question')
+  const link = 'https://albert-schema.vercel.app'
+  const subject = (en ? 'Re: ' : 'Re : ') + it.title
+  const line = en
+    ? kind === 'done'
+      ? `Your ${what} “${it.title}” has been dealt with${it.type === 'bug' ? ': the fix is now online' : ': it is now available'}. You may need to reload the page (Ctrl+F5) to get the latest version.`
+      : `Thank you: your ${what} “${it.title}” has been received and taken into account. I will let you know when it is done.`
+    : kind === 'done'
+      ? `Votre ${what} « ${it.title} » a été traité${it.type === 'bug' ? ' : la correction est en ligne' : ' : c’est disponible'}. Il faudra peut-être recharger la page (Ctrl+F5) pour avoir la dernière version.`
+      : `Merci : votre ${what} « ${it.title} » a bien été reçu et pris en compte. Je vous préviendrai quand ce sera fait.`
+  const body = en ? `Hello,\n\n${line}\n\n${link}\n\nBest regards,\nAlbert Schema Studio` : `Bonjour,\n\n${line}\n\n${link}\n\nCordialement,\nAlbert Schema Studio`
+  return { subject, body }
 }
 
 const when = (ts: string) => new Date(ts).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
@@ -128,6 +147,14 @@ export default function Admin() {
     try { await api(token, '', body) } catch { setError('Action impossible (connexion ou session expirée).') }
   }
   const setItemStatus = (it: Item, s: Status) => { patch(it.id, { status: s }); void act({ action: 'status', id: it.id, status: s }) }
+  /** Ouvre la messagerie avec un message prêt, note la date, et marque le retour « Traité » si c'est le cas. */
+  const notify = (it: Item, kind: 'seen' | 'done') => {
+    const m = reply(it, kind)
+    window.location.href = `mailto:${it.email}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`
+    patch(it.id, { mailed: new Date().toISOString() })
+    void act({ action: 'mailed', id: it.id })
+    if (kind === 'done' && it.status !== 'done') setItemStatus(it, 'done')
+  }
   const toggle = (it: Item) => {
     const next = open === it.id ? null : it.id
     setOpen(next)
@@ -213,6 +240,7 @@ export default function Admin() {
               <span className={'badge ' + it.type}>{KIND_LABEL[it.type]}</span>
               <span className="title">{it.title}</span>
               {it.hasDoc && <span className="mini" title="Schéma joint">📎</span>}
+              {it.mailed && <span className="mini" title={'Auteur prévenu par e-mail le ' + when(it.mailed)}>✉</span>}
               <span className={'state ' + it.status}>{STATUS_LABEL[it.status]}</span>
               <time>{when(it.ts)}</time>
             </button>
@@ -235,6 +263,13 @@ export default function Admin() {
                       {(Object.keys(STATUS_LABEL) as Status[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                     </select>
                   </label>
+                  {it.email ? (
+                    <>
+                      <button onClick={() => notify(it, 'seen')} title="Ouvre votre messagerie avec un message prêt à envoyer">✉ Prévenir : pris en compte</button>
+                      <button onClick={() => notify(it, 'done')} title="Ouvre votre messagerie avec un message prêt à envoyer ; passe le retour en « Traité »">✉ Prévenir : traité</button>
+                    </>
+                  ) : <span className="muted">Pas d’adresse e-mail : impossible de prévenir l’auteur.</span>}
+                  {it.mailed && <span className="muted">✉ prévenu le {when(it.mailed)} <button className="linkish" onClick={() => { patch(it.id, { mailed: undefined }); void act({ action: 'mailed', id: it.id, mailed: false }) }}>retirer</button></span>}
                   {it.hasDoc && <button onClick={() => void downloadDoc(it)}>Télécharger le schéma</button>}
                   <span className="grow" />
                   <button className="danger" onClick={() => remove(it)}>Supprimer</button>

@@ -71,3 +71,5 @@ a { color: var(--accent); }
 .exform label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
 .exform .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 640px) { .exform .grid2 { grid-template-columns: 1fr; } }
+
+.linkish { background: none; border: 0; padding: 0; text-decoration: underline; color: inherit; cursor: pointer; font-size: inherit; }
