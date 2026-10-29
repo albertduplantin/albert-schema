@@ -57,14 +57,16 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
   const hinge: Pt = [bot[0], hingeY]
   const closed: Pt = [top[0], tipY]
   // contact NF : au repos la lame touche l'extrémité de la barre ; actionné, elle s'écarte vers la position ouverte
-  const rest: Pt = mark === 'nc' ? [top[0] - 4, tipY] : open
+  // (sens normalisé : la barre part vers la droite du conducteur amont et la lame, articulée en bas, s'appuie dessus en penchant à droite)
+  const away: Pt = [top[0] + 4 + span * 0.3, tipY]
+  const rest: Pt = mark === 'nc' ? [top[0] + 4, tipY] : open
   const rot = mark === 'nc'
-    ? angle([rest[0] - hinge[0], rest[1] - hinge[1]], [open[0] - hinge[0], open[1] - hinge[1]])
+    ? angle([rest[0] - hinge[0], rest[1] - hinge[1]], [away[0] - hinge[0], away[1] - hinge[1]])
     : angle([open[0] - hinge[0], open[1] - hinge[1]], [closed[0] - hinge[0], closed[1] - hinge[1]])
   let svg = line(top, closed) + line(bot, hinge)
   const extra: string[] = []
   const extraPts: Pt[] = []
-  if (mark === 'nc') svg += line([top[0] - 4, tipY], [top[0] + 4, tipY])
+  if (mark === 'nc') svg += line([top[0], tipY], [top[0] + 4, tipY])
   if (mark === 'breaker') {
     const y = tipY - 5
     svg += line([top[0] - 3, y - 3], [top[0] + 3, y + 3]) + line([top[0] - 3, y + 3], [top[0] + 3, y - 3])
@@ -83,7 +85,7 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
     svg += path(`M${f(top[0])} ${f(tipY - 2 * r)}A${r} ${r} 0 0 0 ${f(top[0])} ${f(tipY)}`, 'fill="none"')
   }
   svg += blade(n, hinge, rest, extra, extraPts)
-  const alt: Pt = mark === 'nc' ? open : closed
+  const alt: Pt = mark === 'nc' ? away : closed
   return { svg, rot, mid: [(hinge[0] + rest[0]) / 2, (hinge[1] + rest[1]) / 2], midClosed: [(hinge[0] + alt[0]) / 2, (hinge[1] + alt[1]) / 2], nc: mark === 'nc' }
 }
 
