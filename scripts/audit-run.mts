@@ -40,6 +40,7 @@ for (const s of els) {
         if (!run(d).energized.has(lampId) || run(d, [], [sw]).energized.has(lampId)) fails.push(`${s.name.fr} (sélecteur à ${m.sel.outs.length} positions) : position 1 / position 2 incorrectes`)
         continue
       }
+      if (m.posPoles) continue // sélecteur 1-0-2 à contacts indépendants : testé dans test-sim
       const useChange = !m.poles.length && m.changeover?.length
       const [a, b] = useChange ? [m.changeover[0][0], m.changeover[0][1]] : m.poles[0]
       const specs: any[] = [['src', 'sim-src1', 100, 30], ['x', s.id, 100, 100, m.ctl === 'coil' ? 'KM1' : 'S1'], ['h', LAMP, 100, 240, 'H1']]

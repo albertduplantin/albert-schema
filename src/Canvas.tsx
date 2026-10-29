@@ -38,7 +38,8 @@ function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | nul
   const conducting = model.changeover?.length ? actuated : model.nc ? !actuated : actuated
   const vars: Record<string, string> = { '--hs': actuated ? '1' : '0' }
   model.blades.forEach((b, n) => {
-    const here = model.ncPoles && !model.changeover?.length ? (model.ncPoles[n] ? !actuated : actuated) : conducting
+    const act = model.posPoles ? sim.pos3?.[id] === model.posPoles[n] : actuated
+    const here = model.ncPoles && !model.changeover?.length ? (model.ncPoles[n] ? !act : act) : conducting
     vars['--b' + n] = (here === b.closed ? 0 : b.rot) + 'deg'
   })
   return vars as React.CSSProperties
@@ -890,7 +891,7 @@ export default function Canvas(p: Props) {
             const model = def.sim
             const lit = p.sim?.energized.has(s.id)
             const closedState = p.sim && model?.k === 'switch' && model.ctl !== 'fixed'
-              ? (model.changeover?.length ? p.sim.closed[s.id] : model.ncPoles ? model.ncPoles.some((n) => n ? !p.sim!.closed[s.id] : p.sim!.closed[s.id]) : model.nc ? !p.sim.closed[s.id] : p.sim.closed[s.id]) // contact conducteur
+              ? (model.changeover?.length ? p.sim.closed[s.id] : model.posPoles ? model.posPoles.some((q, i) => (p.sim!.pos3?.[s.id] === q) !== !!model.ncPoles?.[i]) : model.ncPoles ? model.ncPoles.some((n) => n ? !p.sim!.closed[s.id] : p.sim!.closed[s.id]) : model.nc ? !p.sim.closed[s.id] : p.sim.closed[s.id]) // contact conducteur
               : undefined
             return (
               <g key={s.id}>

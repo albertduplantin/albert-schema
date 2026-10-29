@@ -29,6 +29,8 @@ export type SimModel =
       delay?: TimerKind
       /** sélecteur à trois positions (1-0-2) : centre ouvert ; position 1 : commun–repos, position 2 : commun–travail */
       pos3?: boolean
+      /** sélecteur 1-0-2 à contacts indépendants : position (1 ou 2) qui actionne chaque pôle de `poles` ; au centre (0) aucun n'est actionné */
+      posPoles?: number[]
       /** sélecteur à N positions (commun vers l'une des sorties) : position 1 par défaut, un clic passe à la suivante */
       sel?: { com: string; outs: string[] }
       /** lames animables : angle de bascule (degrés) et état dessiné (fermé = touche le contact fixe) */

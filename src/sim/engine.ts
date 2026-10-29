@@ -250,6 +250,17 @@ function solve(x: Ctx) {
       link(key(s.id, m.sel.com), key(s.id, m.sel.outs[p - 1]))
       continue
     }
+    if (m.pos3 && m.posPoles) {
+      const pos = x.inp.toggled.has(s.id + ':2') ? 2 : x.inp.toggled.has(s.id) ? 1 : 0
+      pos3[s.id] = pos
+      closed[s.id] = pos > 0
+      if (x.inp.cut?.has('stuck:' + s.id)) { for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b)); continue }
+      m.poles.forEach(([a, b], i) => {
+        const on = pos === m.posPoles![i]
+        if ((m.ncPoles?.[i] ?? m.nc) ? !on : on) link(key(s.id, a), key(s.id, b))
+      })
+      continue
+    }
     if (m.pos3 && m.changeover?.length) {
       const p1 = x.inp.toggled.has(s.id), p2 = x.inp.toggled.has(s.id + ':2')
       pos3[s.id] = p2 ? 2 : p1 ? 1 : 0
