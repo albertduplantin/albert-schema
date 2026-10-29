@@ -52,21 +52,20 @@ function magnetic3(tail: string, pnp: boolean): SymbolDef {
       ? { fr: 'Capteur magnétique de vérin, 3 fils PNP (NO)', en: 'Cylinder magnetic sensor, 3-wire PNP (NO)' }
       : { fr: 'Capteur magnétique de vérin, 3 fils NPN (NO)', en: 'Cylinder magnetic sensor, 3-wire NPN (NO)' },
     std: 'CEI 60617',
-    w: 60,
-    h: 90,
-    // contact en bas (borne 1 ou 3 à gauche, sortie 4 à droite), borne d'alimentation de l'électronique au sommet du losange
+    w: 80,
+    h: 70,
+    // boîtier à deux cellules : détecteur (losange, U de l'aimant) à gauche, étage de sortie (contact à fermeture) à droite
     ports: [
-      { id: pnp ? 't0' : 't1', x: 0, y: 80, dir: 'left', label: pnp ? '1' : '3' },
-      { id: pnp ? 't1' : 't0', x: 30, y: 0, dir: 'up', label: pnp ? '3' : '1' },
-      { id: 't2', x: 60, y: 80, dir: 'right', label: '4' },
+      { id: pnp ? 't1' : 't0', x: 20, y: 0, dir: 'up', label: pnp ? '3' : '1' },
+      { id: pnp ? 't0' : 't1', x: 60, y: 0, dir: 'up', label: pnp ? '1' : '3' },
+      { id: 't2', x: 60, y: 70, dir: 'down', label: '4' },
     ],
-    // losange coupé par deux cordes (détecteur de proximité), U de l'approche de l'aimant, contact à fermeture
     svg:
-      line([30, 0], [30, 3]) +
-      diamond(30, 25, 22, 'fill="none"') + line([19, 14], [19, 36]) + line([41, 14], [41, 36]) +
-      text(30, 28, pnp ? 'PNP' : 'NPN', 7, 'font-weight="700"') +
-      '<path d="M22 53V63H38V53" fill="none" stroke-width="3"/>' +
-      line([0, 80], [18, 80]) + line([18, 88], [40, 80]) + line([40, 80], [60, 80]),
+      rect(0, 10, 80, 50, 'fill="none"') + line([40, 10], [40, 60]) +
+      line([20, 0], [20, 20]) + diamond(20, 32, 12, 'fill="none"') + line([14, 27], [14, 37]) + line([26, 27], [26, 37]) +
+      '<path d="M14 49V54H26V49" fill="none" stroke-width="2"/>' +
+      line([60, 0], [60, 24]) + line([60, 46], [60, 70]) + line([60, 46], [68, 26]) +
+      text(70, 56, pnp ? 'PNP' : 'NPN', 7, 'font-weight="700"'),
     sim: { k: 'switch', poles: [[pnp ? 't0' : 't1', 't2']], ctl: 'toggle', nc: false },
   } as SymbolDef
 }
