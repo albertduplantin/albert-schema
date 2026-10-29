@@ -72,6 +72,39 @@ check('auteur prévenu : date enregistrée, statut et note conservés', [!!maile
 await call('POST', { auth: SECRET, body: { action: 'mailed', id: 'bbbb2222', mailed: false } })
 r = await call('GET', { auth: SECRET })
 check('repère « prévenu » retiré', r.body.items.find(i => i.id === 'bbbb2222').mailed, undefined)
+// ── envoi automatique (faux service Resend)
+const sentMails = []
+const mailSrv = http.createServer((q, s) => {
+  let b = ''
+  q.on('data', c => (b += c))
+  q.on('end', () => { sentMails.push({ auth: q.headers.authorization, ...JSON.parse(b) }); s.statusCode = process.env.FAKE_MAIL_FAIL ? 422 : 200; s.end('{}') })
+}).listen(0)
+await new Promise(ok => mailSrv.once('listening', ok))
+let got
+process.env.RESEND_API_URL = 'http://127.0.0.1:' + mailSrv.address().port
+db.list.push(JSON.stringify({ id: 'dddd4444', ts: '2026-10-22T10:00:00.000Z', type: 'bug', title: 'Bug quatre', message: 'm', email: 'auteur@example.org', meta: { lang: 'fr' }, hasDoc: false }))
+r = await call('POST', { auth: SECRET, body: { action: 'send', id: 'dddd4444', kind: 'done' } })
+check('envoi sans clé Resend -> 503', r.code, 503)
+process.env.RESEND_API_KEY = 're_test'
+r = await call('POST', { auth: SECRET, body: { action: 'send', id: 'aaaa1111', kind: 'seen' } })
+check('retour sans adresse -> 422, rien envoyé', [r.code, sentMails.length], [422, 0])
+process.env.FAKE_MAIL_FAIL = '1'
+r = await call('POST', { auth: SECRET, body: { action: 'send', id: 'dddd4444', kind: 'done' } })
+got = await call('GET', { auth: SECRET })
+check('service d’envoi qui refuse -> 502, pas de repère « prévenu »', [r.code, got.body.items.find(i => i.id === 'dddd4444').mailed], [502, undefined])
+delete process.env.FAKE_MAIL_FAIL
+sentMails.length = 0
+r = await call('POST', { auth: SECRET, body: { action: 'send', id: 'dddd4444', kind: 'done' } })
+got = await call('GET', { auth: SECRET })
+const sent4 = got.body.items.find(i => i.id === 'dddd4444')
+check('envoi réussi : 200, repère « prévenu » et statut « traité »', [r.code, !!sent4.mailed, sent4.status], [200, true, 'done'])
+check('e-mail : destinataire, réponse, expéditeur, clé', [sentMails[0].to, sentMails[0].reply_to, sentMails[0].from.includes('@mail.albertduplantin.win'), sentMails[0].auth], [['auteur@example.org'], 'topinambour124@gmail.com', true, 'Bearer re_test'])
+check('e-mail : sujet et texte en français', [sentMails[0].subject, sentMails[0].text.includes('a été traité')], ['Re : Bug quatre', true])
+r = await call('POST', { auth: SECRET, body: { action: 'send', id: 'dddd4444', kind: 'autre' } })
+check('type d’envoi inconnu -> 400', r.code, 400)
+mailSrv.closeAllConnections?.(); mailSrv.close()
+db.list = db.list.filter(l => !l.includes('dddd4444')); delete db.hash.dddd4444
+delete process.env.RESEND_API_KEY
 r = await call('POST', { auth: SECRET, body: { action: 'status', id: 'bbbb2222', status: 'invalide' } })
 check('statut inconnu -> 400', r.code, 400)
 r = await call('POST', { auth: SECRET, body: { action: 'note', id: 'bbbb2222', note: 'x'.repeat(5000) } })

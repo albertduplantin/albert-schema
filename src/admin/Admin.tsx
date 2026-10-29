@@ -155,6 +155,20 @@ export default function Admin() {
     void act({ action: 'mailed', id: it.id })
     if (kind === 'done' && it.status !== 'done') setItemStatus(it, 'done')
   }
+  /** Envoie le message à l'auteur depuis le serveur ; sans service de messagerie configuré, retombe sur la messagerie de l'ordinateur. */
+  const send = async (it: Item, kind: 'seen' | 'done') => {
+    if (!confirm(`Envoyer à ${it.email} : « ${kind === 'done' ? 'traité' : 'pris en compte'} » ?`)) return
+    try {
+      const r = await api(token, '', { action: 'send', id: it.id, kind })
+      const d = (await r.json()) as { mailed?: string }
+      patch(it.id, { mailed: d.mailed ?? new Date().toISOString(), ...(kind === 'done' ? { status: 'done' as Status } : {}) })
+      setError('')
+    } catch (e) {
+      const s = e instanceof ApiError ? e.status : 0
+      if (s === 503) { if (confirm('L’envoi automatique n’est pas configuré. Ouvrir votre messagerie à la place ?')) notify(it, kind) }
+      else setError(s === 502 ? 'Le service d’envoi a refusé le message : rien n’a été envoyé.' : 'Envoi impossible : rien n’a été envoyé.')
+    }
+  }
   const toggle = (it: Item) => {
     const next = open === it.id ? null : it.id
     setOpen(next)
@@ -265,8 +279,9 @@ export default function Admin() {
                   </label>
                   {it.email ? (
                     <>
-                      <button onClick={() => notify(it, 'seen')} title="Ouvre votre messagerie avec un message prêt à envoyer">✉ Prévenir : pris en compte</button>
-                      <button onClick={() => notify(it, 'done')} title="Ouvre votre messagerie avec un message prêt à envoyer ; passe le retour en « Traité »">✉ Prévenir : traité</button>
+                      <button onClick={() => void send(it, 'seen')} title="Envoie un e-mail à l’auteur : sa demande est prise en compte">✉ Envoyer : pris en compte</button>
+                      <button onClick={() => void send(it, 'done')} title="Envoie un e-mail à l’auteur et passe le retour en « Traité »">✉ Envoyer : traité</button>
+                      <button className="linkish" onClick={() => notify(it, 'seen')} title="Ouvre votre messagerie avec un message prêt à envoyer">depuis ma messagerie</button>
                     </>
                   ) : <span className="muted">Pas d’adresse e-mail : impossible de prévenir l’auteur.</span>}
                   {it.mailed && <span className="muted">✉ prévenu le {when(it.mailed)} <button className="linkish" onClick={() => { patch(it.id, { mailed: undefined }); void act({ action: 'mailed', id: it.id, mailed: false }) }}>retirer</button></span>}

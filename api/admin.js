@@ -4,6 +4,8 @@
 //   GET  /api/admin?action=doc&id=<id>     -> schéma joint (JSON brut)
 //   POST /api/admin { action: 'status' | 'note' | 'delete', id, status?, note? }
 //   POST /api/admin { action: 'mailed', id, mailed?: false }   -> repère « auteur prévenu par e-mail » (date), retiré avec mailed: false
+//   POST /api/admin { action: 'send', id, kind: 'seen' | 'done' }   -> envoie à l'auteur (via Resend) « pris en compte » / « traité », puis pose le repère « prévenu »
+//        503 si RESEND_API_KEY manque, 422 si le retour n'a pas d'adresse, 502 si Resend refuse. Expéditeur : MAIL_FROM, réponses : MAIL_REPLY_TO.
 //   GET  /api/admin?action=examples        -> { items: [exemples enregistrés, sans le schéma], hidden: [clés d'exemples intégrés masqués] }
 //   GET  /api/admin?action=exos            -> { items: [exercices guidés publiés, sans le schéma] }
 //   POST /api/admin { action: 'xo-save', id?, domain, level, minutes, order, title, summary, brief:[…], expect:[…], doc } | { action: 'xo-delete', id }
@@ -43,6 +45,25 @@ async function redis(commands) {
   })
   if (!r.ok) throw new Error(`redis ${r.status}`)
   return r.json()
+}
+
+/** Message à l'auteur d'un retour, dans sa langue (même texte que le message prêt à envoyer de l'administration). */
+export function replyMail(it, kind) {
+  const en = it.meta?.lang === 'en'
+  const title = String(it.title ?? '')
+  const what = it.type === 'bug' ? (en ? 'bug report' : 'signalement') : it.type === 'idea' ? (en ? 'suggestion' : 'demande d’amélioration') : 'question'
+  const link = 'https://schema.albertduplantin.win'
+  const line = en
+    ? kind === 'done'
+      ? `Your ${what} “${title}” has been dealt with${it.type === 'bug' ? ': the fix is now online' : ': it is now available'}. You may need to reload the page (Ctrl+F5) to get the latest version.`
+      : `Thank you: your ${what} “${title}” has been received and taken into account. I will let you know when it is done.`
+    : kind === 'done'
+      ? `Votre ${what} « ${title} » a été traité${it.type === 'bug' ? ' : la correction est en ligne' : ' : c’est disponible'}. Il faudra peut-être recharger la page (Ctrl+F5) pour avoir la dernière version.`
+      : `Merci : votre ${what} « ${title} » a bien été reçu et pris en compte. Je vous préviendrai quand ce sera fait.`
+  return {
+    subject: (en ? 'Re: ' : 'Re : ') + title.replace(/\s+/g, ' '),
+    text: en ? `Hello,\n\n${line}\n\n${link}\n\nBest regards,\nAlbert Schema Studio` : `Bonjour,\n\n${line}\n\n${link}\n\nCordialement,\nAlbert Schema Studio`,
+  }
 }
 
 const digest = (s) => createHash('sha256').update(String(s)).digest()
@@ -260,6 +281,36 @@ export default async function handler(req, res) {
         else next.mailed = new Date().toISOString()
         await redis([['HSET', STATUS, id, JSON.stringify(next)]])
         res.status(200).json({ ok: true, mailed: next.mailed ?? null })
+        return
+      }
+      if (body.action === 'send' && (body.kind === 'seen' || body.kind === 'done')) {
+        const key = process.env.RESEND_API_KEY
+        if (!key) { res.status(503).json({ error: 'mail not configured' }); return }
+        const [{ result: rows }] = await redis([['LRANGE', LIST, 0, 999]])
+        let row = null
+        for (const r of rows ?? []) { try { const e = JSON.parse(r); if (e.id === id) { row = e; break } } catch { /* ligne illisible */ } }
+        if (!row) { res.status(404).json({ error: 'not found' }); return }
+        if (!row.email) { res.status(422).json({ error: 'no email' }); return }
+        const m = replyMail(row, body.kind)
+        let sent
+        try {
+          sent = await fetch(process.env.RESEND_API_URL || 'https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: process.env.MAIL_FROM || 'Albert Schema Studio <schema@mail.albertduplantin.win>',
+              to: [row.email],
+              reply_to: process.env.MAIL_REPLY_TO || 'topinambour124@gmail.com',
+              subject: m.subject,
+              text: m.text,
+            }),
+          })
+        } catch { sent = null }
+        if (!sent || !sent.ok) { res.status(502).json({ error: 'mail refused' }); return }
+        const next = { ...prev, mailed: new Date().toISOString() }
+        if (body.kind === 'done') next.status = 'done'
+        await redis([['HSET', STATUS, id, JSON.stringify(next)]])
+        res.status(200).json({ ok: true, mailed: next.mailed })
         return
       }
       if (body.action === 'note' && typeof body.note === 'string') {
