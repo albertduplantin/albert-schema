@@ -5,6 +5,7 @@
 //   POST /api/admin { action: 'status' | 'note' | 'delete', id, status?, note? }
 //   POST /api/admin { action: 'mailed', id, mailed?: false }   -> repère « auteur prévenu par e-mail » (date), retiré avec mailed: false
 //   POST /api/admin { action: 'send', id, kind: 'seen' | 'done' }   -> envoie à l'auteur (via Resend) « pris en compte » / « traité », puis pose le repère « prévenu »
+//        kind: 'custom' + message (2000 caractères au plus) : message libre, le statut ne change pas.
 //        503 si RESEND_API_KEY manque, 422 si le retour n'a pas d'adresse, 502 si Resend refuse. Expéditeur : MAIL_FROM, réponses : MAIL_REPLY_TO.
 //   GET  /api/admin?action=examples        -> { items: [exemples enregistrés, sans le schéma], hidden: [clés d'exemples intégrés masqués] }
 //   GET  /api/admin?action=exos            -> { items: [exercices guidés publiés, sans le schéma] }
@@ -48,9 +49,13 @@ async function redis(commands) {
 }
 
 /** Message à l'auteur d'un retour, dans sa langue (même texte que le message prêt à envoyer de l'administration). */
-export function replyMail(it, kind) {
+export function replyMail(it, kind, message = '') {
   const en = it.meta?.lang === 'en'
   const title = String(it.title ?? '')
+  if (kind === 'custom') {
+    const tail = en ? 'You can reply directly to this message.\n\nBest regards,\nAlbert Schema Studio' : 'Vous pouvez répondre directement à ce message.\n\nCordialement,\nAlbert Schema Studio'
+    return { subject: (en ? 'Re: ' : 'Re : ') + title.replace(/\s+/g, ' '), text: `${en ? 'Hello,' : 'Bonjour,'}\n\n${message}\n\n${tail}` }
+  }
   const what = it.type === 'bug' ? (en ? 'bug report' : 'signalement') : it.type === 'idea' ? (en ? 'suggestion' : 'demande d’amélioration') : 'question'
   const link = 'https://schema.albertduplantin.win'
   const line = en
@@ -283,7 +288,7 @@ export default async function handler(req, res) {
         res.status(200).json({ ok: true, mailed: next.mailed ?? null })
         return
       }
-      if (body.action === 'send' && (body.kind === 'seen' || body.kind === 'done')) {
+      if (body.action === 'send' && (body.kind === 'seen' || body.kind === 'done' || (body.kind === 'custom' && text(body.message, 2000)))) {
         const key = process.env.RESEND_API_KEY
         if (!key) { res.status(503).json({ error: 'mail not configured' }); return }
         const [{ result: rows }] = await redis([['LRANGE', LIST, 0, 999]])
@@ -291,7 +296,7 @@ export default async function handler(req, res) {
         for (const r of rows ?? []) { try { const e = JSON.parse(r); if (e.id === id) { row = e; break } } catch { /* ligne illisible */ } }
         if (!row) { res.status(404).json({ error: 'not found' }); return }
         if (!row.email) { res.status(422).json({ error: 'no email' }); return }
-        const m = replyMail(row, body.kind)
+        const m = replyMail(row, body.kind, text(body.message, 2000))
         let sent
         try {
           sent = await fetch(process.env.RESEND_API_URL || 'https://api.resend.com/emails', {

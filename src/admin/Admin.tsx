@@ -102,6 +102,7 @@ export default function Admin() {
   const [kind, setKind] = useState<Kind | ''>('')
   const [status, setStatus] = useState<Status | 'todo' | ''>('todo')
   const [q, setQ] = useState('')
+  const [draft, setDraft] = useState<Record<string, string>>({}) // message personnalisé en cours, par retour
   const [view, setView] = useState<'feedback' | 'examples' | 'exos'>('feedback')
   const callApi = useCallback((query: string, body?: unknown) => api(token, query, body), [token])
 
@@ -156,16 +157,17 @@ export default function Admin() {
     if (kind === 'done' && it.status !== 'done') setItemStatus(it, 'done')
   }
   /** Envoie le message à l'auteur depuis le serveur ; sans service de messagerie configuré, retombe sur la messagerie de l'ordinateur. */
-  const send = async (it: Item, kind: 'seen' | 'done') => {
-    if (!confirm(`Envoyer à ${it.email} : « ${kind === 'done' ? 'traité' : 'pris en compte'} » ?`)) return
+  const send = async (it: Item, kind: 'seen' | 'done' | 'custom', message = '') => {
+    if (!confirm(`Envoyer à ${it.email} : « ${kind === 'custom' ? 'votre message' : kind === 'done' ? 'traité' : 'pris en compte'} » ?`)) return
     try {
-      const r = await api(token, '', { action: 'send', id: it.id, kind })
+      const r = await api(token, '', { action: 'send', id: it.id, kind, ...(kind === 'custom' ? { message } : {}) })
       const d = (await r.json()) as { mailed?: string }
       patch(it.id, { mailed: d.mailed ?? new Date().toISOString(), ...(kind === 'done' ? { status: 'done' as Status } : {}) })
+      if (kind === 'custom') setDraft((m) => ({ ...m, [it.id]: '' }))
       setError('')
     } catch (e) {
       const s = e instanceof ApiError ? e.status : 0
-      if (s === 503) { if (confirm('L’envoi automatique n’est pas configuré. Ouvrir votre messagerie à la place ?')) notify(it, kind) }
+      if (s === 503) { if (confirm('L’envoi automatique n’est pas configuré. Ouvrir votre messagerie à la place ?')) notify(it, kind === 'custom' ? 'seen' : kind) }
       else setError(s === 502 ? 'Le service d’envoi a refusé le message : rien n’a été envoyé.' : 'Envoi impossible : rien n’a été envoyé.')
     }
   }
@@ -271,6 +273,12 @@ export default function Admin() {
                 <label className="note">Note interne
                   <textarea rows={2} maxLength={1000} defaultValue={it.note} onBlur={(e) => { if (e.target.value !== it.note) { patch(it.id, { note: e.target.value }); void act({ action: 'note', id: it.id, note: e.target.value }) } }} />
                 </label>
+                {it.email && (
+                  <label className="note">Message personnalisé à l’auteur (il pourra répondre sur votre adresse)
+                    <textarea rows={3} maxLength={2000} value={draft[it.id] ?? ''} onChange={(e) => setDraft((m) => ({ ...m, [it.id]: e.target.value }))} placeholder="Bonjour est ajouté au début, la signature à la fin." />
+                    <button disabled={!(draft[it.id] ?? '').trim()} onClick={() => void send(it, 'custom', draft[it.id] ?? '')}>✉ Envoyer ce message</button>
+                  </label>
+                )}
                 <div className="actions">
                   <label>Statut
                     <select value={it.status} onChange={(e) => setItemStatus(it, e.target.value as Status)}>
