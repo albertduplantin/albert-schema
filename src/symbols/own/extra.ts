@@ -9,7 +9,8 @@ const ilsSvg = line([20, 0], closed) + line([20, 60], hinge) + blade(0, hinge, o
 
 /** Bouton ou commutateur à plusieurs contacts actionnés ensemble : un pôle par contact (NO ou NF), liés par la même commande. */
 function multi(tail: string, ncs: boolean[], head: Head, ctl: 'momentary' | 'toggle', fr: string, en: string, posPoles?: number[]): SymbolDef {
-  const ports = ncs.flatMap((_, i) => [{ id: 't' + 2 * i, x: 10 + 20 * i, y: 0, dir: 'up' as const }, { id: 't' + (2 * i + 1), x: 10 + 20 * i, y: 60, dir: 'down' as const }])
+  const x0 = head === 'turn' ? 30 : head === 'key' ? 20 : 10 // place pour la tête de commande à gauche du premier pôle
+  const ports = ncs.flatMap((_, i) => [{ id: 't' + 2 * i, x: x0 + 20 * i, y: 0, dir: 'up' as const }, { id: 't' + (2 * i + 1), x: x0 + 20 * i, y: 60, dir: 'down' as const }])
   const poles = ncs.map((_, i) => ['t' + 2 * i, 't' + (2 * i + 1)] as [string, string])
   const c = contacts(ports, poles, ncs.map((n): PoleMark => (n ? 'nc' : 'none')), head)!
   const push = ctl === 'momentary'
@@ -23,7 +24,7 @@ function multi(tail: string, ncs: boolean[], head: Head, ctl: 'momentary' | 'tog
     prefix: 'S',
     name: { fr, en },
     std: 'CEI 60617',
-    w: 20 * ncs.length,
+    w: x0 - 10 + 20 * ncs.length,
     h: 60,
     ports,
     svg: c.svg,
@@ -38,9 +39,9 @@ export const extraSymbols: SymbolDef[] = [
   multi('poussoir_2no', [false, false], 'push', 'momentary', 'Bouton poussoir, 2 contacts à fermeture (2 NO)', 'Push button, 2 make contacts (2 NO)'),
   multi('poussoir_2nf', [true, true], 'push', 'momentary', 'Bouton poussoir, 2 contacts à ouverture (2 NF)', 'Push button, 2 break contacts (2 NC)'),
   multi('poussoir_no_nf', [false, true], 'push', 'momentary', 'Bouton poussoir, 1 contact à fermeture + 1 à ouverture (1 NO + 1 NF)', 'Push button, 1 make + 1 break contact (1 NO + 1 NC)'),
-  multi('commutateur_2no', [false, false], 'rotate', 'toggle', 'Commutateur à tête tournante, 2 contacts à fermeture (2 NO)', 'Rotary switch, 2 make contacts (2 NO)'),
-  multi('commutateur_2nf', [true, true], 'rotate', 'toggle', 'Commutateur à tête tournante, 2 contacts à ouverture (2 NF)', 'Rotary switch, 2 break contacts (2 NC)'),
-  multi('commutateur_no_nf', [false, true], 'rotate', 'toggle', 'Commutateur à tête tournante, 1 contact à fermeture + 1 à ouverture (1 NO + 1 NF)', 'Rotary switch, 1 make + 1 break contact (1 NO + 1 NC)'),
+  multi('commutateur_2no', [false, false], 'turn', 'toggle', 'Commutateur à tête tournante, 2 contacts à fermeture (2 NO)', 'Rotary switch, 2 make contacts (2 NO)'),
+  multi('commutateur_2nf', [true, true], 'turn', 'toggle', 'Commutateur à tête tournante, 2 contacts à ouverture (2 NF)', 'Rotary switch, 2 break contacts (2 NC)'),
+  multi('commutateur_no_nf', [false, true], 'turn', 'toggle', 'Commutateur à tête tournante, 1 contact à fermeture + 1 à ouverture (1 NO + 1 NF)', 'Rotary switch, 1 make + 1 break contact (1 NO + 1 NC)'),
   multi('commutateur_3pos_2no', [false, false], 'key', 'toggle', 'Commutateur verrouillable à 3 positions (1-0-2), 2 NO (un par position), centre sans contact actionné', 'Lockable 3-position switch (1-0-2), 2 NO (one per position), centre actuates no contact', [1, 2]),
   {
     id: ILS_ID,

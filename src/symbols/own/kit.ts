@@ -89,7 +89,13 @@ export function pole(n: number, top: Pt, bot: Pt, mark: PoleMark = 'none'): Pole
   return { svg, rot, mid: [(hinge[0] + rest[0]) / 2, (hinge[1] + rest[1]) / 2], midClosed: [(hinge[0] + alt[0]) / 2, (hinge[1] + alt[1]) / 2], nc: mark === 'nc' }
 }
 
-export type Head = 'none' | 'push' | 'mushroom' | 'rotate' | 'lever' | 'cam' | 'key'
+export type Head = 'none' | 'push' | 'mushroom' | 'rotate' | 'turn' | 'lever' | 'cam' | 'key'
+
+/** Tête tournante des commutateurs : équerre de manœuvre, liaison en pointillés interrompue par une flèche (sens de rotation), posée à gauche du point (x, y) de la lame. */
+const turnHead = (x: number, y: number) =>
+  path(`M${f(x - 25)} ${f(y + 4)}H${f(x - 22)}V${f(y - 4)}H${f(x - 19)}`, 'fill="none"') +
+  line([x - 22, y], [x - 14, y], DASH) + line([x - 6, y], [x, y], DASH) +
+  line([x - 10, y - 4], [x - 10, y + 3]) + line([x - 10, y + 3], [x - 13.5, y - 2]) + line([x - 10, y + 3], [x - 6.5, y - 2])
 
 /** Liaison mécanique en pointillés entre les pôles, puis tête de commande à gauche du premier. */
 export function actuator(mids: Pt[], head: Head, shift = 0): string {
@@ -99,6 +105,7 @@ export function actuator(mids: Pt[], head: Head, shift = 0): string {
   let svg = ''
   if (sorted.length > 1) svg += line(first, last, DASH)
   if (head === 'none') return svg
+  if (head === 'turn') return svg + turnHead(first[0], first[1])
   const x = first[0] - 8, y = first[1]
   svg += line(first, [x, y], DASH)
   switch (head) {
