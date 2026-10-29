@@ -45,6 +45,16 @@ function standardLabels(def: SymbolDef): Record<string, string> {
     const [a, b] = ordered(def, m.poles[0])
     return m.nc ? { [a]: '1', [b]: '2' } : { [a]: '3', [b]: '4' }
   }
+  if (m?.k === 'switch' && m.poles.length > 1 && !m.changeover?.length && PUSH.test(def.id)) {
+    // bouton à plusieurs contacts : un rang par contact (13-14, 21-22…), repos 1-2 / travail 3-4 selon sa nature
+    const out: Record<string, string> = {}
+    m.poles.forEach((pl, i) => {
+      const [a, b] = ordered(def, pl)
+      const nc = m.ncPoles?.[i] ?? m.nc
+      out[a] = String((i + 1) * 10 + (nc ? 1 : 3)); out[b] = String((i + 1) * 10 + (nc ? 2 : 4))
+    })
+    return out
+  }
   if (m?.k === 'switch' && m.poles.length === 1 && !m.changeover?.length && THERMAL.test(def.id.split('/').pop() ?? '')) {
     const [a, b] = ordered(def, m.poles[0])
     return m.nc ? { [a]: '95', [b]: '96' } : { [a]: '97', [b]: '98' }
@@ -138,7 +148,7 @@ export function effectiveTerms(symbols: PlacedSymbol[], defs: Record<string, Sym
             labels = [n, n + 1]
             labels.forEach((v) => powerNumbers.add(String(v)))
           } else {
-            const wanted = (r: number) => (g.kind === 'changeover' ? [r * 10 + 1, r * 10 + 2, r * 10 + 4] : m.nc ? [r * 10 + 1, r * 10 + 2] : [r * 10 + 3, r * 10 + 4])
+            const wanted = (r: number) => (g.kind === 'changeover' ? [r * 10 + 1, r * 10 + 2, r * 10 + 4] : (m.ncPoles?.[g.index] ?? m.nc) ? [r * 10 + 1, r * 10 + 2] : [r * 10 + 3, r * 10 + 4])
             let r = 1
             while (r < 9 && (rankTaken(r) || wanted(r).some((v) => used.has(String(v))))) r++
             labels = wanted(r)

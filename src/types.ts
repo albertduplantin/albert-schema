@@ -23,6 +23,8 @@ export type SimModel =
       changeover?: [string, string, string][]
       ctl: 'coil' | 'momentary' | 'toggle' | 'fixed'
       nc: boolean
+      /** contacts mixtes (ex. 1 NO + 1 NF sur un même poussoir) : état NF de chaque pôle, dans l'ordre de `poles` ; `nc` vaut alors celui du premier */
+      ncPoles?: boolean[]
       /** contact temporisé */
       delay?: TimerKind
       /** sélecteur à trois positions (1-0-2) : centre ouvert ; position 1 : commun–repos, position 2 : commun–travail */

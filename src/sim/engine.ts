@@ -270,8 +270,9 @@ function solve(x: Ctx) {
       for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
       continue
     }
-    const isClosed = m.nc ? !act : act
-    if (isClosed) for (const [a, b] of m.poles) link(key(s.id, a), key(s.id, b))
+    m.poles.forEach(([a, b], i) => {
+      if ((m.ncPoles?.[i] ?? m.nc) ? !act : act) link(key(s.id, a), key(s.id, b))
+    })
     // inverseurs : commun relié au contact travail (actionné) ou repos (au repos)
     for (const [com, nc, no] of m.changeover ?? []) link(key(s.id, com), key(s.id, act ? no : nc))
   }

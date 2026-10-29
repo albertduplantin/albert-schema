@@ -4,6 +4,7 @@ const ROOT = '..'
 const { SYMBOL_MAP, SYMBOLS } = await import(ROOT + '/src/symbols/index.ts')
 const T = await import(ROOT + '/src/templates.ts')
 const { simulate } = await import(ROOT + '/src/sim/engine.ts')
+const { effectiveTerms } = await import(ROOT + '/src/terminals.ts')
 const lib = (await import('./lib-full.mjs')).loadFull()
 for (const s of lib.symbols) { SYMBOLS.push(s); SYMBOL_MAP[s.id] = s }
 const base: any = { version: 1, paper: 'A3', title: {}, symbols: [], wires: [] }
@@ -742,6 +743,30 @@ function rig(doc: any) {
   const mem = { ...r.state }; delete mem['§TRIP:' + ov.fid]
   r = simulate(ov.d, SYMBOL_MAP, mem, inp, 1000 + 60100)
   check('fusible remplacé : le circuit est de nouveau alimenté', r.energized.size > 0 && !r.tripped.has(ov.fid), true)
+}
+// ── bouton poussoir et commutateur à tête tournante à deux contacts (NO + NF, 2 NO, 2 NF) commandés ensemble
+{
+  const LAMP = 'qet:10_electric/10_allpole/380_signaling_operating/11_optical_signaling/lampe2'
+  const pbId = (t: string) => `own:elec/20_push_buttons/${t}`, rotId = (t: string) => `own:elec/21_selector_switches/${t}`
+  const all = ['poussoir_2no', 'poussoir_2nf', 'poussoir_no_nf'].map(pbId).concat(['commutateur_2no', 'commutateur_2nf', 'commutateur_no_nf'].map(rotId))
+  check('contacts multiples : 6 symboles présents', all.every((i) => !!SYMBOL_MAP[i]), true)
+  // la lampe H1 sur le pôle 1 (t0-t1), H2 sur le pôle 2 (t2-t3), alimentées en parallèle
+  const run = (id: string, act: boolean) => {
+    const d = T.build(base, [['src', 'sim-src1', 100, 30], ['x', id, 100, 100, 'S1'], ['h1', LAMP, 100, 240, 'H1'], ['h2', LAMP, 260, 240, 'H2']],
+      [['src', 'a', 'x', 't0'], ['src', 'a', 'x', 't2'], ['x', 't1', 'h1', 't0'], ['x', 't3', 'h2', 't0'], ['h1', 't1', 'src', 'b'], ['h2', 't1', 'src', 'b']])
+    const g = rig(d)
+    const x = d.symbols.find((v: any) => v.label === 'S1').id
+    const push = SYMBOL_MAP[id].sim.ctl === 'momentary'
+    const r = act ? (push ? g.run([x]) : g.run([], [x])) : g.run()
+    return [g.on(r, 'H1'), g.on(r, 'H2')]
+  }
+  const want: Record<string, boolean[][]> = { poussoir_2no: [[false, false], [true, true]], poussoir_2nf: [[true, true], [false, false]], poussoir_no_nf: [[false, true], [true, false]] }
+  for (const [t, w] of Object.entries(want)) {
+    check(`poussoir ${t} : repos puis appuyé`, [run(pbId(t), false), run(pbId(t), true)], w)
+    check(`commutateur ${t.replace('poussoir', 'commutateur')} : position 0 puis 1`, [run(rotId(t.replace('poussoir', 'commutateur')), false), run(rotId(t.replace('poussoir', 'commutateur')), true)], w)
+  }
+  const terms = effectiveTerms([{ id: 'a', defId: pbId('poussoir_no_nf'), x: 0, y: 0, rot: 0 } as any], SYMBOL_MAP).a
+  check('poussoir 1 NO + 1 NF : bornes 13-14 et 21-22', [terms.t0, terms.t1, terms.t2, terms.t3], ['13', '14', '21', '22'])
 }
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests passent')
 process.exit(fails ? 1 : 0)

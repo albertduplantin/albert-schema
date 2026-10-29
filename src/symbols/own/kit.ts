@@ -114,7 +114,7 @@ export function actuator(mids: Pt[], head: Head, shift = 0): string {
 }
 
 /** Contact(s) : un pôle par paire de bornes, lames animées dans l'ordre de `poles`, liaison mécanique et tête de commande. */
-export function contacts(ports: PortInfo[], poles: [string, string][], mark: PoleMark, head: Head): { svg: string; blades: { rot: number; closed: boolean }[] } | null {
+export function contacts(ports: PortInfo[], poles: [string, string][], mark: PoleMark | PoleMark[], head: Head): { svg: string; blades: { rot: number; closed: boolean }[] } | null {
   const by = new Map(ports.map((p) => [p.id, p]))
   let svg = ''
   const blades: { rot: number; closed: boolean }[] = []
@@ -124,7 +124,7 @@ export function contacts(ports: PortInfo[], poles: [string, string][], mark: Pol
     const a = by.get(poles[i][0]), b = by.get(poles[i][1])
     if (!a || !b || Math.abs(a.y - b.y) < 12) return null
     const [t, u] = a.y < b.y ? [a, b] : [b, a]
-    const p = pole(i, [t.x, t.y], [u.x, u.y], mark)
+    const p = pole(i, [t.x, t.y], [u.x, u.y], Array.isArray(mark) ? mark[i] ?? 'none' : mark)
     svg += p.svg
     blades.push({ rot: p.rot, closed: !!p.nc })
     mids.push(p.mid)
