@@ -56,9 +56,9 @@ function magnetic3(tail: string, pnp: boolean): SymbolDef {
     h: 70,
     // boîtier à deux cellules : détecteur (losange, U de l'aimant) à gauche, étage de sortie (contact à fermeture) à droite
     ports: [
-      { id: pnp ? 't1' : 't0', x: 20, y: 0, dir: 'up', label: pnp ? '3' : '1' },
-      { id: pnp ? 't0' : 't1', x: 60, y: 0, dir: 'up', label: pnp ? '1' : '3' },
-      { id: 't2', x: 60, y: 70, dir: 'down', label: '4' },
+      { id: pnp ? 't1' : 't0', x: 20, y: 0, dir: 'up', label: pnp ? 'BU' : 'BN' },
+      { id: pnp ? 't0' : 't1', x: 60, y: 0, dir: 'up', label: pnp ? 'BN' : 'BU' },
+      { id: 't2', x: 60, y: 70, dir: 'down', label: 'BK' },
     ],
     svg:
       rect(0, 10, 80, 50, 'fill="none"') + line([40, 10], [40, 60]) +
