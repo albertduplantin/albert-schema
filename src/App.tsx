@@ -1436,7 +1436,7 @@ function Editor() {
                 <p className="muted small">{lang === 'fr' ? `${selSym.plc?.steps.length ?? 0} étape(s) Grafcet · ${selSym.plc?.ladder.length ?? 0} réseau(x) Ladder. Alimentez L+ et M (24 V) pour que l’automate démarre.` : `${selSym.plc?.steps.length ?? 0} Grafcet step(s) · ${selSym.plc?.ladder.length ?? 0} ladder rung(s). Power L+ and M (24 V) to start the controller.`}</p>
               </fieldset>
             )}
-            {(() => { const d = SYMBOL_MAP[selSym.defId]; return d.sim?.k === 'switch' && d.sim.ctl === 'toggle' && /390_sensors_instruments|41_limit_switches/.test(d.id) })() && (
+            {(() => { const d = SYMBOL_MAP[selSym.defId]; return d.sim?.k === 'switch' && d.sim.ctl === 'toggle' && /390_sensors_instruments|41_limit_switches|5040_sensors/.test(d.id) })() && (
               <fieldset className="ratings" data-tip={lang === 'fr' ? 'Pose ce capteur sur un vérin pneumatique ou hydraulique : le contact se ferme quand le piston atteint la position réglée. Un repère sur le vérin montre où il est placé.' : 'Mounts this sensor on a pneumatic or hydraulic cylinder: the contact closes when the piston reaches the set position. A mark on the cylinder shows where it sits.'}>
                 <legend>{lang === 'fr' ? 'Détecteur de vérin' : 'Cylinder sensor'}</legend>
                 <label>{lang === 'fr' ? 'Vérin détecté (repère)' : 'Cylinder (tag)'}

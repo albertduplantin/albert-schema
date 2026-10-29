@@ -1,5 +1,5 @@
 import type { SymbolDef } from '../../types'
-import { angle, blade, contacts, line, rect, type Head, type Pt, type PoleMark } from './kit'
+import { angle, blade, contacts, diamond, line, rect, text, type Head, type Pt, type PoleMark } from './kit'
 
 /** Symboles propres à l'application qui n'existent pas dans la collection d'origine. */
 // lame ouverte : sa pointe reste à l'intérieur de l'ampoule (x de 8 à 32)
@@ -34,6 +34,48 @@ function multi(tail: string, ncs: boolean[], head: Head, ctl: 'momentary' | 'tog
 
 export const ILS_ID = 'qet:10_electric/10_allpole/390_sensors_instruments/41_limit_switches/ils_no'
 
+/**
+ * Capteur magnétique de vérin à 3 fils (électronique) : 1 (marron) = +24 V, 3 (bleu) = 0 V, 4 (noir) = sortie.
+ * PNP : la sortie passe au +24 V quand l'aimant du piston est détecté (la charge est entre la sortie et 0 V).
+ * NPN : la sortie passe au 0 V (la charge est entre +24 V et la sortie). Pour la simulation, c'est un contact entre l'alimentation concernée et la sortie.
+ */
+function magnetic3(tail: string, pnp: boolean): SymbolDef {
+  return {
+    id: `own:elec/390_sensors_instruments/03_sensors_magnetic/${tail}`,
+    domain: 'electrical',
+    cat: '10_electric_10_allpole/390_sensors_instruments',
+    group: { fr: 'Fins de course', en: 'Limits' },
+    score: 84,
+    top: true,
+    prefix: 'B',
+    name: pnp
+      ? { fr: 'Capteur magnétique de vérin, 3 fils PNP (NO)', en: 'Cylinder magnetic sensor, 3-wire PNP (NO)' }
+      : { fr: 'Capteur magnétique de vérin, 3 fils NPN (NO)', en: 'Cylinder magnetic sensor, 3-wire NPN (NO)' },
+    std: 'CEI 60617',
+    w: 60,
+    h: 60,
+    ports: [
+      { id: 't0', x: 10, y: 0, dir: 'up', label: '1' },
+      { id: 't1', x: 10, y: 60, dir: 'down', label: '3' },
+      { id: 't2', x: 60, y: 30, dir: 'right', label: '4' },
+    ],
+    svg:
+      line([10, 0], [10, 10]) + line([10, 50], [10, 60]) + line([40, 30], [60, 30]) +
+      rect(0, 10, 40, 40, 'fill="none"') +
+      text(20, 22, pnp ? 'PNP' : 'NPN', 8, 'font-weight="700"') +
+      diamond(20, 36, 9) + text(20, 39, 'M', 9, 'font-weight="700"'),
+    sim: { k: 'switch', poles: [[pnp ? 't0' : 't1', 't2']], ctl: 'toggle', nc: false },
+  } as SymbolDef
+}
+
+/** Copie d'un capteur de position dans la palette pneumatique (catégorie Capteurs), pour les schémas de vérins sans passer par l'électricité. */
+const inPneumatic = (s: SymbolDef): SymbolDef => ({
+  ...s,
+  domain: 'pneumatic',
+  cat: '50_pneumatic/5040_sensors',
+  group: { fr: 'Détecteurs de position de vérin', en: 'Cylinder position sensors' },
+} as SymbolDef)
+
 /** Interrupteur à lame souple (ILS, capteur reed) : contact à lame dans une ampoule de verre, fermé par le champ de l'aimant du piston. */
 export const extraSymbols: SymbolDef[] = [
   multi('poussoir_2no', [false, false], 'push', 'momentary', 'Bouton poussoir, 2 contacts à fermeture (2 NO)', 'Push button, 2 make contacts (2 NO)'),
@@ -60,4 +102,8 @@ export const extraSymbols: SymbolDef[] = [
       ilsSvg + rect(8, 8, 24, 44, 'rx="10" fill="none"'),
     sim: { k: 'switch', poles: [['t0', 't1']], ctl: 'toggle', nc: false, blades: [{ rot: ilsRot, closed: false }] },
   } as SymbolDef,
+  magnetic3('capteur_magnetique_pnp', true),
+  magnetic3('capteur_magnetique_npn', false),
 ]
+// mêmes capteurs dans la palette pneumatique (Capteurs) : identifiants distincts, même dessin et même simulation
+extraSymbols.push(...extraSymbols.filter((s) => /ils_no$|capteur_magnetique_(pnp|npn)$/.test(s.id)).map((s) => ({ ...inPneumatic(s), id: 'own:pneu/5040_sensors/' + s.id.split('/').pop() })))

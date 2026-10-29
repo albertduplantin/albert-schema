@@ -263,9 +263,12 @@ for (const [suffix, op, wantOne, wantBoth] of [['5010162011_selecteur', 'OU', 'P
   for (const s of vis) names.set(s.name.fr, (names.get(s.name.fr) ?? 0) + 1)
   check('palette pneumatique : aucun nom en double', [...names.values()].filter((n) => n > 1).length, 0)
   check('palette pneumatique : tous les symboles proposés sont simulables', vis.filter((s: any) => !s.fluid && !s.sim).map((s: any) => s.name.fr), [])
+  const cs = vis.filter((s: any) => /5040_sensors\/(ils_no|capteur_magnetique_(pnp|npn))$/.test(s.id))
+  check('palette pneumatique : ILS et capteurs magnétiques 3 fils PNP / NPN dans Capteurs, simulés comme contacts', [cs.length, cs.every((s: any) => s.sim?.k === 'switch' && s.sim.ctl === 'toggle')], [3, true])
+  check('capteur 3 fils : PNP commute le +24 V (borne 1), NPN le 0 V (borne 3), vers la sortie', cs.filter((s: any) => s.ports.length === 3).map((s: any) => s.sim.poles[0].join()).sort(), ['t0,t2', 't1,t2'])
   // un seul distributeur et un seul vérin par comportement (les variantes qui ne diffèrent que par le nom du fabricant ou le dessin d'origine sont masquées)
   const roles = (sym: any) => { const r = new Map<string, string>(); for (const dir of ['up', 'down', 'left', 'right']) sym.ports.filter((p: any) => p.dir === dir).sort((a: any, b: any) => (dir === 'left' || dir === 'right' ? a.y - b.y : a.x - b.x)).forEach((p: any, i: number) => r.set(p.id, dir[0] + i)); return r }
-  const behav = (sym: any) => { const f = sym.fluid, r = roles(sym), R = (i: string) => r.get(i) ?? i, pr = (l: any[]) => (l ?? []).map(([a, b]) => [R(a), R(b)].sort().join('-')).sort().join(',')
+  const behav = (sym: any) => { const f = sym.fluid ?? {}, r = roles(sym), R = (i: string) => r.get(i) ?? i, pr = (l: any[]) => (l ?? []).map(([a, b]) => [R(a), R(b)].sort().join('-')).sort().join(',')
     return f.k === 'valve' ? `v|${f.a}|${f.b}|${f.three}|${pr(f.rest)}|${pr(f.act)}|${pr(f.actB)}|${f.pilotA ? R(f.pilotA) : ''}|${f.pilotB ? R(f.pilotB) : ''}` : f.k === 'cyl' ? `c|${R(f.cap)}|${f.rod ? R(f.rod) : ''}|${f.single ?? ''}` : null }
   const seen = new Map<string, string[]>()
   for (const sy of vis) { const k = behav(sy); if (k) seen.set(k, [...(seen.get(k) ?? []), sy.name.fr]) }
