@@ -226,7 +226,8 @@ function closedPlug(def: SymbolDef, ports: PortInfo[]): R {
 function hydTank(def: SymbolDef, ports: PortInfo[]): R {
   if (def.domain !== 'hydraulic' || !/^own:hyd\/bache/.test(def.id)) return null
   const w = def.w, h = def.h
-  let svg = path(`M0 0V${f(h)}H${f(w)}V0`, 'fill="none"')
+  // niveau d'huile en pointillé : les retours s'arrêtent au-dessus, les aspirations plongent dessous
+  let svg = path(`M0 0V${f(h)}H${f(w)}V0`, 'fill="none"') + line([0, h * 0.55], [w, h * 0.55], DASH)
   for (const p of ports) svg += line([p.x, 0], [p.x, p.id.startsWith('s') ? h - 8 : h * 0.4])
   const n = ports.length
   return { svg, name: T(`Réservoir (bâche) à ${n} orifices`, `Tank with ${n} ports`) }
