@@ -37,6 +37,12 @@ function bladeVars(id: string, model: SimModel | undefined, sim: SimResult | nul
   // état conducteur : un inverseur est « fermé » côté travail quand il est actionné ; un contact simple selon sa nature (NO/NF)
   const conducting = model.changeover?.length ? actuated : model.nc ? !actuated : actuated
   const vars: Record<string, string> = { '--hs': actuated ? '1' : '0' }
+  if (model.pos3 && model.changeover?.length) {
+    // inverseur 1-0-2 : la lame est dessinée au centre ; blades[0] la penche vers le repos (position 1), blades[1] vers le travail (position 2)
+    const pos = sim.pos3?.[id] ?? 0
+    vars['--b0'] = (pos === 1 ? model.blades[0].rot : pos === 2 ? model.blades[1]?.rot ?? 0 : 0) + 'deg'
+    return vars as React.CSSProperties
+  }
   model.blades.forEach((b, n) => {
     const act = model.posPoles ? sim.pos3?.[id] === model.posPoles[n] : actuated
     const here = model.ncPoles && !model.changeover?.length ? (model.ncPoles[n] ? !act : act) : conducting

@@ -1,5 +1,5 @@
 import type { SymbolDef } from '../../types'
-import { BG, DASH, box, circle, contacts, diamond, earth, f, line, path, poly, rect, text, type Head, type Own, type PoleMark, type PortInfo, type Pt } from './kit'
+import { BG, DASH, actuator, angle, blade, box, circle, contacts, diamond, earth, f, line, path, poly, rect, text, type Head, type Own, type PoleMark, type PortInfo, type Pt } from './kit'
 
 type Recipe = (def: SymbolDef, ports: PortInfo[]) => Omit<Own, 'std'> | null
 
@@ -11,6 +11,31 @@ const sw = (mark: PoleMark, head: Head, name: { fr: string; en: string }): Recip
   if (m?.k !== 'switch') return null
   const c = contacts(ports, m.poles, mark, head)
   return c ? { svg: c.svg, blades: c.blades, name } : null
+}
+
+/**
+ * Inverseur manuel (commun, repos, travail) : lame articulée au bout du conducteur commun.
+ * À trois positions (1-0-2) la lame est dessinée au centre ; ses deux angles (vers le repos, vers le travail) sont dans `blades`.
+ * À deux positions elle est dessinée sur le repos et `blades[0]` l'amène sur le travail.
+ */
+const co = (head: Head, name: { fr: string; en: string }): Recipe => (def, ports) => {
+  const m = def.sim
+  if (m?.k !== 'switch' || !m.changeover?.length || m.poles.length) return null
+  const by = new Map(ports.map((p) => [p.id, p]))
+  const [c, n, o] = m.changeover[0].map((id) => by.get(id))
+  if (!c || !n || !o) return null
+  const s = c.y < o.y ? 1 : -1 // sens du commun vers les sorties
+  const hy = c.y + s * 14
+  const Lb = 16
+  const tipOf = (p: PortInfo): Pt => [p.x, hy + s * Math.sqrt(Math.max(1, Lb * Lb - (p.x - c.x) ** 2))]
+  const tn = tipOf(n), to = tipOf(o)
+  const hinge: Pt = [c.x, hy]
+  const rest: Pt = m.pos3 ? [c.x, hy + s * Lb] : tn
+  const v = (p: Pt): Pt => [p[0] - hinge[0], p[1] - hinge[1]]
+  const svg = line([c.x, c.y], hinge) + line([n.x, n.y], tn) + line([o.x, o.y], to) + circle(c.x, hy, 1.8, 'fill="currentColor"')
+    + blade(0, hinge, rest) + actuator([[(hinge[0] + rest[0]) / 2, (hinge[1] + rest[1]) / 2]], head)
+  const blades = m.pos3 ? [{ rot: angle(v(rest), v(tn)), closed: false }, { rot: angle(v(rest), v(to)), closed: false }] : [{ rot: angle(v(tn), v(to)), closed: false }]
+  return { svg, blades, name }
 }
 
 /** Fusible : rectangle traversé d'un trait, un par pôle. */
@@ -158,6 +183,14 @@ const RECIPES: Record<string, Recipe> = {
   // commande
   poussoir: sw('none', 'push', T('Bouton poussoir à fermeture (NO)', 'Push button, make (NO)')),
   poussoir_nf: sw('nc', 'push', T('Bouton poussoir à ouverture (NF)', 'Push button, break (NC)')),
+  '015_inter_2': co('lever', T('Inverseur à deux positions', 'Two-position changeover switch')),
+  '022_inter_2n': co('lever', T('Inverseur à trois positions (1-0-2)', 'Three-position changeover switch (1-0-2)')),
+  'bp1-0-2': co('rotate', T('Commutateur rotatif à trois positions (1-0-2)', 'Three-position rotary switch (1-0-2)')),
+  'bp1-0-2inv': co('rotate', T('Commutateur rotatif à trois positions (1-0-2), commun en bas', 'Three-position rotary switch (1-0-2), common at the bottom')),
+  interruptor_001: co('rotate', T('Commutateur rotatif à trois positions (1-0-2), modèle 2', 'Three-position rotary switch (1-0-2), type 2')),
+  interruptor_002: co('rotate', T('Commutateur rotatif à trois positions (1-0-2), commun en bas, modèle 2', 'Three-position rotary switch (1-0-2), common at the bottom, type 2')),
+  'key_1-0-2': co('key', T('Commutateur à clé à trois positions (1-0-2)', 'Three-position key switch (1-0-2)')),
+  'key_1-0-2_inv': co('key', T('Commutateur à clé à trois positions (1-0-2), commun en bas', 'Three-position key switch (1-0-2), common at the bottom')),
   '010_switch_1pos': sw('none', 'lever', T('Interrupteur', 'Switch')),
   fin_de_course_came_2_no: sw('none', 'cam', T('Fin de course à galet (NO)', 'Roller limit switch (NO)')),
   fin_course_nc: sw('nc', 'cam', T('Fin de course à galet (NF)', 'Roller limit switch (NC)')),

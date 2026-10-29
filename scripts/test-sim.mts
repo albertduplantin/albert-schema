@@ -648,6 +648,7 @@ function rig(doc: any) {
   check('nouveaux symboles présents dans la bibliothèque', [sel, foot, brake, conn, sens].every(Boolean), true)
   const defSel = SYMBOL_MAP[sel]
   check('sélecteur 1-0-2 : modèle à trois positions', defSel.sim.pos3 === true && defSel.sim.changeover.length === 1, true)
+  check('sélecteur 1-0-2 : lame animée (angles vers le repos et vers le travail, de signes opposés)', defSel.sim.blades?.length === 2 && defSel.sim.blades[0].rot * defSel.sim.blades[1].rot < 0, true)
   const com = defSel.sim.changeover[0]
   const d = T.build(base, [['src', 'sim-src1', 100, 30], ['x', sel, 100, 100, 'S1'], ['h1', LAMP, 100, 240, 'H1'], ['h2', LAMP, 260, 240, 'H2']],
     [['src', 'a', 'x', com[0]], ['x', com[1], 'h1', 't0'], ['h1', 't1', 'src', 'b'], ['x', com[2], 'h2', 't0'], ['h2', 't1', 'src', 'b']])

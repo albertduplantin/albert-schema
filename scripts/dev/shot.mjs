@@ -7,7 +7,7 @@ import puppeteer from 'puppeteer-core'
 const [re, out, zoom = '2.4'] = process.argv.slice(2)
 if (!re || !out) { console.error('usage : shot.mjs "<regex id>" sortie.png [zoom]'); process.exit(2) }
 const k = Number(zoom)
-const lib = JSON.parse(fs.readFileSync('public/library-core.json', 'utf8'))
+const lib = JSON.parse(fs.readFileSync('public/library-' + (process.env.LIB ?? 'core') + '.json', 'utf8'))
 const syms = (lib.symbols ?? lib).filter((s) => new RegExp(re).test(s.id))
 if (!syms.length) { console.error('aucun symbole'); process.exit(1) }
 let h = '<body style="background:#fff;color:#000;margin:6px">'
