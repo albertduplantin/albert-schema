@@ -3,4 +3,4 @@ Allow: /
 Disallow: /api/
 Disallow: /admin
 
-Sitemap: https://albert-schema.vercel.app/sitemap.xml
+Sitemap: https://schema.albertduplantin.win/sitemap.xml

@@ -1,6 +1,6 @@
 # Albert Schema Studio : notes de travail
 
-Éditeur et simulateur de schémas électriques / pneumatiques / hydrauliques (Vite + React + TS), FR/EN. Production : https://albert-schema.vercel.app (déploiement automatique à chaque push sur `main`).
+Éditeur et simulateur de schémas électriques / pneumatiques / hydrauliques (Vite + React + TS), FR/EN. Production : https://schema.albertduplantin.win (l’ancienne adresse https://albert-schema.vercel.app reste active, sans redirection : le stockage du navigateur est propre à chaque adresse) (déploiement automatique à chaque push sur `main`).
 
 ## Boucle de travail (sobre en jetons)
 - **Vérifier** : `node scripts/dev/verify.mjs` (tsc + tous les tests, une ligne par étape, détail seulement en cas d'échec). `--e2e` ajoute le navigateur, `--only=hydraulic` limite à une étape. Ne pas lancer `npm test` brut : sa sortie est très longue.

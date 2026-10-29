@@ -2,7 +2,7 @@
 // Le site contient l'identifiant du commit déployé (voir vite.config.ts) ; on le cherche dans ses fichiers JavaScript.
 import { execSync } from 'node:child_process'
 
-const url = (process.argv[2] ?? 'https://albert-schema.vercel.app').replace(/\/$/, '')
+const url = (process.argv[2] ?? 'https://schema.albertduplantin.win').replace(/\/$/, '')
 const minutes = Number(process.argv[3] ?? 6)
 const sha = execSync('git rev-parse --short=7 HEAD').toString().trim()
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

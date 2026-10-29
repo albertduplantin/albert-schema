@@ -60,7 +60,7 @@ function download(name: string, blob: Blob) {
 function reply(it: Item, kind: 'seen' | 'done'): { subject: string; body: string } {
   const en = it.meta.lang === 'en'
   const what = it.type === 'bug' ? (en ? 'bug report' : 'signalement') : it.type === 'idea' ? (en ? 'suggestion' : 'demande d’amélioration') : (en ? 'question' : 'question')
-  const link = 'https://albert-schema.vercel.app'
+  const link = 'https://schema.albertduplantin.win'
   const subject = (en ? 'Re: ' : 'Re : ') + it.title
   const line = en
     ? kind === 'done'
