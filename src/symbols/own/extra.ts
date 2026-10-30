@@ -5,6 +5,8 @@ import { angle, blade, contacts, diamond, line, rect, text, type Head, type Pt, 
 // lame ouverte : sa pointe reste à l'intérieur de l'ampoule (x de 8 à 32)
 const hinge: Pt = [20, 46], closed: Pt = [20, 14], open: Pt = [12, 16]
 const ilsRot = angle([open[0] - hinge[0], open[1] - hinge[1]], [closed[0] - hinge[0], closed[1] - hinge[1]])
+// capteur 3 fils : lame ouverte (pointe en [46, 26]) qui vient toucher la borne du haut ([40, 24]) quand l'aimant est détecté
+const magRot = angle([46 - 40, 26 - 40], [0, 24 - 40])
 const ilsSvg = line([20, 0], closed) + line([20, 60], hinge) + blade(0, hinge, open)
 
 /** Bouton ou commutateur à plusieurs contacts actionnés ensemble : un pôle par contact (NO ou NF), liés par la même commande. */
@@ -64,9 +66,9 @@ function magnetic3(tail: string, pnp: boolean): SymbolDef {
       rect(0, 10, 50, 40, 'fill="none"') +
       line([20, 0], [20, 19]) + diamond(20, 28, 9, 'fill="none"') + line([15, 24], [15, 32]) + line([25, 24], [25, 32]) +
       '<path d="M15 40V44H25V40" fill="none" stroke-width="1.5"/>' +
-      line([40, 0], [40, 24]) + line([40, 40], [40, 60]) + line([40, 40], [46, 26]) +
+      line([40, 0], [40, 24]) + line([40, 40], [40, 60]) + blade(0, [40, 40], [46, 26]) +
       text(54, 57, pnp ? 'PNP' : 'NPN', 6, 'font-weight="700"'),
-    sim: { k: 'switch', poles: [[pnp ? 't0' : 't1', 't2']], ctl: 'toggle', nc: false },
+    sim: { k: 'switch', poles: [[pnp ? 't0' : 't1', 't2']], ctl: 'toggle', nc: false, blades: [{ rot: magRot, closed: false }] },
   } as SymbolDef
 }
 
