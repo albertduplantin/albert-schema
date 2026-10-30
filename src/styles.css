@@ -770,3 +770,8 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .cloud-nudge { position: absolute; right: 14px; bottom: 54px; z-index: 19; max-width: 340px; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-left: 5px solid var(--accent-olive); border-radius: 10px; padding: 10px 14px; box-shadow: 0 6px 20px #0003; font-size: 13px; }
 .cloud-nudge p { margin: 0 0 8px; }
 .cloud-nudge .row { display: flex; gap: 8px; }
+
+/* bouton d'explication (ⓘ) : fenêtre affichée à côté du bouton */
+.help-pop { position: fixed; z-index: 60; width: 330px; max-height: 60vh; overflow: auto; padding: 10px 14px; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-left: 4px solid #1b5fa6; border-radius: 6px; box-shadow: 0 6px 24px #0004; font-size: 14px; line-height: 1.45; }
+.help-pop h4 { margin: 0 0 6px; font-size: 15px; }
+.help-pop p { margin: 0; white-space: pre-wrap; }

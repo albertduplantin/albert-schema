@@ -11,6 +11,7 @@ import { customExercise, type CustomExo } from './customEx'
 import type { GExercise } from './guided'
 import { defaultVolts, sourcePots } from './sim/potentials'
 import { isTerminal, stripOf, terminalRows } from './strips'
+import { templateHelps } from './templateHelp'
 import { SHAPE_COLORS, SHAPE_FILLS, SHAPE_WIDTHS, STROKES, dashArray } from './shapes'
 import type { Doc, Instrument, Note, Shape, StrokeStyle, Ratings, Domain, Lang, Paper, PlacedSymbol, Wire } from './types'
 import { CATEGORIES, extendedAvailable, extendedLoaded, loadExtended, loadLibrary, needsExtended, SYMBOLS, SYMBOL_MAP } from './symbols'
@@ -221,6 +222,15 @@ function Editor() {
   const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
   const [showCredits, setShowCredits] = useState(false)
   const [explainFor, setExplainFor] = useState<string | null>(null)
+  const [helpOpen, setHelpOpen] = useState<{ id: string; x: number; y: number } | null>(null) // explication ouverte à côté d'un bouton ⓘ
+  useEffect(() => {
+    if (!helpOpen) return
+    const away = (e: Event) => { if (!(e.target as Element).closest?.('.help-pop')) setHelpOpen(null) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setHelpOpen(null) }
+    document.addEventListener('pointerdown', away, true)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc) }
+  }, [helpOpen])
   const [showMachine, setShowMachine] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
   const [usageTick, setUsageTick] = useState(0) // relance le classement après chaque pose
@@ -955,7 +965,7 @@ function Editor() {
   const showNudge = !vault && !nudgeOff && doc.symbols.length >= 6
   const [showExample, setShowExample] = useState(false)
   const startTemplate = (fn: (b: Doc) => Doc, key?: string) => {
-    commit((d) => ({ ...fn(d), ...(key ? { example: key } : {}) }))
+    commit((d) => { const nd = fn(d); const hs = templateHelps(key, lang); return { ...nd, ...(hs.length ? { notes: [...(nd.notes ?? []), ...hs] } : {}), ...(key ? { example: key } : {}) } })
     setSel([])
     detachVault()
     if (key) setShowExample(true) // la fiche s'ouvre d'elle-même ; le bouton ⓘ de la barre d'outils la rouvre
@@ -1088,6 +1098,11 @@ function Editor() {
   const addNote = () => {
     const id = uid()
     commit((d) => ({ ...d, notes: [...(d.notes ?? []), { id, x: 160 + 10 * (d.notes?.length ?? 0), y: 120 + 10 * (d.notes?.length ?? 0), text: tr(lang, 'noteDefault'), size: 12 }] }))
+    setSel([id])
+  }
+  const addHelp = () => {
+    const id = uid()
+    commit((d) => ({ ...d, notes: [...(d.notes ?? []), { id, x: 160 + 10 * (d.notes?.length ?? 0), y: 120 + 10 * (d.notes?.length ?? 0), text: lang === 'fr' ? 'Écrivez ici l’explication du fonctionnement. Elle s’affiche quand on clique sur le bouton.' : 'Write the explanation here. It appears when the button is clicked.', title: lang === 'fr' ? 'Explication' : 'Explanation', size: 12, help: true }] }))
     setSel([id])
   }
   const selWire = sel.length === 1 ? doc.wires.find((w) => w.id === sel[0]) : undefined
@@ -1601,6 +1616,7 @@ function Editor() {
             <button onClick={autoColors} title={t('autoColorsHelp')}>{t('autoColors')}</button>
             <p className="menu-title">{t('annotate')}</p>
             <button onClick={addNote} title={t('note')}>T {t('note')}</button>
+            <button onClick={addHelp} title={lang === 'fr' ? 'Un bouton ⓘ qui affiche une explication à côté de lui quand on clique dessus' : 'An ⓘ button that shows an explanation next to it when clicked'}>ⓘ {lang === 'fr' ? 'Bouton d’explication' : 'Explanation button'}</button>
             <button onClick={copyStyle} disabled={!sel.length}>🖌 {lang === 'fr' ? 'Copier le style' : 'Copy style'}<kbd>Ctrl+Maj+C</kbd></button>
             <button onClick={pasteStyle} disabled={!sel.length}>🖌 {lang === 'fr' ? 'Appliquer le style' : 'Apply style'}<kbd>Ctrl+Maj+V</kbd></button>
             <button onClick={saveBlock} disabled={!sel.length}>{t('blockSave')}</button>
@@ -1775,7 +1791,7 @@ function Editor() {
       <main className="stage" data-plcdock={plcSym && !plcWin.max && !plcWin.min && plcWin.dock !== 'float' ? plcWin.dock : undefined} style={{ ['--plc-w' as string]: plcWin.w + 'px', ['--plc-h' as string]: plcWin.h + 'px' }}>
         <Canvas doc={doc} lang={lang} simSpeed={simMode ? clockUi.speed : 1} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel} detectors={detectors}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} onAdjust={onAdjust} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} onHelp={(id, x, y) => setHelpOpen({ id, x, y })} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} onAdjust={onAdjust} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
           {pageTabs.map((pg, i) => (
             <button key={i} role="tab" aria-selected={i === (doc.page ?? 0)} className={i === (doc.page ?? 0) ? 'on' : ''}
@@ -1948,6 +1964,17 @@ function Editor() {
             )}
             <label data-tip={t('helpRotation')}>{t('rotation')}{tip('helpRotation')}<input type="number" step={15} value={selShape.rot ?? 0} onChange={(e) => patchShape({ rot: ((Number(e.target.value) % 360) + 360) % 360 || undefined })} /></label>
             <p className="muted small">{t(selShape.kind === 'image' ? 'imageHelp' : 'shapeHelp')}</p>
+          </div>
+        ) : selNote?.help ? (
+          <div className="form" onFocus={checkpoint}>
+            <h3>ⓘ {lang === 'fr' ? 'Bouton d’explication' : 'Explanation button'}</h3>
+            <label>{lang === 'fr' ? 'Titre' : 'Title'}<input value={selNote.title ?? ''} maxLength={80} onChange={(e) => patchNote({ title: e.target.value })} /></label>
+            <label>{lang === 'fr' ? 'Explication (affichée au clic sur le bouton)' : 'Explanation (shown when the button is clicked)'}<textarea rows={9} maxLength={2000} value={selNote.text} onChange={(e) => patchNote({ text: e.target.value })} /></label>
+            <div className="colors">
+              <button className={'swatch' + (!selNote.color ? ' on' : '')} style={{ background: '#1b5fa6' }} title={lang === 'fr' ? 'Bleu (par défaut)' : 'Blue (default)'} aria-label={lang === 'fr' ? 'Bleu par défaut' : 'Default blue'} onClick={() => patchNote({ color: undefined })} />
+              {SHAPE_COLORS.map((c) => <button key={c} className={'swatch' + (selNote.color === c ? ' on' : '')} style={{ background: c }} title={t('color')} aria-label={c} onClick={() => patchNote({ color: c })} />)}
+            </div>
+            <p className="muted small">{lang === 'fr' ? 'Cliquez sur le bouton ⓘ du schéma pour voir l’explication telle que la verront les élèves. Le bouton n’apparaît pas dans les exports et à l’impression.' : 'Click the ⓘ button on the diagram to see the explanation as students will. The button is not included in exports or prints.'}</p>
           </div>
         ) : selNote ? (
           <div className="form" onFocus={checkpoint}>
@@ -2131,6 +2158,16 @@ function Editor() {
         </div>
       )}
 
+      {helpOpen && (() => {
+        const hn = (doc.notes ?? []).find((n) => n.id === helpOpen.id)
+        if (!hn?.help) return null
+        return (
+          <div className="help-pop" role="dialog" aria-label={hn.title || (lang === 'fr' ? 'Explication' : 'Explanation')} style={{ left: Math.max(8, Math.min(helpOpen.x + 14, window.innerWidth - 348)), top: Math.max(8, Math.min(helpOpen.y + 14, window.innerHeight - 120)) }}>
+            {hn.title && <h4>{hn.title}</h4>}
+            <p>{hn.text}</p>
+          </div>
+        )
+      })()}
       {explainFor && SYMBOL_MAP[explainFor] && (
         <div className="modal" onClick={() => setExplainFor(null)}>
           <div className="dialog" role="dialog" aria-label={SYMBOL_MAP[explainFor].name[lang]} onClick={(e) => e.stopPropagation()}>

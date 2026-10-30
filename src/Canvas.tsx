@@ -120,6 +120,8 @@ interface Props {
   onEditSymbol?: (id: string, x: number, y: number) => void
   /** double-clic sur un texte (annotation, nom de composant, repère) : édition sur place */
   onEditText?: (kind: 'note' | 'name' | 'label' | 'tag', id: string, x: number, y: number) => void
+  /** clic sur un bouton d'explication (ⓘ) : position écran du clic */
+  onHelp?: (id: string, x: number, y: number) => void
   onSimFault?: (id: string) => void
   /** outil de dessin actif (rectangle, ellipse, ligne), style des nouvelles formes, et fin de l'outil après le tracé */
   dark?: boolean
@@ -721,6 +723,7 @@ export default function Canvas(p: Props) {
 
   const onMouseUp = (e: React.MouseEvent) => {
     const it = inter.current
+    if (it.kind === 'note' && !it.moved && e.button === 0 && (doc.notes ?? []).find((n) => n.id === it.id)?.help) p.onHelp?.(it.id, e.clientX, e.clientY)
     if (held.current) { p.onSimPress(held.current, false); held.current = null }
     setGuides((g) => (g.v.length || g.h.length ? { v: [], h: [] } : g))
     if (it.kind === 'pan' && it.btn === 2 && Math.hypot(e.clientX - it.sx, e.clientY - it.sy) < 4) {
@@ -885,7 +888,12 @@ export default function Canvas(p: Props) {
           {junctions.map((j) => <circle key={j.x + ',' + j.y} cx={j.x} cy={j.y} r={2.8} fill="currentColor" stroke="none" />)}
           {(doc.notes ?? []).map((n) => (
             <g key={n.id} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined}>
-              {n.text.split('\n').map((line, i) => (
+              {n.help ? (
+                <g className="help-btn">
+                  <circle cx={n.x + 10} cy={n.y + 10} r={10} fill={n.color ?? '#1b5fa6'} stroke="none" />
+                  <text x={n.x + 10} y={n.y + 15} fontSize={14} fontWeight={700} fontFamily="Georgia, serif" textAnchor="middle" fill="#fff" stroke="none">i</text>
+                </g>
+              ) : n.text.split('\n').map((line, i) => (
                 <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fontFamily={fontCss(n.font)} fontWeight={n.bold ? 700 : 400} fontStyle={n.italic ? 'italic' : 'normal'} fill={n.color ?? 'currentColor'} stroke="none">{line}</text>
               ))}
             </g>
@@ -1207,8 +1215,8 @@ export default function Canvas(p: Props) {
           })}
           {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')
-            const w = Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
-            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={lines.length * n.size * 1.2 + 4} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined} />
+            const w = n.help ? 24 : Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
+            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={n.help ? 24 : lines.length * n.size * 1.2 + 4} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined} />
           })}
           {(doc.instruments ?? []).map((ins) => {
             const simDoc = { ...doc, symbols: [...doc.symbols, ...(p.extra ?? [])] }

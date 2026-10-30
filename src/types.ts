@@ -264,6 +264,9 @@ export interface Note {
   italic?: boolean
   /** couleur du texte (absent : couleur normale du schéma) */
   color?: string
+  /** bouton d'explication (ⓘ) : `text` est l'explication, affichée à côté du bouton au clic ; il n'apparaît pas dans les exports */
+  help?: boolean
+  title?: string
   /** rotation en degrés (sens horaire) autour du coin haut gauche du texte */
   rot?: number
 }

@@ -24,7 +24,7 @@ export const toMonochrome = (svg: string) =>
 
 export function sheetSvg(doc: Doc, content: SVGGElement): string {
   const { w, h } = PAPER_SIZE[doc.paper]
-  let body = new XMLSerializer().serializeToString(content)
+  let body = new XMLSerializer().serializeToString(content).replace(/<g[^>]*class="help-btn"[^>]*>.*?<\/g>/gs, '') // boutons d'explication : à l'écran seulement
   if (monochrome) body = toMonochrome(body)
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w * UNIT_MM}mm" height="${h * UNIT_MM}mm">` +

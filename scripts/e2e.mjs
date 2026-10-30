@@ -130,6 +130,16 @@ try {
   d = await doc()
   check('annotation : Entrée passe à la ligne', d.notes?.some((n) => n.text === 'Ligne 1\nLigne 2'), JSON.stringify(d.notes))
 
+  // ── bouton d'explication (ⓘ) : créé, texte affiché à côté au clic, fermé par Échap
+  await menu(1); await click(/^ⓘ Bouton d’explication/, '.toolbar .menu-list button'); await sleep(300)
+  d = await doc()
+  check('bouton d’explication : créé comme annotation « help »', d.notes?.some((n) => n.help && n.title === 'Explication'), JSON.stringify(d.notes))
+  const hp = await page.evaluate(() => { const r = document.querySelector('.help-btn').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })
+  await page.mouse.click(hp[0], hp[1]); await sleep(300)
+  check('bouton d’explication : le clic affiche le texte à côté', await page.evaluate(() => /Explication/.test(document.querySelector('.help-pop')?.textContent ?? '')))
+  await page.keyboard.press('Escape'); await sleep(200)
+  check('bouton d’explication : Échap ferme la fenêtre', await page.evaluate(() => !document.querySelector('.help-pop')))
+
   // ── nomenclature et export DXF présents dans le menu Fichier
   await menu(0)
   const items = await page.evaluate(() => [...document.querySelectorAll('.toolbar .menu-list')[0].querySelectorAll('button')].map((x) => x.textContent.trim()))
