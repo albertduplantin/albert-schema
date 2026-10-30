@@ -101,6 +101,8 @@ interface Props {
   highlight?: { symId: string; portId: string } | null
   /** électrovannes verrouillées en simulation (Ctrl + clic) : « id » côté gauche, « id:B » côté droit */
   latched?: ReadonlySet<string>
+  /** Ctrl + clic sur un poussoir : le garde enfoncé (ou le relâche) */
+  onSimLatch?: (id: string) => void
   /** tracé d'un conducteur en cours (pour l'aide affichée) */
   onWiring?: (on: boolean) => void
   onContext: (x: number, y: number, target: string | null) => void
@@ -452,6 +454,7 @@ export default function Canvas(p: Props) {
         if (k && e.ctrlKey) p.onSimToggle(k) // Ctrl + clic : l'électrovanne reste excitée jusqu'au prochain Ctrl + clic
         else if (k) { held.current = k; p.onSimPress(k, true) } else handled = false
       }
+      else if (s && kind === 'momentary' && e.ctrlKey) p.onSimLatch?.(s.id) // Ctrl + clic : le poussoir reste enfoncé jusqu'au prochain Ctrl + clic ou clic
       else if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
       else if (s && m?.k === 'switch' && m.ctl === 'fixed') p.onSimFault?.(s.id)
