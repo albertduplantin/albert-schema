@@ -10,6 +10,9 @@
 - Ne pas relire un fichier entier : Grep d'abord, puis Read avec `offset` / `limit`.
 - Scripts temporaires et captures : dossier scratchpad de la session, jamais à la racine du dépôt (`git add -A` les commiterait ; ship.mjs signale les fichiers non suivis).
 
+## Référencement
+- `public/<page>/index.html` (schema-electrique, schema-pneumatique, schema-hydraulique, exercices-guides, exemples, en) et `public/sitemap.xml` sont **générés et commités** par `npx tsx scripts/build-seo.mts` : à relancer quand on ajoute ou renomme un exemple de la galerie (`src/galleryMeta.ts`). Les exemples y pointent vers `/?exemple=<clé>` (lu dans `App.tsx`).
+
 ## Pièges connus
 - `public/library-core.json` et `library-extended.json` sont **commités et générés** (`npx tsx scripts/build-library.mts`) : oublier de les régénérer = le navigateur affiche l'ancien symbole.
 - Grille = 10 : les orifices des symboles doivent tomber sur des multiples de 10 (test dans test-hydraulic).

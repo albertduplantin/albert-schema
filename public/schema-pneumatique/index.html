@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulateur pneumatique et électropneumatique | Albert Schema Studio</title>
+<meta name="description" content="Dessinez et simulez un circuit pneumatique ou électropneumatique : vérins, distributeurs 5/2, fins de course, cycle A+ B+ A- B- avec automate.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://schema.albertduplantin.win/schema-pneumatique/">
+
+<meta name="theme-color" content="#0b6bcb">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Albert Schema Studio">
+<meta property="og:url" content="https://schema.albertduplantin.win/schema-pneumatique/">
+<meta property="og:title" content="Simulateur pneumatique et électropneumatique">
+<meta property="og:description" content="Dessinez et simulez un circuit pneumatique ou électropneumatique : vérins, distributeurs 5/2, fins de course, cycle A+ B+ A- B- avec automate.">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:image" content="https://schema.albertduplantin.win/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://schema.albertduplantin.win/schema-pneumatique/","url":"https://schema.albertduplantin.win/schema-pneumatique/","name":"Simulateur pneumatique et électropneumatique","description":"Dessinez et simulez un circuit pneumatique ou électropneumatique : vérins, distributeurs 5/2, fins de course, cycle A+ B+ A- B- avec automate.","inLanguage":"fr","isPartOf":{"@type":"WebSite","name":"Albert Schema Studio","url":"https://schema.albertduplantin.win/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Albert Schema Studio","item":"https://schema.albertduplantin.win/"},{"@type":"ListItem","position":2,"name":"Simulateur de schémas pneumatiques et électropneumatiques","item":"https://schema.albertduplantin.win/schema-pneumatique/"}]}]}</script>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6;color:#151916;margin:0;background:#f6f7f3}
+header,main,footer{max-width:46rem;margin:0 auto;padding:0 1rem}
+header{padding-top:1rem;padding-bottom:.5rem;display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;border-bottom:1px solid #d3d7d0}
+header a.brand{font-weight:700;text-decoration:none;color:#151916;margin-right:auto}
+header a,footer a{color:#1b5fa6}
+h1{font-size:1.7rem;line-height:1.25;margin:1.5rem 0 1rem}
+h2{font-size:1.2rem;margin:1.8rem 0 .5rem}
+ul.ex{padding-left:1.1rem}ul.ex li{margin:.6rem 0}
+.lvl{color:#7a7a7a;font-size:.85rem}
+.cta a{display:inline-block;background:#1b5fa6;color:#fff;text-decoration:none;padding:.7rem 1.2rem;border-radius:6px;font-weight:600}
+footer{padding-top:1rem;padding-bottom:2rem;margin-top:2rem;border-top:1px solid #d3d7d0;font-size:.9rem;color:#4d554e}
+</style>
+</head>
+<body>
+<header><a class="brand" href="/">Albert Schema Studio</a><a href="/schema-electrique/">Schémas électriques</a><a href="/schema-pneumatique/">Pneumatique</a><a href="/schema-hydraulique/">Hydraulique</a><a href="/exercices-guides/">Exercices guidés</a><a href="/exemples/">Exemples</a><a href="/en/">English</a></header>
+<main>
+<h1>Simulateur de schémas pneumatiques et électropneumatiques</h1>
+<p>Albert Schema Studio permet de dessiner un circuit pneumatique, de le câbler avec sa commande électrique et de le <strong>voir fonctionner</strong> : l’air sous pression en rouge, l’échappement en bleu, les tiroirs des distributeurs qui glissent, les chambres des vérins qui se remplissent.</p>
+<h2>Fonctions de simulation</h2>
+<ul>
+<li>Vérins simple et double effet, distributeurs 3/2 et 5/2, monostables et bistables, commande manuelle, électrique ou pneumatique.</li>
+<li>Électrodistributeurs : l’électrovanne suit la bobine du même repère (YV1, YV1/YV2). Un clic en simulation actionne la commande manuelle de secours ; Ctrl + clic verrouille une électrovanne pour en actionner une autre en même temps.</li>
+<li>Fins de course et détecteurs de position posés sur le vérin : capteurs à lame souple (ILS) et capteurs magnétiques 3 fils PNP ou NPN, avec leur position réglable le long de la course.</li>
+<li>Cycles automatiques A+ A- et A+ B+ A- B- avec fins de course, ou pilotés par un automate programmable (Grafcet).</li>
+<li>Repères normalisés : 1A, 1V1, 1S1, 1Y1 ; numéros d’orifices.</li>
+</ul>
+<h2>Exemples à ouvrir directement</h2>
+<ul class="ex"><li><a href="/?exemple=tplPneu"><strong>Vérin double effet, distributeur manuel (pneumatique)</strong></a> <span class="lvl">★☆☆</span><br>Vérin double effet et distributeur 5/2 manuel : maintenez le distributeur appuyé en simulation.</li><li><a href="/?exemple=tplPneuElec"><strong>Vérin et électrodistributeur (électro-pneumatique)</strong></a> <span class="lvl">★★☆</span><br>Électrodistributeur 5/2 commandé par un bouton ; le fin de course A1+ allume un voyant.</li><li><a href="/?exemple=tplPneuAuto"><strong>Va-et-vient automatique A+ A- (électro-pneumatique)</strong></a> <span class="lvl">★★★</span><br>Va-et-vient automatique A+ A- : distributeur bistable et deux fins de course.</li><li><a href="/?exemple=tplPneuPlc"><strong>Cycle A+ B+ A- B- avec automate programmable (Grafcet)</strong></a> <span class="lvl">★★★</span><br>Cycle A+ B+ A- B- : deux vérins 1A et 2A, distributeurs bistables 1V1 / 2V1 (bobines 1YV14, 1YV12, 2YV14, 2YV12), détecteurs a0 a1 b0 b1 et automate programmé en Grafcet.</li></ul>
+<p class="cta"><a href="/">Ouvrir l’éditeur : gratuit, sans compte</a></p>
+</main>
+<footer>Albert Schema Studio : éditeur et simulateur de schémas électriques, pneumatiques et hydrauliques. Symboles basés sur la collection QElectroTech (CC-BY 3.0) et dessinés par l’application.</footer>
+</body>
+</html>

@@ -462,6 +462,12 @@ function Editor() {
   // lien d'exercice (?exo=… et éventuellement &classe=…) : ouvre l'exercice et rejoint la classe
   useEffect(() => {
     const q = new URLSearchParams(location.search)
+    const exemple = q.get('exemple') // lien depuis les pages de présentation : ouvre un exemple de la galerie
+    if (exemple && TEMPLATE_FN[exemple]) {
+      history.replaceState(null, '', location.pathname + location.hash)
+      if (!docRef.current.symbols.length || window.confirm(tr(lang, 'galleryReplace'))) startTemplate(TEMPLATE_FN[exemple], exemple)
+      return
+    }
     const exo = q.get('exo'), code = q.get('classe')
     if (!exo && !code) return
     if (code && /^[A-Za-z0-9-]{3,24}$/.test(code)) setClass(code, classInfo.pseudo)

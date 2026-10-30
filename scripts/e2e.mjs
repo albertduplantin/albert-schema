@@ -140,6 +140,15 @@ try {
   await page.keyboard.press('Escape'); await sleep(200)
   check('bouton d’explication : Échap ferme la fenêtre', await page.evaluate(() => !document.querySelector('.help-pop')))
 
+  // ── lien depuis une page de présentation : ?exemple=<clé> ouvre l'exemple (document vide : pas de confirmation)
+  const pe = await browser.newPage()
+  await pe.setViewport({ width: 1300, height: 800 })
+  await pe.evaluateOnNewDocument(() => { try { localStorage.clear(); localStorage.setItem('albertschema.tour', '1') } catch {} })
+  await pe.goto(URL + '?exemple=tplPneu', { waitUntil: 'networkidle0' }); await sleep(1500)
+  const ex = await pe.evaluate(() => { const d = JSON.parse(localStorage.getItem('albertschema.doc') || '{}'); return { n: d.symbols?.length ?? 0, example: d.example, search: location.search } })
+  check('lien ?exemple= : l’exemple s’ouvre et l’adresse est nettoyée', ex.n > 0 && ex.example === 'tplPneu' && ex.search === '', JSON.stringify(ex))
+  await pe.close()
+
   // ── nomenclature et export DXF présents dans le menu Fichier
   await menu(0)
   const items = await page.evaluate(() => [...document.querySelectorAll('.toolbar .menu-list')[0].querySelectorAll('button')].map((x) => x.textContent.trim()))
