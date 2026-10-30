@@ -1218,7 +1218,7 @@ export default function Canvas(p: Props) {
           {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')
             const w = n.help ? 30 : Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
-            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} rx={n.help ? 15 : undefined} x={n.x - 3} y={n.y - 1} width={w} height={n.help ? 30 : lines.length * n.size * 1.2 + 4} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined} />
+            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} rx={n.help ? 15 : undefined} data-tip={n.help ? `ⓘ ${n.title ? n.title + ' : ' : ''}${p.lang === 'fr' ? 'cliquez pour lire l’explication' : 'click to read the explanation'}` : undefined} x={n.x - 3} y={n.y - 1} width={w} height={n.help ? 30 : lines.length * n.size * 1.2 + 4} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined} />
           })}
           {(doc.instruments ?? []).map((ins) => {
             const simDoc = { ...doc, symbols: [...doc.symbols, ...(p.extra ?? [])] }
