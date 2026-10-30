@@ -54,14 +54,14 @@ function magnetic3(tail: string, pnp: boolean): SymbolDef {
     std: 'CEI 60617',
     w: 80,
     h: 70,
-    // boîtier à deux cellules : détecteur (losange, U de l'aimant) à gauche, étage de sortie (contact à fermeture) à droite
+    // boîtier : détecteur (losange, U de l'aimant) à gauche, étage de sortie (contact à fermeture) à droite
     ports: [
       { id: pnp ? 't1' : 't0', x: 20, y: 0, dir: 'up', label: pnp ? 'BU' : 'BN' },
       { id: pnp ? 't0' : 't1', x: 60, y: 0, dir: 'up', label: pnp ? 'BN' : 'BU' },
       { id: 't2', x: 60, y: 70, dir: 'down', label: 'BK' },
     ],
     svg:
-      rect(0, 10, 80, 50, 'fill="none"') + line([40, 10], [40, 60]) +
+      rect(0, 10, 80, 50, 'fill="none"') +
       line([20, 0], [20, 20]) + diamond(20, 32, 12, 'fill="none"') + line([14, 27], [14, 37]) + line([26, 27], [26, 37]) +
       '<path d="M14 49V54H26V49" fill="none" stroke-width="2"/>' +
       line([60, 0], [60, 24]) + line([60, 46], [60, 70]) + line([60, 46], [68, 26]) +
