@@ -99,6 +99,8 @@ interface Props {
   onPlaced: (defId: string) => void
   /** borne mise en évidence (saisie d'un repère dans le panneau) */
   highlight?: { symId: string; portId: string } | null
+  /** électrovannes verrouillées en simulation (Ctrl + clic) : « id » côté gauche, « id:B » côté droit */
+  latched?: ReadonlySet<string>
   /** tracé d'un conducteur en cours (pour l'aide affichée) */
   onWiring?: (on: boolean) => void
   onContext: (x: number, y: number, target: string | null) => void
@@ -447,7 +449,8 @@ export default function Canvas(p: Props) {
         const f = SYMBOL_MAP[s.defId].fluid as { b?: string }
         const twoSided = f.b === 'elec' || f.b === 'man'
         const k = side === 'b' && twoSided ? s.id + ':B' : side === 'b' || (twoSided && !side) ? null : s.id
-        if (k) { held.current = k; p.onSimPress(k, true) } else handled = false
+        if (k && e.ctrlKey) p.onSimToggle(k) // Ctrl + clic : l'électrovanne reste excitée jusqu'au prochain Ctrl + clic
+        else if (k) { held.current = k; p.onSimPress(k, true) } else handled = false
       }
       else if (s && kind === 'momentary') { held.current = s.id; p.onSimPress(s.id, true) }
       else if (s && kind === 'toggle') p.onSimToggle(s.id)
@@ -947,6 +950,8 @@ export default function Canvas(p: Props) {
                     </g>
                   )
                 })()}
+                {p.sim && p.latched?.has(s.id) && <text x={b.x1 - 2} y={b.y1 - 4} fontSize={12} stroke="none" pointerEvents="none">🔒</text>}
+                {p.sim && p.latched?.has(s.id + ':B') && <text x={b.x2 - 12} y={b.y1 - 4} fontSize={12} stroke="none" pointerEvents="none">🔒</text>}
                 {p.sim?.tripped.has(s.id) && <text x={b.x2 + 3} y={b.y1 + 9} fontSize={9} stroke="none" fill="#e53935" fontWeight={700} pointerEvents="none">{kindOf(def) === 'fuse' ? p.lang === 'fr' ? 'FONDU' : 'BLOWN' : p.lang === 'fr' ? 'DÉCLENCHÉ' : 'TRIPPED'}</text>}
                 {p.sim && model === undefined && def.fluid?.k === 'valve' && !isDynamic(def) && (
                   <circle cx={b.x2 + 4} cy={b.y1 + 4} r={3} fill={p.sim.valveA[s.id] ? '#35c759' : '#fff'} stroke={p.sim.valveA[s.id] ? '#1f8f3a' : '#888'} strokeWidth={0.8} />

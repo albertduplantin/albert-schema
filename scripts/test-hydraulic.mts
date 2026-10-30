@@ -15,7 +15,7 @@ const TANK = lib.symbols.find((s: any) => s.domain === 'hydraulic' && s.fluid?.k
 const TK = TANK.ports[0].id
 const rig = (doc: any) => {
   let mem: any = {}, now = 1_000_000
-  const run = (pressed: string[] = [], dt = 0) => { now += dt; const r = simulate(doc, SYMBOL_MAP, mem, { pressed: new Set(pressed), toggled: new Set(), cut: new Set() }, now); mem = r.state; return r }
+  const run = (pressed: string[] = [], dt = 0, toggled: string[] = []) => { now += dt; const r = simulate(doc, SYMBOL_MAP, mem, { pressed: new Set(pressed), toggled: new Set(toggled), cut: new Set() }, now); mem = r.state; return r }
   return { run, id: (label: string) => doc.symbols.find((s: any) => s.label === label)?.id }
 }
 const num = (s: string | undefined) => { const m = /(\d+(?:,\d+)?)/.exec(s ?? ''); return m ? Number(m[1].replace(',', '.')) : 0 }
@@ -292,6 +292,17 @@ check('distributeurs hydrauliques : chacun a un dessin', valves.every((s: any) =
 {
   const off = lib.symbols.filter((s: any) => s.domain === 'hydraulic').flatMap((s: any) => s.ports.filter((p: any) => p.x % 10 || p.y % 10).map((p: any) => `${s.id}:${p.id}(${p.x},${p.y})`))
   check('grille : tous les orifices hydrauliques sont sur la grille de 10', off, [])
+}
+
+// ── deux distributeurs : un Ctrl + clic verrouille l'électrovanne de 1V2 pendant qu'on tient celle de 1V1
+{
+  const d = T.hydraulicTP5(base)
+  const g = rig(d)
+  const v1 = g.id('1V1'), v2 = g.id('1V2'), m = g.id('M2'), c = g.id('1A')
+  let r = g.run([], 0); r = g.run([], 1500)
+  const p0 = r.cylPos[c] ?? 0
+  r = g.run([v1], 100, [v2 + ':B']); r = g.run([v1], 3000, [v2 + ':B'])
+  check('deux distributeurs : 1V2 verrouillée (côté droit), 1V1 tenue : le vérin avance et le moteur tourne', [Math.abs((r.cylPos[c] ?? 0) - p0) > 0.05, (r.motorRpm[m] ?? 0) > 100], [true, true])
 }
 
 console.log(fails ? `\n${fails} ÉCHEC(S)` : '\ntous les tests hydrauliques passent')

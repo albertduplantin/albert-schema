@@ -137,7 +137,7 @@ export function solveFluid(x: FluidIn): FluidOut {
 
         (f.a === 'man' && (x.pressed.has(s.id) || x.toggled.has(s.id))) ||
         (f.a === 'pneu' && !!f.pilotA && pilotP.has(key(s.id, f.pilotA)))
-      const bOn = (f.b === 'elec' && (coilB || x.pressed.has(s.id + ':B'))) || (f.b === 'man' && x.pressed.has(s.id + ':B')) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
+      const bOn = (f.b === 'elec' && (coilB || x.pressed.has(s.id + ':B') || x.toggled.has(s.id + ':B'))) || (f.b === 'man' && x.pressed.has(s.id + ':B')) || (f.b === 'pneu' && !!f.pilotB && pilotP.has(key(s.id, f.pilotB)))
       const mem = x.memory['§V:' + s.id]?.on ?? false
       if (f.prop) {
         // proportionnel : la position du joystick choisit la case (gauche : négatif, droite : positif)

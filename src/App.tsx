@@ -594,6 +594,18 @@ function Editor() {
       return { ...s, toggled }
     })
   }, [all])
+  // électrovannes verrouillées par Ctrl + clic : clés de `toggled` qui visent un distributeur à commande électrique
+  const latched = useMemo(() => {
+    const out = new Set<string>()
+    for (const k of simIn.toggled) {
+      const s = all.symbols.find((x) => x.id === k.replace(/:B$/, ''))
+      const f = s && (SYMBOL_MAP[s.defId]?.fluid as { k?: string; a?: string; b?: string } | undefined)
+      if (f?.k === 'valve' && (k.endsWith(':B') ? f.b === 'elec' : f.a === 'elec')) out.add(k)
+    }
+    return out
+  }, [simIn.toggled, all])
+  const unlockAll = () => setSimIn((s) => ({ ...s, toggled: new Set([...s.toggled].filter((k) => !latched.has(k))) }))
+  const [showSimKeys, setShowSimKeys] = useState(false)
   const coilLabels = useMemo(
     () => [...new Set(all.symbols.filter((s) => SYMBOL_MAP[s.defId]?.sim?.k === 'coil' && s.label).map((s) => s.label))],
     [all.symbols],
@@ -1709,6 +1721,8 @@ function Editor() {
             <>
               <button onClick={() => rebase({ paused: !clock.current.paused })}>{clockUi.paused ? '▶ ' + t('resume') : '⏸ ' + t('pause')}</button>
               {clockUi.paused && <button onClick={() => { clock.current = { ...clock.current, v: clock.current.v + (sim?.pendingMs ?? 500) + 15 }; setSimTick((n) => n + 1) }}>⏭ {t('step')}</button>}
+              {latched.size > 0 && <button onClick={unlockAll} title={lang === 'fr' ? 'Libère les électrovannes verrouillées par Ctrl + clic' : 'Releases the solenoids locked with Ctrl + click'}>🔓 {lang === 'fr' ? 'Tout déverrouiller' : 'Unlock all'}</button>}
+              <button className={showSimKeys ? 'on' : ''} onClick={() => setShowSimKeys((v) => !v)} title={lang === 'fr' ? 'Les commandes de la souris pendant la simulation' : 'Mouse commands during the simulation'}>🖱 {lang === 'fr' ? 'Commandes' : 'Controls'}</button>
               <select aria-label={t('speed')} title={t('speedHelp')} value={clockUi.speed} onChange={(e) => rebase({ speed: Number(e.target.value) })}>
                 {[0.5, 1, 2, 5, 10].map((v) => <option key={v} value={v}>× {v}</option>)}
               </select>
@@ -1791,7 +1805,7 @@ function Editor() {
       <main className="stage" data-plcdock={plcSym && !plcWin.max && !plcWin.min && plcWin.dock !== 'float' ? plcWin.dock : undefined} style={{ ['--plc-w' as string]: plcWin.w + 'px', ['--plc-h' as string]: plcWin.h + 'px' }}>
         <Canvas doc={doc} lang={lang} simSpeed={simMode ? clockUi.speed : 1} sel={sel} setSel={setSel} placing={placing} setPlacing={setPlacing} dark={darkSheet} tool={tool} measure={measure} toolStyle={toolStyle} onToolDone={() => setTool(null)}
           commit={commit} update={update} checkpoint={checkpoint} contentRef={contentRef} nextLabel={nextLabel} detectors={detectors}
-          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} onHelp={(id, x, y) => setHelpOpen({ id, x, y })} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} onAdjust={onAdjust} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
+          onPlaced={onPlaced} onContext={(x, y, target) => setMenu({ x, y, target })} onWiring={setWiringOn} onHelp={(id, x, y) => setHelpOpen({ id, x, y })} latched={latched} highlight={hiPort} sim={sim} onSimPress={onSimPress} onSimToggle={onSimToggle} onAdjust={onAdjust} faults={simIn.cut} onSimFault={onSimFault} onEditTitle={() => setShowTitleBlock(true)} onEditSymbol={openProps} onEditText={(kind, id, x, y) => { textDone.current = false; setTextEdit({ kind, id, x, y }) }} extra={extraSyms} pageOf={pageOf} sheetLabel={pageCount(doc) > 1 ? `${(doc.page ?? 0) + 1}/${pageCount(doc)}` : undefined} labels={{ zoomIn: t('zoomIn'), zoomOut: t('zoomOut'), fit: t('fit'), grid: t('grid') }} />
         <div className="pagebar" role="tablist" aria-label={t('pages')}>
           {pageTabs.map((pg, i) => (
             <button key={i} role="tab" aria-selected={i === (doc.page ?? 0)} className={i === (doc.page ?? 0) ? 'on' : ''}
@@ -2158,6 +2172,27 @@ function Editor() {
         </div>
       )}
 
+      {simMode && showSimKeys && (
+        <div className="help-pop sim-keys" role="dialog" aria-label={lang === 'fr' ? 'Commandes de la simulation' : 'Simulation controls'} style={{ left: '50%', transform: 'translateX(-50%)', top: 96 }}>
+          <h4>🖱 {lang === 'fr' ? 'Commandes de la simulation' : 'Simulation controls'}</h4>
+          <table><tbody>
+            {(lang === 'fr' ? [
+              ['Clic', 'Manœuvrer un bouton, un interrupteur ou un sélecteur. Maintenir le clic : poussoir ou électrovanne.'],
+              ['Ctrl + clic', 'Électrovanne : la verrouiller (🔒). Elle reste excitée pendant que vous actionnez un autre distributeur. Ctrl + clic de nouveau : la libérer.'],
+              ['Alt + clic', 'Provoquer un défaut : contact collé, court-circuit, fil coupé.'],
+              ['Maj + clic', 'Sélectionner un organe sans le manœuvrer.'],
+              ['Clic sur un déclenché', 'Réarmer un disjoncteur ou remplacer un fusible.'],
+            ] : [
+              ['Click', 'Operate a button, switch or selector. Hold the click: pushbutton or solenoid.'],
+              ['Ctrl + click', 'Solenoid: lock it (🔒). It stays energised while you operate another valve. Ctrl + click again: release it.'],
+              ['Alt + click', 'Inject a fault: stuck contact, short circuit, cut wire.'],
+              ['Shift + click', 'Select a device without operating it.'],
+              ['Click on a tripped device', 'Reset a breaker or replace a fuse.'],
+            ]).map(([k, d]) => <tr key={k}><td><kbd>{k}</kbd></td><td>{d}</td></tr>)}
+          </tbody></table>
+          <div className="actions"><button onClick={() => setShowSimKeys(false)}>{t('close')}</button></div>
+        </div>
+      )}
       {helpOpen && (() => {
         const hn = (doc.notes ?? []).find((n) => n.id === helpOpen.id)
         if (!hn?.help) return null
