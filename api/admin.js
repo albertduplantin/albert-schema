@@ -7,6 +7,7 @@
 //   POST /api/admin { action: 'send', id, kind: 'seen' | 'done' }   -> envoie à l'auteur (via Resend) « pris en compte » / « traité », puis pose le repère « prévenu »
 //        kind: 'custom' + message (2000 caractères au plus) : message libre, le statut ne change pas.
 //        503 si RESEND_API_KEY manque, 422 si le retour n'a pas d'adresse, 502 si Resend refuse. Expéditeur : MAIL_FROM, réponses : MAIL_REPLY_TO.
+//   GET  /api/admin?action=stats&days=30   -> audience (voir api/visit.js) : { today, days: [{ day, visits, uniq }], tops: { pages, origins, countries, devices, langs }, months: [{ month, uniq }] }
 //   GET  /api/admin?action=examples        -> { items: [exemples enregistrés, sans le schéma], hidden: [clés d'exemples intégrés masqués] }
 //   GET  /api/admin?action=exos            -> { items: [exercices guidés publiés, sans le schéma] }
 //   POST /api/admin { action: 'xo-save', id?, domain, level, minutes, order, title, summary, brief:[…], expect:[…], doc } | { action: 'xo-delete', id }
@@ -101,6 +102,31 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const action = String(req.query?.action || new URL(req.url, 'http://x').searchParams.get('action') || 'list')
+      if (action === 'stats') {
+        const n = Math.min(90, Math.max(1, Number(req.query?.days || new URL(req.url, 'http://x').searchParams.get('days')) || 30))
+        const stamp = (back) => new Date(Date.now() - back * 86_400_000).toISOString()
+        const days = Array.from({ length: n }, (_, i) => stamp(n - 1 - i).slice(0, 10))
+        const months = [...new Set([stamp(0).slice(0, 7), stamp(31).slice(0, 7), stamp(62).slice(0, 7)])]
+        const out = await redis([...days.map((d) => ['HGETALL', `albertschema:v:d:${d}`]), ...months.map((m) => ['PFCOUNT', `albertschema:v:m:${m}`])])
+        const tops = { pages: {}, origins: {}, countries: {}, devices: {}, langs: {} }
+        const names = { p: 'pages', r: 'origins', c: 'countries', d: 'devices', l: 'langs' }
+        const rows = days.map((day, i) => {
+          const flat = out[i]?.result ?? []
+          let visits = 0
+          let uniq = 0
+          for (let j = 0; j + 1 < flat.length; j += 2) {
+            const k = String(flat[j])
+            const v = Number(flat[j + 1]) || 0
+            if (k === 'visits') visits = v
+            else if (k === 'uniq') uniq = v
+            else if (names[k[0]] && k[1] === ':') tops[names[k[0]]][k.slice(2)] = (tops[names[k[0]]][k.slice(2)] ?? 0) + v
+          }
+          return { day, visits, uniq }
+        })
+        const sorted = Object.fromEntries(Object.entries(tops).map(([k, o]) => [k, Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, 15)]))
+        res.status(200).json({ today: days[days.length - 1], days: rows, tops: sorted, months: months.map((month, i) => ({ month, uniq: Number(out[n + i]?.result) || 0 })) })
+        return
+      }
       if (action === 'examples') {
         const [{ result: rows }, { result: hidden }] = await redis([['HGETALL', EXAMPLES], ['SMEMBERS', HIDDEN]])
         const items = []

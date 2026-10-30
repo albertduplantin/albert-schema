@@ -13,6 +13,8 @@
 ## Référencement
 - `public/<page>/index.html` (schema-electrique, schema-pneumatique, schema-hydraulique, exercices-guides, exemples, en) et `public/sitemap.xml` sont **générés et commités** par `npx tsx scripts/build-seo.mts` : à relancer quand on ajoute ou renomme un exemple de la galerie (`src/galleryMeta.ts`). Les exemples y pointent vers `/?exemple=<clé>` (lu dans `App.tsx`).
 
+- Les pages ont des captures `public/img/exemple-*.webp` (faites avec puppeteer sur `/?exemple=<clé>`, panneaux fermés) ; `public/v.js` (mesure d’audience) est inclus dans index.html et dans chaque page générée.
+
 ## Pièges connus
 - `public/library-core.json` et `library-extended.json` sont **commités et générés** (`npx tsx scripts/build-library.mts`) : oublier de les régénérer = le navigateur affiche l'ancien symbole.
 - Grille = 10 : les orifices des symboles doivent tomber sur des multiples de 10 (test dans test-hydraulic).

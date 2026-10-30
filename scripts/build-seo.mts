@@ -31,6 +31,10 @@ const exampleLink = (key: string) => `${SITE}/?exemple=${key}`
 const exampleItems = (keys: string[]) =>
   `<ul class="ex">${keys.map((k) => `<li><a href="/?exemple=${k}"><strong>${esc(tr('fr', k as never))}</strong></a> <span class="lvl">${stars(meta(k).level)}</span><br>${esc(meta(k).about.fr)}</li>`).join('')}</ul>`
 
+/** Capture d'écran de l'éditeur (public/img, régénérée à la main) : légende lisible aussi par les moteurs de recherche. */
+const fig = (file: string, key: string, alt: string, caption: string) =>
+  `<figure><a href="/?exemple=${key}"><img src="/img/${file}.webp" width="870" height="520" alt="${esc(alt)}" loading="lazy"></a><figcaption>${esc(caption)}</figcaption></figure>`
+
 const CTA = '<p class="cta"><a href="/">Ouvrir l’éditeur : gratuit, sans compte</a></p>'
 
 const PAGES: Page[] = [
@@ -42,6 +46,7 @@ const PAGES: Page[] = [
     h1: 'Logiciel de schémas électriques en ligne, avec simulation',
     body: `
 <p>Albert Schema Studio est un éditeur de schémas électriques qui fonctionne dans le navigateur, sans installation ni compte. Vous posez les symboles, tracez les conducteurs, puis <strong>simulez le circuit</strong> : le courant circule en couleur, les contacteurs collent, les voyants s’allument.</p>
+${fig('exemple-electrique', 'tplRelay24', 'Schéma électrique d’un relais en 24 V alternatif avec bornier, en simulation : conducteurs colorés selon la tension', 'Relais en 24 V alternatif avec bornier, pendant la simulation.')}
 <h2>Ce que vous pouvez dessiner et simuler</h2>
 <ul>
 <li>Circuits de commande et de puissance : disjoncteur-moteur, contacteur, relais, bouton-poussoir, auto-maintien, voyants.</li>
@@ -64,6 +69,7 @@ ${CTA}`,
     h1: 'Simulateur de schémas pneumatiques et électropneumatiques',
     body: `
 <p>Albert Schema Studio permet de dessiner un circuit pneumatique, de le câbler avec sa commande électrique et de le <strong>voir fonctionner</strong> : l’air sous pression en rouge, l’échappement en bleu, les tiroirs des distributeurs qui glissent, les chambres des vérins qui se remplissent.</p>
+${fig('exemple-pneumatique', 'tplPneuAuto', 'Schéma électropneumatique d’un va-et-vient automatique A+ A- : vérin, distributeur 5/2 et circuit de commande en simulation', 'Va-et-vient automatique A+ A- : l’air sous pression en rouge, l’échappement en bleu.')}
 <h2>Fonctions de simulation</h2>
 <ul>
 <li>Vérins simple et double effet, distributeurs 3/2 et 5/2, monostables et bistables, commande manuelle, électrique ou pneumatique.</li>
@@ -84,6 +90,7 @@ ${CTA}`,
     h1: 'Simulateur de schémas hydrauliques avec valeurs chiffrées',
     body: `
 <p>Albert Schema Studio simule les circuits hydrauliques avec des <strong>valeurs chiffrées</strong> : pression en bar, débit en L/min, vitesse des moteurs en tr/min, vitesse et effort des vérins, couple. Le modèle est documenté et se règle composant par composant.</p>
+${fig('exemple-hydraulique', 'tplHydTP5', 'Schéma hydraulique d’un banc : pompe, limiteur de pression, distributeurs 4/3, moteur et vérin avec manomètres en bar', 'TP5 : limiteurs de pression secondaires. Les boutons ⓘ ouvrent l’explication du professeur.')}
 <h2>Composants simulés</h2>
 <ul>
 <li>Groupe motopompe à cylindrée fixe ou variable, pompe à pression constante, pompe Load Sensing.</li>
@@ -142,6 +149,7 @@ ${CTA}`,
 <li>Guided exercises and a class mode for teachers.</li>
 <li>Export to SVG, PNG, PDF and DXF, bill of materials and wiring list. Works offline.</li>
 </ul>
+<figure><a href="/?exemple=tplHydTP5"><img src="/img/exemple-hydraulique.webp" width="870" height="520" alt="Hydraulic circuit with pump, relief valves, 4/3 valves, motor and cylinder, pressures shown in bar" loading="lazy"></a><figcaption>Hydraulic example: pressures in bar, flows in L/min.</figcaption></figure>
 <p class="cta"><a href="/">Open the editor: free, no account</a></p>
 <p>The application interface is available in English: use the FR / EN switch in the top right corner.</p>
 <h2>Examples</h2>
@@ -196,6 +204,7 @@ h1{font-size:1.7rem;line-height:1.25;margin:1.5rem 0 1rem}
 h2{font-size:1.2rem;margin:1.8rem 0 .5rem}
 ul.ex{padding-left:1.1rem}ul.ex li{margin:.6rem 0}
 .lvl{color:#7a7a7a;font-size:.85rem}
+figure{margin:1.2rem 0}figure img{max-width:100%;height:auto;border:1px solid #d3d7d0;border-radius:6px;display:block}figcaption{font-size:.85rem;color:#4d554e;margin-top:.3rem}
 .cta a{display:inline-block;background:#1b5fa6;color:#fff;text-decoration:none;padding:.7rem 1.2rem;border-radius:6px;font-weight:600}
 footer{padding-top:1rem;padding-bottom:2rem;margin-top:2rem;border-top:1px solid #d3d7d0;font-size:.9rem;color:#4d554e}
 </style>
@@ -207,6 +216,7 @@ footer{padding-top:1rem;padding-bottom:2rem;margin-top:2rem;border-top:1px solid
 ${p.body.trim()}
 </main>
 <footer>${p.lang === 'fr' ? 'Albert Schema Studio : éditeur et simulateur de schémas électriques, pneumatiques et hydrauliques. Symboles basés sur la collection QElectroTech (CC-BY 3.0) et dessinés par l’application.' : 'Albert Schema Studio: editor and simulator for electrical, pneumatic and hydraulic schematics. Symbols based on the QElectroTech collection (CC-BY 3.0) and drawn by the application.'}</footer>
+<script src="/v.js" defer></script>
 </body>
 </html>
 `

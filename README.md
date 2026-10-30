@@ -17,6 +17,7 @@ Le **noyau** (≈ 260 symboles électriques, pneumatiques et hydrauliques) est d
 - **Commun** (`api/usage.js`, `src/globalUsage.ts`) : statistiques anonymes de tous les utilisateurs, **uniquement avec leur accord**
   (aucun schéma ni donnée personnelle, seulement des identifiants de symboles). Sans base configurée, l'appli fonctionne
   normalement avec le classement personnel et le classement éditorial (`scripts/popularity.mjs`).
+- **Audience** (`public/v.js`, `api/visit.js`, onglet « Audience » de `/admin`) : mesure sans cookie, une requête par onglet ; visiteur unique du jour = empreinte (sel + jour + IP + navigateur), l’IP n’est jamais enregistrée. Ignorée avec « Do Not Track », localhost, robots ; case « Ne pas me compter » dans l’administration.
 
 Mise en place du classement commun : dans Vercel, *Storage → Upstash Redis* (Marketplace), connecter la base au projet.
 Les variables `KV_REST_API_URL` et `KV_REST_API_TOKEN` (ou `UPSTASH_REDIS_REST_URL/TOKEN`) sont alors injectées ; redéployer.
