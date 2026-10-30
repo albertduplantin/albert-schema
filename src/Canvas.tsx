@@ -889,9 +889,11 @@ export default function Canvas(p: Props) {
           {(doc.notes ?? []).map((n) => (
             <g key={n.id} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined}>
               {n.help ? (
-                <g className="help-btn">
-                  <circle cx={n.x + 10} cy={n.y + 10} r={10} fill={n.color ?? '#1b5fa6'} stroke="none" />
-                  <text x={n.x + 10} y={n.y + 15} fontSize={14} fontWeight={700} fontFamily="Georgia, serif" textAnchor="middle" fill="#fff" stroke="none">i</text>
+                <g className="help-btn" style={{ filter: 'drop-shadow(0 1.5px 2px rgba(0,0,0,.4))' }}>
+                  <circle cx={n.x + 12} cy={n.y + 14} r={13} fill={n.color ?? '#1b5fa6'} stroke="#fff" strokeWidth={2} />
+                  <path d={`M${n.x + 3} ${n.y + 11}A9 9 0 0 1 ${n.x + 21} ${n.y + 11}A14 6 0 0 0 ${n.x + 3} ${n.y + 11}Z`} fill="#fff" fillOpacity={0.22} stroke="none" />
+                  <circle cx={n.x + 12} cy={n.y + 8.5} r={2.1} fill="#fff" stroke="none" />
+                  <rect x={n.x + 10.2} y={n.y + 12} width={3.6} height={9.5} rx={1.6} fill="#fff" stroke="none" />
                 </g>
               ) : n.text.split('\n').map((line, i) => (
                 <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fontFamily={fontCss(n.font)} fontWeight={n.bold ? 700 : 400} fontStyle={n.italic ? 'italic' : 'normal'} fill={n.color ?? 'currentColor'} stroke="none">{line}</text>
@@ -1215,8 +1217,8 @@ export default function Canvas(p: Props) {
           })}
           {(doc.notes ?? []).map((n) => {
             const lines = n.text.split('\n')
-            const w = n.help ? 24 : Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
-            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} x={n.x - 3} y={n.y - 1} width={w} height={n.help ? 24 : lines.length * n.size * 1.2 + 4} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined} />
+            const w = n.help ? 30 : Math.max(...lines.map((l) => l.length)) * n.size * 0.6 + 6
+            return <rect key={n.id} data-note={n.id} className={sel.includes(n.id) ? 'sel-box lbl-hit' : 'lbl-hit'} rx={n.help ? 15 : undefined} x={n.x - 3} y={n.y - 1} width={w} height={n.help ? 30 : lines.length * n.size * 1.2 + 4} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined} />
           })}
           {(doc.instruments ?? []).map((ins) => {
             const simDoc = { ...doc, symbols: [...doc.symbols, ...(p.extra ?? [])] }
