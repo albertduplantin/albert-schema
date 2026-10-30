@@ -52,20 +52,20 @@ function magnetic3(tail: string, pnp: boolean): SymbolDef {
       ? { fr: 'Capteur magnétique de vérin, 3 fils PNP (NO)', en: 'Cylinder magnetic sensor, 3-wire PNP (NO)' }
       : { fr: 'Capteur magnétique de vérin, 3 fils NPN (NO)', en: 'Cylinder magnetic sensor, 3-wire NPN (NO)' },
     std: 'CEI 60617',
-    w: 80,
-    h: 70,
-    // boîtier : détecteur (losange, U de l'aimant) à gauche, étage de sortie (contact à fermeture) à droite
+    w: 60,
+    h: 60,
+    // boîtier compact : détecteur (losange, U de l'aimant) à gauche, étage de sortie (contact à fermeture) à droite
     ports: [
       { id: pnp ? 't1' : 't0', x: 20, y: 0, dir: 'up', label: pnp ? 'BU' : 'BN' },
-      { id: pnp ? 't0' : 't1', x: 60, y: 0, dir: 'up', label: pnp ? 'BN' : 'BU' },
-      { id: 't2', x: 60, y: 70, dir: 'down', label: 'BK' },
+      { id: pnp ? 't0' : 't1', x: 40, y: 0, dir: 'up', label: pnp ? 'BN' : 'BU' },
+      { id: 't2', x: 40, y: 60, dir: 'down', label: 'BK' },
     ],
     svg:
-      rect(0, 10, 80, 50, 'fill="none"') +
-      line([20, 0], [20, 20]) + diamond(20, 32, 12, 'fill="none"') + line([14, 27], [14, 37]) + line([26, 27], [26, 37]) +
-      '<path d="M14 49V54H26V49" fill="none" stroke-width="2"/>' +
-      line([60, 0], [60, 24]) + line([60, 46], [60, 70]) + line([60, 46], [68, 26]) +
-      text(70, 56, pnp ? 'PNP' : 'NPN', 7, 'font-weight="700"'),
+      rect(0, 10, 50, 40, 'fill="none"') +
+      line([20, 0], [20, 19]) + diamond(20, 28, 9, 'fill="none"') + line([15, 24], [15, 32]) + line([25, 24], [25, 32]) +
+      '<path d="M15 40V44H25V40" fill="none" stroke-width="1.5"/>' +
+      line([40, 0], [40, 24]) + line([40, 40], [40, 60]) + line([40, 40], [46, 26]) +
+      text(54, 57, pnp ? 'PNP' : 'NPN', 6, 'font-weight="700"'),
     sim: { k: 'switch', poles: [[pnp ? 't0' : 't1', 't2']], ctl: 'toggle', nc: false },
   } as SymbolDef
 }
