@@ -1225,7 +1225,7 @@ function Editor() {
     const sh = (doc.shapes ?? []).find((x) => sel.includes(x.id)), w = doc.wires.find((x) => sel.includes(x.id)), n = (doc.notes ?? []).find((x) => sel.includes(x.id))
     if (sh) painter.current = { kind: 'shape', style: { stroke: sh.stroke, width: sh.width, color: sh.color, fill: sh.fill, arrow: sh.arrow } }
     else if (w) painter.current = { kind: 'wire', style: { color: w.color, width: w.width, dash: w.dash } }
-    else if (n) painter.current = { kind: 'note', style: { size: n.size, font: n.font, bold: n.bold, italic: n.italic } }
+    else if (n) painter.current = { kind: 'note', style: { size: n.size, font: n.font, bold: n.bold, italic: n.italic, color: n.color } }
     else return
     say(lang === 'fr' ? 'Style copié : Ctrl+Maj+V pour l’appliquer à la sélection.' : 'Style copied: Ctrl+Shift+V applies it to the selection.')
   }
@@ -1966,6 +1966,10 @@ function Editor() {
             <div className="row">
               <button className={selNote.bold ? 'on' : ''} onClick={() => patchNote({ bold: !selNote.bold })}><b>B</b></button>
               <button className={selNote.italic ? 'on' : ''} onClick={() => patchNote({ italic: !selNote.italic })}><i>I</i></button>
+            </div>
+            <div className="colors" data-tip={t('color')}>
+              <button className={'swatch' + (!selNote.color ? ' on' : '')} style={{ background: 'linear-gradient(135deg,#fff 50%,#000 50%)', border: '1px solid #888' }} title={lang === 'fr' ? 'Couleur normale du schéma' : 'Normal diagram colour'} aria-label={lang === 'fr' ? 'Couleur normale' : 'Normal colour'} onClick={() => patchNote({ color: undefined })} />
+              {SHAPE_COLORS.map((c) => <button key={c} className={'swatch' + (selNote.color === c ? ' on' : '')} style={{ background: c }} title={t('color')} aria-label={c} onClick={() => patchNote({ color: c })} />)}
             </div>
             <label data-tip={t('helpRotation')}>{t('rotation')}{tip('helpRotation')}<input type="number" step={15} value={selNote.rot ?? 0} onChange={(e) => patchNote({ rot: ((Number(e.target.value) % 360) + 360) % 360 || undefined })} /></label>
           </div>

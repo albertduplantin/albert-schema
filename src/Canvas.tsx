@@ -886,7 +886,7 @@ export default function Canvas(p: Props) {
           {(doc.notes ?? []).map((n) => (
             <g key={n.id} transform={n.rot ? `rotate(${n.rot} ${n.x} ${n.y})` : undefined}>
               {n.text.split('\n').map((line, i) => (
-                <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fontFamily={fontCss(n.font)} fontWeight={n.bold ? 700 : 400} fontStyle={n.italic ? 'italic' : 'normal'} fill="currentColor" stroke="none">{line}</text>
+                <text key={i} x={n.x} y={n.y + n.size + i * n.size * 1.2} fontSize={n.size} fontFamily={fontCss(n.font)} fontWeight={n.bold ? 700 : 400} fontStyle={n.italic ? 'italic' : 'normal'} fill={n.color ?? 'currentColor'} stroke="none">{line}</text>
               ))}
             </g>
           ))}

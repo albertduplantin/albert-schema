@@ -262,6 +262,8 @@ export interface Note {
   font?: string
   bold?: boolean
   italic?: boolean
+  /** couleur du texte (absent : couleur normale du schéma) */
+  color?: string
   /** rotation en degrés (sens horaire) autour du coin haut gauche du texte */
   rot?: number
 }
