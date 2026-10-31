@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { BUILTIN_META } from '../src/galleryMeta.ts'
 import { tr } from '../src/i18n.ts'
+import { DONATE_URL } from '../src/donate.ts'
 
 const SITE = 'https://schema.albertduplantin.win'
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -168,6 +169,7 @@ const NAV: [string, string][] = [
   ['/en/', 'English'],
 ]
 
+const donate = (lang: 'fr' | 'en') => DONATE_URL ? ` <a href="${DONATE_URL}" target="_blank" rel="noopener noreferrer">☕ ${lang === 'fr' ? 'Soutenir le projet' : 'Support the project'}</a>` : ''
 const url = (p: Page) => `${SITE}/${p.slug}/`
 const html = (p: Page) => `<!doctype html>
 <html lang="${p.lang}">
@@ -217,7 +219,7 @@ footer{padding-top:1rem;padding-bottom:2rem;margin-top:2rem;border-top:1px solid
 <h1>${esc(p.h1)}</h1>
 ${p.body.trim()}
 </main>
-<footer>${p.lang === 'fr' ? 'Albert Schema Studio : éditeur et simulateur de schémas électriques, pneumatiques et hydrauliques. Symboles basés sur la collection QElectroTech (CC-BY 3.0) et dessinés par l’application.' : 'Albert Schema Studio: editor and simulator for electrical, pneumatic and hydraulic schematics. Symbols based on the QElectroTech collection (CC-BY 3.0) and drawn by the application.'}</footer>
+<footer>${p.lang === 'fr' ? 'Albert Schema Studio : éditeur et simulateur de schémas électriques, pneumatiques et hydrauliques. Symboles basés sur la collection QElectroTech (CC-BY 3.0) et dessinés par l’application.' : 'Albert Schema Studio: editor and simulator for electrical, pneumatic and hydraulic schematics. Symbols based on the QElectroTech collection (CC-BY 3.0) and drawn by the application.'}${donate(p.lang)}</footer>
 <script src="/v.js" defer></script>
 </body>
 </html>

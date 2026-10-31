@@ -20,6 +20,7 @@ import { PAPER_SIZE, symBBox, uid } from './geometry'
 import { defaultInstrument } from './instruments'
 import Canvas from './Canvas'
 
+import { DONATE_URL, donateDue, donateOff, donateShown } from './donate'
 import { bomRows, exportCsv, exportDxf, exportWiringCsv, exportPng, setMonochrome, exportSvg, printProject, printSheet, saveJson, sheetSvg, wireRows, fileBase } from './exporters'
 import { relay24V, delayedCascade, motorStarter, motorStarterTransformer, pneumaticAuto, pneumaticPlc, hydraulicMotor, hydraulicCylinder, hydraulicTP5, hydraulicTP6, hydraulicTP7, hydraulicTP8, hydraulicTP9, pneumaticCylinder, pneumaticElectric, reversingStarter, startLamps, timerOnDelay } from './templates'
 import { duplicateTerms, editTerm, ensureUnique, othersTerms, termGroups } from './terminals'
@@ -962,6 +963,13 @@ function Editor() {
   const [syncAt, setSyncAt] = useState<number | null>(null)
   const [showCloud, setShowCloud] = useState(false)
   const [nudgeOff, setNudgeOff] = useState(() => { try { return localStorage.getItem('albertschema.cloudNudge') === '1' } catch { return true } })
+  // message de soutien discret après un export réussi : au plus une fois par mois, définitivement refusable ; absent tant qu'aucun lien de don n'est configuré
+  const [donateNudge, setDonateNudge] = useState(false)
+  const afterExport = () => {
+    if (!donateDue()) return
+    donateShown()
+    window.setTimeout(() => setDonateNudge(true), 1500)
+  }
   const changeVault = (c: string | null) => { setVault(c); setVaultState(c) }
   /** Un autre schéma remplace celui qui était sauvegardé : on arrête la mise à jour automatique pour ne pas écraser la copie en ligne. */
   const detachVault = () => { if (getVault()) { changeVault(null); setSync('idle'); say(lang === 'fr' ? 'Sauvegarde en ligne arrêtée : ce nouveau schéma a besoin de son propre code (Fichier → Sauvegarde en ligne).' : 'Online backup stopped: this new diagram needs its own code (File → Online backup).') } }
@@ -1199,7 +1207,7 @@ function Editor() {
       }
       setH((s) => ({ ...s, doc: switchPage(s.doc, start) }))
     }
-    if (svgs.length) { const { exportPdf } = await import('./pdf'); await exportPdf(doc, svgs, fileBase(doc) + '.pdf') }
+    if (svgs.length) { const { exportPdf } = await import('./pdf'); await exportPdf(doc, svgs, fileBase(doc) + '.pdf'); afterExport() }
   }
   const printAllPages = async () => {
     if (exportRef.current) exportRef.current.open = false
@@ -1598,8 +1606,8 @@ function Editor() {
             <button onClick={() => setShowBom(true)}>{t('bom')}</button>
             <button onClick={() => { setVersions(loadVersions()); setShowVersions(true) }}>{t('versions')}</button>
             <p className="menu-title">{t('export')}</p>
-            <button onClick={withContent((c) => exportSvg(doc, c))}>{t('exportSvg')}</button>
-            <button onClick={withContent((c) => exportPng(doc, c))}>{t('exportPng')}</button>
+            <button onClick={withContent((c) => { exportSvg(doc, c); afterExport() })}>{t('exportSvg')}</button>
+            <button onClick={withContent((c) => { exportPng(doc, c); afterExport() })}>{t('exportPng')}</button>
             <button onClick={withContent((c) => printSheet(doc, c))}>{t('print')}</button>
             <button onClick={() => pdfAll(false)}>{lang === 'fr' ? 'Télécharger en PDF (cette feuille)' : 'Download PDF (this sheet)'}</button>
             {pageCount(doc) > 1 && <button onClick={() => pdfAll(true)}>{lang === 'fr' ? 'Télécharger en PDF (toutes les feuilles)' : 'Download PDF (all sheets)'}</button>}
@@ -1852,6 +1860,16 @@ function Editor() {
             <div className="row">
               <button onClick={() => setShowCloud(true)}>{lang === 'fr' ? 'Sauvegarder en ligne' : 'Back up online'}</button>
               <button onClick={() => { setNudgeOff(true); try { localStorage.setItem('albertschema.cloudNudge', '1') } catch { /* ignoré */ } }}>{lang === 'fr' ? 'Plus tard' : 'Later'}</button>
+            </div>
+          </div>
+        )}
+        {donateNudge && DONATE_URL && (
+          <div className="cloud-nudge" role="status" style={showNudge ? { bottom: 190 } : undefined}>
+            <p>{lang === 'fr' ? 'Votre export est prêt. Albert Schema Studio est gratuit, sans publicité ni compte : si l’outil vous sert, vous pouvez soutenir son développement.' : 'Your export is ready. Albert Schema Studio is free, with no ads and no account: if it is useful to you, you can support its development.'}</p>
+            <div className="row">
+              <button onClick={() => { window.open(DONATE_URL, '_blank', 'noopener'); setDonateNudge(false) }}>☕ {lang === 'fr' ? 'Soutenir le projet' : 'Support the project'}</button>
+              <button onClick={() => setDonateNudge(false)}>{lang === 'fr' ? 'Plus tard' : 'Later'}</button>
+              <button onClick={() => { donateOff(); setDonateNudge(false) }}>{lang === 'fr' ? 'Ne plus afficher' : 'Do not show again'}</button>
             </div>
           </div>
         )}
@@ -2241,6 +2259,7 @@ function Editor() {
             <p>{t('privacyText')}</p>
             <h3>{t('legalTitle')}</h3>
             <p>{t('legalText')}</p>
+            {DONATE_URL && <p>☕ <a href={DONATE_URL} target="_blank" rel="noopener noreferrer">{lang === 'fr' ? 'Soutenir le projet' : 'Support the project'}</a> {lang === 'fr' ? ': gratuit, sans publicité ni compte ; un don aide à le faire vivre.' : ': free, no ads, no account; a donation helps keep it going.'}</p>}
             <p><a href="https://github.com/albertduplantin/albert-schema" target="_blank" rel="noreferrer">{t('sourceCode')}</a> · <button className="link" onClick={() => { setShowCredits(false); setShowFeedback(true) }}>{t('contact')}</button></p>
             {(extendedLoaded || showExt) && <p><a href="https://qelectrotech.org" target="_blank" rel="noreferrer">qelectrotech.org</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer">CC BY 3.0</a> · <a href="https://github.com/qelectrotech/qelectrotech-elements" target="_blank" rel="noreferrer">qelectrotech-elements</a></p>}
             <div className="actions"><button onClick={() => setShowCredits(false)}>{t('close')}</button></div>
