@@ -111,6 +111,7 @@ ${CTA}`,
     h1: 'Exercices guidés et mode classe pour l’enseignement',
     body: `
 <p>Albert Schema Studio propose des <strong>exercices guidés</strong> : l’énoncé s’affiche à côté du schéma, l’élève pose les composants, les câble et simule, et l’application vérifie chaque étape.</p>
+<figure><a href="/?exo=d-latch"><img src="/img/exercice-guide.webp" width="1400" height="800" alt="Exercice guidé de dépannage : énoncé, matériel, fonctionnement attendu et étapes à droite du schéma du contacteur" loading="lazy"></a><figcaption>Exercice guidé « Dépannage : le contacteur ne se maintient pas » : l’énoncé et les étapes à droite du schéma.</figcaption></figure>
 <h2>Pour l’enseignant</h2>
 <ul>
 <li>Un <strong>mode classe</strong> : l’élève rejoint la classe avec un lien, l’enseignant suit la progression avec le code de classe, sans compte.</li>
@@ -130,6 +131,7 @@ ${CTA}`,
     h1: 'Exemples de schémas à ouvrir et simuler',
     body: `
 <p>Chaque exemple s’ouvre dans l’éditeur en un clic. Vous pouvez le simuler, le modifier et l’enregistrer. Les étoiles indiquent le niveau de difficulté.</p>
+<figure><a href="/"><img src="/img/galerie-exemples.webp" width="1400" height="800" alt="Galerie d’exemples de schémas de l’éditeur : départ moteur, inverseur, électropneumatique, banc hydraulique, avec niveau de difficulté" loading="lazy"></a><figcaption>La galerie d’exemples dans l’éditeur.</figcaption></figure>
 ${GROUPS.map((g) => `<h2>${esc(g.fr)}</h2>${exampleItems(g.keys)}`).join('\n')}
 ${CTA}`,
   },
