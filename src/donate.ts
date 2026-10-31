@@ -2,7 +2,7 @@
  * Adresse de la page de dons (Ko-fi, par exemple https://ko-fi.com/votre-nom).
  * Tant qu'elle est vide, aucun lien de don n'est affiché, ni dans l'éditeur ni dans les pages de présentation.
  */
-export const DONATE_URL = ''
+export const DONATE_URL = 'https://ko-fi.com/topinambourrutabaga'
 
 const KEY = 'albertschema.donate'
 const EVERY_MS = 30 * 86_400_000
