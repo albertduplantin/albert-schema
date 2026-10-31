@@ -218,6 +218,8 @@ function Editor() {
   const [h, setH] = useState(() => ({ doc: loadDoc(), past: [] as Doc[], future: [] as Doc[] }))
   const [sel, setSel] = useState<string[]>([])
   const [placing, setPlacing] = useState<string | null>(null)
+  const [palOpen, setPalOpen] = useState(false) // téléphone : la bibliothèque est un panneau qu'on ouvre, elle ne laisse plus la place au schéma
+  useEffect(() => { if (placing) setPalOpen(false) }, [placing])
   const [domain, setDomain] = useState<Domain>('electrical')
   const [query, setQuery] = useState('')
   const [catByDomain, setCatByDomain] = useState<Record<Domain, string>>({ electrical: '', pneumatic: '', hydraulic: '' })
@@ -1609,9 +1611,10 @@ function Editor() {
   )
 
   return (
-    <div className={'app' + (simMode ? ' simmode' : '')} style={{ ['--pal-w' as string]: palW + 'px', ['--props-w' as string]: propsW + 'px' }}>
+    <div className={'app' + (simMode ? ' simmode' : '') + (palOpen ? ' pal-open' : '')} style={{ ['--pal-w' as string]: palW + 'px', ['--props-w' as string]: propsW + 'px' }}>
       <header className="toolbar" role="toolbar">
         <span className="brand"><span className="vis" aria-hidden="true" />Albert<b>Schema</b><span className="studio"> Studio</span></span>
+        <button className="pal-toggle" aria-expanded={palOpen} onClick={() => setPalOpen((v) => !v)}>☰ {lang === 'fr' ? 'Symboles' : 'Symbols'}</button>
 
         {/* Fichier : ouvrir, enregistrer, exporter, exemples, nomenclature */}
         <details className="menu" ref={exportRef}>

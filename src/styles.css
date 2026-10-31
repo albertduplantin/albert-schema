@@ -779,3 +779,12 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .class-submit { margin: 10px 0; }
 .class-submit h4, .class-table h4 { margin: 8px 0 4px; font-size: 13px; }
 .class-submit textarea { width: 100%; margin-bottom: 6px; }
+
+/* téléphone : le schéma prend toute la largeur, la bibliothèque s'ouvre par le bouton « Symboles » */
+.pal-toggle { display: none; }
+@media (max-width: 600px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'bar' 'stage'; }
+  .pal-toggle { display: inline-flex; align-items: center; gap: 4px; }
+  .palette { display: none; }
+  .app.pal-open .palette { display: flex; position: fixed; z-index: 40; top: 0; bottom: 0; left: 0; width: min(88vw, 340px); box-shadow: 0 0 30px #0007; }
+}
