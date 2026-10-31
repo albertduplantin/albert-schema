@@ -1000,8 +1000,9 @@ function Editor() {
   }
   const showNudge = !vault && !nudgeOff && doc.symbols.length >= 6
   const [showExample, setShowExample] = useState(false)
+  // les annotations de l'ancien schéma partent avec lui (`notes: []`) ; sinon les boutons ⓘ des exemples s'accumulent
   const startTemplate = (fn: (b: Doc) => Doc, key?: string) => {
-    commit((d) => { const nd = fn(d); const hs = templateHelps(key, lang); return { ...nd, ...(hs.length ? { notes: [...(nd.notes ?? []), ...hs] } : {}), ...(key ? { example: key } : {}) } })
+    commit((d) => { const nd = fn({ ...d, notes: [] }); const hs = templateHelps(key, lang); return { ...nd, ...(hs.length ? { notes: [...(nd.notes ?? []), ...hs] } : {}), ...(key ? { example: key } : {}) } })
     setSel([])
     detachVault()
     if (key) setShowExample(true) // la fiche s'ouvre d'elle-même ; le bouton ⓘ de la barre d'outils la rouvre

@@ -1,0 +1,20 @@
+{
+  "tplMotor": "depart-moteur",
+  "tplLamps": "voyants-marche-arret",
+  "tplTimer": "temporisation-a-la-montee",
+  "tplTrafo": "depart-moteur-transformateur-commande",
+  "tplCascade": "demarrage-cascade-temporise",
+  "tplRelay24": "relais-24v-bornier",
+  "tplReversing": "inverseur-sens-de-marche",
+  "tplPneu": "verin-double-effet-distributeur-manuel",
+  "tplPneuElec": "verin-electrodistributeur",
+  "tplPneuAuto": "va-et-vient-automatique",
+  "tplPneuPlc": "cycle-a-b-grafcet-automate",
+  "tplHydMotor": "hydraulique-moteur-limiteurs-de-debit",
+  "tplHydCyl": "hydraulique-verin-limiteurs-de-debit",
+  "tplHydTP5": "hydraulique-limiteurs-de-pression-secondaires",
+  "tplHydTP6": "hydraulique-reducteur-de-pression",
+  "tplHydTP7": "hydraulique-clapets-pilotes",
+  "tplHydTP8": "hydraulique-pompe-pression-constante",
+  "tplHydTP9": "hydraulique-load-sensing"
+}

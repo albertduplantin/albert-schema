@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { BUILTIN_META } from '../src/galleryMeta.ts'
 import { tr } from '../src/i18n.ts'
+import { EXAMPLE_GUIDES } from '../src/exampleGuides.ts'
 import { DONATE_URL } from '../src/donate.ts'
 
 const SITE = 'https://schema.albertduplantin.win'
@@ -26,11 +27,13 @@ const GROUPS: { fr: string; domain: 'electrical' | 'pneumatic' | 'hydraulic'; ke
   { fr: 'Pneumatique et électropneumatique', domain: 'pneumatic', keys: ['tplPneu', 'tplPneuElec', 'tplPneuAuto', 'tplPneuPlc'] },
   { fr: 'Hydraulique', domain: 'hydraulic', keys: ['tplHydMotor', 'tplHydCyl', 'tplHydTP5', 'tplHydTP6', 'tplHydTP7', 'tplHydTP8', 'tplHydTP9'] },
 ]
+/** Adresse de la page de chaque exemple : /exemples/<slug>/ (les captures sont public/img/ex-<slug>.webp). */
+const SLUGS: Record<string, string> = JSON.parse(fs.readFileSync(new URL('./seo-slugs.json', import.meta.url), 'utf8'))
 const meta = (key: string) => BUILTIN_META.find((m) => m.key === key)!
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n)
 const exampleLink = (key: string) => `${SITE}/?exemple=${key}`
 const exampleItems = (keys: string[]) =>
-  `<ul class="ex">${keys.map((k) => `<li><a href="/?exemple=${k}"><strong>${esc(tr('fr', k as never))}</strong></a> <span class="lvl">${stars(meta(k).level)}</span><br>${esc(meta(k).about.fr)}</li>`).join('')}</ul>`
+  `<ul class="ex">${keys.map((k) => `<li><a href="/exemples/${SLUGS[k]}/"><strong>${esc(tr('fr', k as never))}</strong></a> <span class="lvl">${stars(meta(k).level)}</span><br>${esc(meta(k).about.fr)} <a href="/?exemple=${k}">Ouvrir dans l’éditeur</a></li>`).join('')}</ul>`
 
 /** Capture d'écran de l'éditeur (public/img, régénérée à la main) : légende lisible aussi par les moteurs de recherche. */
 const fig = (file: string, key: string, alt: string, caption: string) =>
@@ -160,6 +163,38 @@ ${CTA}`,
   },
 ]
 
+/** Une page par exemple : fiche pédagogique (à quoi ça sert, ce qu'on apprend, quoi simuler), capture et lien d'ouverture. */
+const trim = (s: string, n: number) => (s.length <= n ? s : s.slice(0, s.lastIndexOf(' ', n - 1)).replace(/[ ,;:.]+$/, '') + '…')
+const TAIL = ' Schéma à ouvrir et simuler gratuitement.'
+for (const g of GROUPS) {
+  for (const k of g.keys) {
+    const title = tr('fr', k as never)
+    const guide = EXAMPLE_GUIDES[k].fr
+    const slug = SLUGS[k]
+    const same = g.keys.filter((o) => o !== k)
+    PAGES.push({
+      slug: `exemples/${slug}`,
+      lang: 'fr',
+      title: `${title} : schéma et simulation`,
+      description: trim(meta(k).about.fr, 150 - TAIL.length) + TAIL,
+      h1: title,
+      body: `
+<p>${esc(meta(k).about.fr)} Niveau ${stars(meta(k).level)}.</p>
+<figure><a href="/?exemple=${k}"><img src="/img/ex-${slug}.webp" width="870" height="520" alt="${esc(`Schéma : ${title}`)}" loading="lazy"></a><figcaption>${esc(title)} : cliquez pour l’ouvrir dans l’éditeur.</figcaption></figure>
+<p class="cta"><a href="/?exemple=${k}">Ouvrir ce schéma dans l’éditeur et le simuler</a></p>
+<h2>À quoi sert ce montage</h2>
+<p>${esc(guide.purpose)}</p>
+<h2>Ce que vous apprenez</h2>
+<ul>${guide.learn.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+<h2>À simuler</h2>
+<ol>${guide.simulate.map((l) => `<li>${esc(l)}</li>`).join('')}</ol>
+<h2>Autres exemples ${esc(g.fr.toLowerCase())}</h2>
+<ul class="ex">${same.map((o) => `<li><a href="/exemples/${SLUGS[o]}/">${esc(tr('fr', o as never))}</a> <span class="lvl">${stars(meta(o).level)}</span></li>`).join('')}</ul>
+<p><a href="/exemples/">Tous les exemples</a></p>`,
+    })
+  }
+}
+
 const NAV: [string, string][] = [
   ['/schema-electrique/', 'Schémas électriques'],
   ['/schema-pneumatique/', 'Pneumatique'],
@@ -232,7 +267,7 @@ for (const p of PAGES) {
 }
 
 const today = new Date().toISOString().slice(0, 10)
-const urls = [{ loc: SITE + '/', priority: '1.0', freq: 'weekly' }, ...PAGES.map((p) => ({ loc: url(p), priority: p.slug === 'en' ? '0.7' : '0.8', freq: 'monthly' }))]
+const urls = [{ loc: SITE + '/', priority: '1.0', freq: 'weekly' }, ...PAGES.map((p) => ({ loc: url(p), priority: p.slug === 'en' ? '0.7' : p.slug.startsWith('exemples/') ? '0.6' : '0.8', freq: 'monthly' }))]
 fs.writeFileSync(
   'public/sitemap.xml',
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${u.freq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`).join('\n')}\n</urlset>\n`,

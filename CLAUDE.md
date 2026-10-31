@@ -15,6 +15,8 @@
 
 - Les pages ont des captures `public/img/exemple-*.webp` (faites avec puppeteer sur `/?exemple=<clé>`, panneaux fermés) ; `public/v.js` (mesure d’audience) est inclus dans index.html et dans chaque page générée.
 
+- Une page par exemple : `public/exemples/<slug>/` (slugs dans `scripts/seo-slugs.json`, texte tiré de `src/exampleGuides.ts`), captures `public/img/ex-<slug>.webp` à refaire à la main si le schéma change. Les boutons ⓘ des exemples sont dans `src/templateHelp.ts`.
+
 ## Pièges connus
 - `public/library-core.json` et `library-extended.json` sont **commités et générés** (`npx tsx scripts/build-library.mts`) : oublier de les régénérer = le navigateur affiche l'ancien symbole.
 - Grille = 10 : les orifices des symboles doivent tomber sur des multiples de 10 (test dans test-hydraulic).

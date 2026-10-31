@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TP5 hydraulique : limiteurs de pression secondaires : schéma et simulation | Albert Schema Studio</title>
+<meta name="description" content="TP5 du banc : moteur (limiteurs de débit) et vérin en parallèle, un limiteur de pression secondaire sur… Schéma à ouvrir et simuler gratuitement.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://schema.albertduplantin.win/exemples/hydraulique-limiteurs-de-pression-secondaires/">
+
+<meta name="theme-color" content="#0b6bcb">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Albert Schema Studio">
+<meta property="og:url" content="https://schema.albertduplantin.win/exemples/hydraulique-limiteurs-de-pression-secondaires/">
+<meta property="og:title" content="TP5 hydraulique : limiteurs de pression secondaires : schéma et simulation">
+<meta property="og:description" content="TP5 du banc : moteur (limiteurs de débit) et vérin en parallèle, un limiteur de pression secondaire sur… Schéma à ouvrir et simuler gratuitement.">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:image" content="https://schema.albertduplantin.win/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://schema.albertduplantin.win/exemples/hydraulique-limiteurs-de-pression-secondaires/","url":"https://schema.albertduplantin.win/exemples/hydraulique-limiteurs-de-pression-secondaires/","name":"TP5 hydraulique : limiteurs de pression secondaires : schéma et simulation","description":"TP5 du banc : moteur (limiteurs de débit) et vérin en parallèle, un limiteur de pression secondaire sur… Schéma à ouvrir et simuler gratuitement.","inLanguage":"fr","isPartOf":{"@type":"WebSite","name":"Albert Schema Studio","url":"https://schema.albertduplantin.win/"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Albert Schema Studio","item":"https://schema.albertduplantin.win/"},{"@type":"ListItem","position":2,"name":"TP5 hydraulique : limiteurs de pression secondaires","item":"https://schema.albertduplantin.win/exemples/hydraulique-limiteurs-de-pression-secondaires/"}]}]}</script>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6;color:#151916;margin:0;background:#f6f7f3}
+header,main,footer{max-width:46rem;margin:0 auto;padding:0 1rem}
+header{padding-top:1rem;padding-bottom:.5rem;display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:center;border-bottom:1px solid #d3d7d0}
+header a.brand{font-weight:700;text-decoration:none;color:#151916;margin-right:auto}
+header a,footer a{color:#1b5fa6}
+h1{font-size:1.7rem;line-height:1.25;margin:1.5rem 0 1rem}
+h2{font-size:1.2rem;margin:1.8rem 0 .5rem}
+ul.ex{padding-left:1.1rem}ul.ex li{margin:.6rem 0}
+.lvl{color:#7a7a7a;font-size:.85rem}
+figure{margin:1.2rem 0}figure img{max-width:100%;height:auto;border:1px solid #d3d7d0;border-radius:6px;display:block}figcaption{font-size:.85rem;color:#4d554e;margin-top:.3rem}
+.cta a{display:inline-block;background:#1b5fa6;color:#fff;text-decoration:none;padding:.7rem 1.2rem;border-radius:6px;font-weight:600}
+footer{padding-top:1rem;padding-bottom:2rem;margin-top:2rem;border-top:1px solid #d3d7d0;font-size:.9rem;color:#4d554e}
+</style>
+</head>
+<body>
+<header><a class="brand" href="/">Albert Schema Studio</a><a href="/schema-electrique/">Schémas électriques</a><a href="/schema-pneumatique/">Pneumatique</a><a href="/schema-hydraulique/">Hydraulique</a><a href="/exercices-guides/">Exercices guidés</a><a href="/exemples/">Exemples</a><a href="/en/">English</a></header>
+<main>
+<h1>TP5 hydraulique : limiteurs de pression secondaires</h1>
+<p>TP5 du banc : moteur (limiteurs de débit) et vérin en parallèle, un limiteur de pression secondaire sur chaque ligne du vérin (80 bar côté fond, 40 bar côté tige) sous le limiteur principal à 100 bar. Mettez le vérin en butée puis lancez le moteur : la pression retombe au tarage secondaire et le moteur ralentit. Niveau ★★★.</p>
+<figure><a href="/?exemple=tplHydTP5"><img src="/img/ex-hydraulique-limiteurs-de-pression-secondaires.webp" width="870" height="520" alt="Schéma : TP5 hydraulique : limiteurs de pression secondaires" loading="lazy"></a><figcaption>TP5 hydraulique : limiteurs de pression secondaires : cliquez pour l’ouvrir dans l’éditeur.</figcaption></figure>
+<p class="cta"><a href="/?exemple=tplHydTP5">Ouvrir ce schéma dans l’éditeur et le simuler</a></p>
+<h2>À quoi sert ce montage</h2>
+<p>Limiter l’effort d’un vérin sans toucher à la pression du reste du circuit : un limiteur de pression secondaire sur chaque ligne du vérin (80 bar côté fond, 40 bar côté tige), sous le limiteur principal à 100 bar.</p>
+<h2>Ce que vous apprenez</h2>
+<ul><li>Pression principale et pressions secondaires : chacune protège sa branche.</li><li>Quand le vérin est en butée, la pression retombe au tarage secondaire : la consommation de puissance est faible mais l’effort est limité.</li><li>Pourquoi un moteur et un vérin en parallèle se gênent : le débit prend le chemin le plus facile.</li></ul>
+<h2>À simuler</h2>
+<ol><li>Maintenez 1V2 (vérin) jusqu’en butée : lisez G5 (≈ 40 bar) ou G4 (≈ 80 bar) selon le côté.</li><li>Maintenez 1V1 : le moteur tourne à ≈ 300 tr/min (croisé) ou ≈ 200 tr/min (parallèle).</li><li>Maintenez les deux, vérin en butée : le moteur ralentit, car la pression de pompe tombe à celle du secondaire.</li></ol>
+<h2>Autres exemples hydraulique</h2>
+<ul class="ex"><li><a href="/exemples/hydraulique-moteur-limiteurs-de-debit/">Banc hydraulique : moteur et limiteurs de débit à l’admission</a> <span class="lvl">★★☆</span></li><li><a href="/exemples/hydraulique-verin-limiteurs-de-debit/">Banc hydraulique : vérin et limiteurs de débit à l’échappement</a> <span class="lvl">★★★</span></li><li><a href="/exemples/hydraulique-reducteur-de-pression/">TP6 hydraulique : réducteur de pression</a> <span class="lvl">★★★</span></li><li><a href="/exemples/hydraulique-clapets-pilotes/">TP7 hydraulique : clapets anti-retour pilotés</a> <span class="lvl">★★★</span></li><li><a href="/exemples/hydraulique-pompe-pression-constante/">TP8 hydraulique : pompe à pression constante</a> <span class="lvl">★★★</span></li><li><a href="/exemples/hydraulique-load-sensing/">TP9 hydraulique : Load Sensing</a> <span class="lvl">★★★</span></li></ul>
+<p><a href="/exemples/">Tous les exemples</a></p>
+</main>
+<footer>Albert Schema Studio : éditeur et simulateur de schémas électriques, pneumatiques et hydrauliques. Symboles basés sur la collection QElectroTech (CC-BY 3.0) et dessinés par l’application. <a href="https://ko-fi.com/topinambourrutabaga" target="_blank" rel="noopener noreferrer">☕ Soutenir le projet</a></footer>
+<script src="/v.js" defer></script>
+</body>
+</html>

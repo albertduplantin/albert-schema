@@ -134,7 +134,7 @@ try {
   await menu(1); await click(/^ⓘ Bouton d’explication/, '.toolbar .menu-list button'); await sleep(300)
   d = await doc()
   check('bouton d’explication : créé comme annotation « help »', d.notes?.some((n) => n.help && n.title === 'Explication'), JSON.stringify(d.notes))
-  const hp = await page.evaluate(() => { const r = document.querySelector('.help-btn').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })
+  const hp = await page.evaluate(() => { const r = [...document.querySelectorAll('.help-btn')].pop().getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })
   await page.mouse.click(hp[0], hp[1]); await sleep(300)
   check('bouton d’explication : le clic affiche le texte à côté', await page.evaluate(() => /Explication/.test(document.querySelector('.help-pop')?.textContent ?? '')))
   await page.keyboard.press('Escape'); await sleep(200)
