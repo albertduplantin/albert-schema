@@ -12,6 +12,8 @@ const srv = http.createServer((req, res) => {
         case 'EXPIRE': return { result: 1 }
         case 'HSET': (hashes[key] ??= {})[a[0]] = a[1]; return { result: 1 }
         case 'HLEN': return { result: Object.keys(hashes[key] ?? {}).length }
+        case 'HGET': return { result: (hashes[key] ?? {})[a[0]] ?? null }
+        case 'HEXISTS': return { result: a[0] in (hashes[key] ?? {}) ? 1 : 0 }
         case 'HGETALL': return { result: Object.entries(hashes[key] ?? {}).flatMap(([k, v]) => [k, v]) }
         default: return { result: null }
       }
@@ -41,6 +43,21 @@ check('exercice invalide refusé', (await call('POST', { body: { code: 'abcd', p
 check('pseudo vide refusé', (await call('POST', { body: { code: 'abcd', pseudo: '  ', exercise: 'e-lamp' } })).code, 400)
 check('lecture sans code valide refusée', (await call('GET', { query: { code: 'a' } })).code, 400)
 check('méthode non permise', (await call('DELETE')).code, 405)
+
+// ── rendu d'un schéma à l'enseignant
+const doc = { version: 1, symbols: [{ id: 's1' }], wires: [] }
+check('rendu valide', (await call('POST', { body: { code: 'classe-1a', pseudo: 'Léa', work: { comment: 'Voilà mon montage', doc } } })).code, 204)
+check('le rendu ne compte pas comme exercice terminé', Object.keys((await call('GET', { query: { code: 'classe-1a' } })).body.students['Léa']).sort(), ['e-lamp', 'e-startstop'])
+const list = await call('GET', { query: { code: 'classe-1a', work: '1' } })
+check('liste des rendus : sans le schéma', list.body.works.map((w) => [w.pseudo, w.exercise, w.comment, 'doc' in w]), [['Léa', 'w-rendu', 'Voilà mon montage', false]])
+const one = await call('GET', { query: { code: 'classe-1a', work: '1', pseudo: 'Léa', exercise: 'w-rendu' } })
+check('un rendu : le schéma est restitué', [one.code, one.body.doc.symbols.length, one.body.comment], [200, 1, 'Voilà mon montage'])
+check('rendu introuvable : 404', (await call('GET', { query: { code: 'classe-1a', work: '1', pseudo: 'Tom', exercise: 'w-rendu' } })).code, 404)
+await call('POST', { body: { code: 'classe-1a', pseudo: 'Léa', work: { comment: 'Version 2', doc } } })
+check('un nouveau rendu remplace l’ancien', (await call('GET', { query: { code: 'classe-1a', work: '1' } })).body.works.map((w) => w.comment), ['Version 2'])
+check('rendu sans schéma refusé', (await call('POST', { body: { code: 'classe-1a', pseudo: 'Léa', work: { comment: 'x' } } })).code, 400)
+check('rendu sans pseudonyme refusé', (await call('POST', { body: { code: 'classe-1a', pseudo: '', work: { doc } } })).code, 400)
+check('rendu trop gros refusé', (await call('POST', { body: { code: 'classe-1a', pseudo: 'Léa', work: { doc: { ...doc, junk: 'x'.repeat(210_000) } } } })).code, 413)
 srv.closeAllConnections?.(); srv.close()
 console.log(fails ? `\n${fails} ECHEC(S)` : '\ntous les tests de suivi de classe passent')
 process.exit(fails ? 1 : 0)

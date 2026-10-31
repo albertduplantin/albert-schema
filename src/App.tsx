@@ -434,6 +434,27 @@ function Editor() {
     reported.current.add(guidedEx.id)
     fetch('/api/classroom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: classInfo.code, pseudo: classInfo.pseudo, exercise: guidedEx.id }) }).catch(() => { /* hors ligne : ignoré */ })
   }, [stepsDone, guidedEx, classInfo])
+  /** Rend le schéma en cours à l'enseignant de la classe (code de classe + pseudonyme enregistrés). */
+  const submitWork = async (comment: string): Promise<boolean> => {
+    if (!classInfo.code || !classInfo.pseudo || !docRef.current.symbols.length) return false
+    try {
+      const r = await fetch('/api/classroom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: classInfo.code, pseudo: classInfo.pseudo, work: { comment, doc: docRef.current } }) })
+      return r.status === 204
+    } catch { return false }
+  }
+  /** Ouvre le schéma rendu par un élève (même contrôle que l'ouverture d'un fichier). */
+  const openWork = async (raw: unknown) => {
+    try {
+      const d = raw as Doc
+      if (d.version !== 1 || !Array.isArray(d.symbols)) throw new Error('format')
+      if (docRef.current.symbols.length && !window.confirm(lang === 'fr' ? 'Remplacer le schéma actuel par ce rendu ? (Ctrl + Z pour revenir)' : 'Replace the current diagram with this submission? (Ctrl + Z to undo)')) return
+      await ensureDefs(d)
+      commit(() => sanitize(d))
+      setSel([])
+      detachVault()
+      setShowGuided(false)
+    } catch { say(tr(lang, 'toastInvalid')) }
+  }
   const copyExerciseLink = async () => {
     if (!guidedEx) return
     const q = new URLSearchParams({ exo: guidedEx.id })
@@ -2350,7 +2371,7 @@ function Editor() {
         </div>
       )}
 
-      {showGuided && <GuidedList list={allGuided} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} classCode={classInfo.code} pseudo={classInfo.pseudo} onClass={setClass} />}
+      {showGuided && <GuidedList list={allGuided} completed={guidedDone} lang={lang} onStart={startGuided} onClose={() => setShowGuided(false)} classCode={classInfo.code} pseudo={classInfo.pseudo} onClass={setClass} onSubmit={submitWork} onOpenWork={(d) => void openWork(d)} />}
 
       {tourStep !== null && (
         <div className="modal" onClick={endTour}>

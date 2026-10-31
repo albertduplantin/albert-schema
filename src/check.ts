@@ -44,6 +44,25 @@ export function checkDoc(doc: Doc, defs: Record<string, SymbolDef>, lang: Lang):
     else if (free.length && (m.k === 'coil' || m.k === 'load')) out.push({ level: 'warn', symId: s.id, text: S(lang, `${name(s)} : borne non raccordée.`, `${name(s)}: unconnected terminal.`) })
   }
 
+  // appareils fluidiques (pneumatique, hydraulique) sans aucun conduit, vérins dont un orifice reste libre
+  for (const s of doc.symbols) {
+    const f = defs[s.defId]?.fluid
+    const ids = (defs[s.defId]?.ports ?? []).map((p) => p.id)
+    if (!f || f.k === 'flink' || !ids.length) continue
+    const free = ids.filter((p) => !used.has(`${s.id}:${p}`))
+    if (free.length === ids.length) out.push({ level: 'warn', symId: s.id, text: S(lang, `${name(s)} n'est raccordé à aucun conduit.`, `${name(s)} is not connected to any line.`) })
+    else if (f.k === 'cyl' && free.length) out.push({ level: 'warn', symId: s.id, text: S(lang, `${name(s)} : orifice non raccordé.`, `${name(s)}: unconnected port.`) })
+  }
+
+  // un même repère sur plusieurs appareils (boutons, récepteurs, distributeurs, vérins) : confusion à la lecture et au câblage
+  const byLabel = new Map<string, number>()
+  for (const s of doc.symbols) {
+    const d = defs[s.defId]
+    const device = (d?.sim?.k === 'switch' && d.sim.ctl !== 'coil') || d?.sim?.k === 'load' || d?.fluid?.k === 'valve' || d?.fluid?.k === 'cyl'
+    if (device && s.label.trim()) byLabel.set(s.label.trim(), (byLabel.get(s.label.trim()) ?? 0) + 1)
+  }
+  for (const [label, n] of byLabel) if (n > 1) out.push({ level: 'warn', text: S(lang, `Le repère ${label} est porté par ${n} appareils : chacun doit avoir le sien.`, `Reference ${label} is used by ${n} devices: each one needs its own.`) })
+
   // court-circuit au repos (aucun organe manœuvré)
   try {
     const r = simulate(doc, defs, {}, { pressed: new Set(), toggled: new Set() }, 0)

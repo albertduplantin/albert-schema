@@ -775,3 +775,7 @@ details.explain-box > summary { cursor: pointer; font-weight: 600; }
 .help-pop { position: fixed; z-index: 60; width: 330px; max-height: 60vh; overflow: auto; padding: 10px 14px; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-line); border-left: 4px solid #1b5fa6; border-radius: 6px; box-shadow: 0 6px 24px #0004; font-size: 14px; line-height: 1.45; }
 .help-pop h4 { margin: 0 0 6px; font-size: 15px; }
 .help-pop p { margin: 0; white-space: pre-wrap; }
+
+.class-submit { margin: 10px 0; }
+.class-submit h4, .class-table h4 { margin: 8px 0 4px; font-size: 13px; }
+.class-submit textarea { width: 100%; margin-bottom: 6px; }

@@ -82,14 +82,37 @@ interface ListProps {
   classCode: string
   pseudo: string
   onClass: (code: string, pseudo: string) => void
+  /** rend le schéma en cours à l'enseignant de la classe (vrai si le serveur l'a reçu) */
+  onSubmit?: (comment: string) => Promise<boolean>
+  /** ouvre dans l'éditeur le schéma rendu par un élève */
+  onOpenWork?: (doc: unknown) => void
 }
+
+interface Work { pseudo: string; exercise: string; ts: number; comment: string }
 
 const DOMAINS: Domain[] = ['electrical', 'pneumatic', 'hydraulic']
 
 /** Liste des exercices guidés, filtrable par domaine et par niveau. */
 /** Suivi de classe : code partagé par l'enseignant et pseudonyme de l'élève ; tableau des exercices terminés par élève. */
-function ClassBox({ lang, classCode, pseudo, onClass, list }: Pick<ListProps, 'lang' | 'classCode' | 'pseudo' | 'onClass' | 'list'>) {
+function ClassBox({ lang, classCode, pseudo, onClass, list, onSubmit, onOpenWork }: Pick<ListProps, 'lang' | 'classCode' | 'pseudo' | 'onClass' | 'list' | 'onSubmit' | 'onOpenWork'>) {
   const fr = lang === 'fr'
+  const [works, setWorks] = useState<Work[] | null>(null)
+  const [comment, setComment] = useState('')
+  const [sent, setSent] = useState<'idle' | 'busy' | 'ok' | 'fail'>('idle')
+  const loadWorks = async (c: string) => {
+    try {
+      const r = await fetch(`/api/classroom?code=${encodeURIComponent(c.trim())}&work=1`)
+      if (!r.ok) throw new Error('x')
+      setWorks((await r.json()).works as Work[])
+    } catch { setWorks(null) }
+  }
+  const openWork = async (w: Work) => {
+    try {
+      const r = await fetch(`/api/classroom?code=${encodeURIComponent(code.trim())}&work=1&pseudo=${encodeURIComponent(w.pseudo)}&exercise=${encodeURIComponent(w.exercise)}`)
+      if (!r.ok) throw new Error('x')
+      onOpenWork?.((await r.json()).doc)
+    } catch { setErr(true) }
+  }
   const [code, setCode] = useState(classCode)
   const [name, setName] = useState(pseudo)
   const [rows, setRows] = useState<Record<string, Record<string, number>> | null>(null)
@@ -100,6 +123,7 @@ function ClassBox({ lang, classCode, pseudo, onClass, list }: Pick<ListProps, 'l
       const r = await fetch('/api/classroom?code=' + encodeURIComponent(code.trim()))
       if (!r.ok) throw new Error('x')
       setRows((await r.json()).students)
+      void loadWorks(code)
     } catch { setRows(null); setErr(true) }
   }
   const valid = /^[A-Za-z0-9-]{3,24}$/.test(code.trim())
@@ -114,6 +138,29 @@ function ClassBox({ lang, classCode, pseudo, onClass, list }: Pick<ListProps, 'l
         {classCode && <button className="link" onClick={() => { setCode(''); onClass('', name.trim()); setRows(null) }}>{fr ? 'Quitter la classe' : 'Leave class'}</button>}
       </div>
       {err && <p className="muted small">{fr ? 'Suivi indisponible pour le moment.' : 'Tracking is unavailable right now.'}</p>}
+      {classCode && pseudo && onSubmit && (
+        <div className="class-submit">
+          <h4>{fr ? 'Rendre mon schéma' : 'Hand in my diagram'}</h4>
+          <p className="muted small">{fr ? 'Envoie le schéma affiché à l’enseignant de la classe, avec un mot facultatif. Un nouvel envoi remplace le précédent. Toute personne connaissant le code de classe peut le lire : ne mettez pas de nom réel.' : 'Sends the diagram currently shown to the class teacher, with an optional note. A new submission replaces the previous one. Anyone who knows the class code can read it: do not put a real name.'}</p>
+          <textarea rows={2} maxLength={500} value={comment} onChange={(e) => { setComment(e.target.value); setSent('idle') }} placeholder={fr ? 'Un mot pour l’enseignant (facultatif)' : 'A note for the teacher (optional)'} />
+          <button disabled={sent === 'busy'} onClick={async () => { setSent('busy'); setSent((await onSubmit(comment)) ? 'ok' : 'fail') }}>{fr ? 'Rendre mon schéma' : 'Hand in my diagram'}</button>
+          {sent === 'ok' && <span className="muted small"> {fr ? '✓ Envoyé à l’enseignant.' : '✓ Sent to the teacher.'}</span>}
+          {sent === 'fail' && <span className="muted small"> {fr ? 'Envoi impossible (schéma vide ou trop gros, ou hors connexion).' : 'Could not send (empty or too large diagram, or offline).'}</span>}
+        </div>
+      )}
+      {works && works.length > 0 && (
+        <div className="class-table">
+          <h4>{fr ? 'Schémas rendus' : 'Submitted diagrams'}</h4>
+          <table>
+            <thead><tr><th>{fr ? 'Élève' : 'Student'}</th><th>{fr ? 'Date' : 'Date'}</th><th>{fr ? 'Mot' : 'Note'}</th><th /></tr></thead>
+            <tbody>
+              {works.map((w) => (
+                <tr key={w.pseudo + w.exercise}><td>{w.pseudo}</td><td>{new Date(w.ts).toLocaleString(fr ? 'fr-FR' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })}</td><td>{w.comment}</td><td><button onClick={() => void openWork(w)}>{fr ? 'Ouvrir' : 'Open'}</button></td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {rows && (
         <div className="class-table">
           <table>
@@ -131,7 +178,7 @@ function ClassBox({ lang, classCode, pseudo, onClass, list }: Pick<ListProps, 'l
   )
 }
 
-export function GuidedList({ list, completed, lang, onStart, onClose, classCode, pseudo, onClass }: ListProps) {
+export function GuidedList({ list, completed, lang, onStart, onClose, classCode, pseudo, onClass, onSubmit, onOpenWork }: ListProps) {
   const [domain, setDomain] = useState<Domain | 'all'>('all')
   const [level, setLevel] = useState<0 | 1 | 2 | 3>(0)
   const t = (k: Key) => tr(lang, k)
@@ -153,7 +200,7 @@ export function GuidedList({ list, completed, lang, onStart, onClose, classCode,
             ))}
           </div>
         </div>
-        <ClassBox lang={lang} classCode={classCode} pseudo={pseudo} onClass={onClass} list={list} />
+        <ClassBox lang={lang} classCode={classCode} pseudo={pseudo} onClass={onClass} list={list} onSubmit={onSubmit} onOpenWork={onOpenWork} />
         <div className="cards">
           {shown.map((ex) => (
             <div key={ex.id} className="card wide">

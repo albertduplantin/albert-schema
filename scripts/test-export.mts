@@ -164,6 +164,16 @@ check('noir et blanc : couleurs → noir, blanc et currentColor conservés', toM
   const { checkDoc } = await import(ROOT + '/src/check.ts')
   const { applyFixToDoc } = await import(ROOT + '/src/advice.ts')
   const Q = (x: string) => 'qet:10_electric/10_allpole/' + x
+  // appareils fluidiques non raccordés et repères en double
+  const pn = T.pneumaticCylinder(base)
+  check('Contrôle : exemple pneumatique complet → aucun avertissement de raccordement', !checkDoc(pn, SYMBOL_MAP, 'fr').some((x: any) => /aucun conduit|orifice non raccordé/.test(x.text)))
+  const cylId = pn.symbols.find((x: any) => SYMBOL_MAP[x.defId]?.fluid?.k === 'cyl').id
+  pn.wires = pn.wires.filter((w: any) => w.from.symId !== cylId && w.to.symId !== cylId)
+  check('Contrôle : vérin sans conduit → avertissement', checkDoc(pn, SYMBOL_MAP, 'fr').some((x: any) => x.symId === cylId && /aucun conduit/.test(x.text)))
+  const dup = T.motorStarter(base)
+  dup.symbols.filter((x: any) => /poussoir/.test(x.defId)).forEach((x: any) => { x.label = 'S2' })
+  check('Contrôle : deux boutons au même repère → avertissement', checkDoc(dup, SYMBOL_MAP, 'fr').some((x: any) => /Le repère S2 est porté par 2 appareils/.test(x.text)))
+  check('Contrôle : repères distincts → pas d’avertissement de doublon', !checkDoc(T.motorStarter(base), SYMBOL_MAP, 'fr').some((x: any) => /est porté par/.test(x.text)))
   // tension de bobine inadaptée
   const d = T.build(base, [['src', 'sim-src1', 400, 30], ['c', Q('380_signaling_operating/11_optical_signaling/lampe2'), 400, 150, 'H2']], [['src', 'a', 'c', 't0'], ['c', 't1', 'src', 'b']])
   d.symbols.find((x: any) => x.defId === 'sim-src1').volts = 24

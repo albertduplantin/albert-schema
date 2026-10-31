@@ -17,6 +17,8 @@
 
 - Une page par exemple : `public/exemples/<slug>/` (slugs dans `scripts/seo-slugs.json`, texte tiré de `src/exampleGuides.ts`), captures `public/img/ex-<slug>.webp` à refaire à la main si le schéma change. Les boutons ⓘ des exemples sont dans `src/templateHelp.ts`.
 
+- Rendu élève → enseignant : `api/classroom.js` (POST `work`, GET `work=1`), clé Redis `albertschema:class:<code>:work`, interface dans `ClassBox` (`src/GuidedPanel.tsx`) ; contrôle du schéma dans `src/check.ts`.
+
 ## Pièges connus
 - `public/library-core.json` et `library-extended.json` sont **commités et générés** (`npx tsx scripts/build-library.mts`) : oublier de les régénérer = le navigateur affiche l'ancien symbole.
 - Grille = 10 : les orifices des symboles doivent tomber sur des multiples de 10 (test dans test-hydraulic).
